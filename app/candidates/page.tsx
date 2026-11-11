@@ -1,0 +1,75 @@
+import CardActions from "@/components/CardActions";
+import CardView from "@/components/CardView";
+import SetupNotice from "@/components/SetupNotice";
+import { hasDatabase } from "@/lib/db";
+import * as store from "@/lib/scout/store";
+import { swingConfigured } from "@/lib/scout/swing";
+import { toEt } from "@/lib/time";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+export default async function CandidatesPage({ searchParams }: { searchParams: Promise<{ days?: string; card?: string }> }) {
+  if (!hasDatabase()) return <SetupNotice />;
+  const sp = await searchParams;
+  const days = Math.min(90, Math.max(1, Number(sp.days ?? 7) || 7));
+  const [candidates, cards, tracks, runs] = await Promise.all([store.candidatesSince(days), store.cardsSince(days), store.allTracks(), store.recentRuns(10)]);
+  const byId = new Map(cards.map((c) => [c.id, c]));
+  const t = new Map(tracks.map((x) => [x.cardId, x]));
+  const sw = swingConfigured();
+  const lastDaily = runs.find((r) => r.action === "daily");
+  const measured = (lastDaily?.detail as { measured?: Array<{ term: string; kind: string; sources: number; accelerating: number; score: number; candidate: boolean; cooldown: boolean }>; risingQueries?: Array<{ title: string; traffic: string }>; stoppedEarly?: string | null } | null) ?? null;
+  return (
+    <>
+      <h1>Candidates</h1>
+      <p className="small secondary">Everything the scout logged in the last {days} days, including what it rejected and why. <a href="?days=7">7d</a> · <a href="?days=30">30d</a> · <a href="?days=90">90d</a></p>
+      {lastDaily && (
+        <section className="card">
+          <h2>Last scan · {toEt(new Date(lastDaily.startedAt)).date} · {lastDaily.status}{lastDaily.error ? ` · ${lastDaily.error}` : ""}</h2>
+          {measured?.stoppedEarly && <p className="warn small">{measured.stoppedEarly}</p>}
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Watch-list term</th><th>Kind</th><th className="num">Sources with data</th><th className="num">Accelerating</th><th className="num">Score</th><th>Result</th></tr></thead>
+              <tbody>
+                {(measured?.measured ?? []).sort((a, b) => b.score - a.score).map((m) => (
+                  <tr key={m.term}><td>{m.term}</td><td className="small">{m.kind}</td><td className="num">{m.sources}</td><td className="num">{m.accelerating}</td><td className="num">{m.score}</td>
+                    <td className="small">{m.candidate ? (m.cooldown ? "candidate, but researched within 7 days" : "candidate") : "not accelerating"}</td></tr>
+                ))}
+                {!measured?.measured?.length && <tr><td colSpan={6} className="muted">No measurements recorded.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          {measured?.risingQueries && measured.risingQueries.length > 0 && (
+            <details style={{ marginTop: 8 }}><summary>Google rising queries seen (not on the watch-list; add any that matter)</summary>
+              <p className="small">{measured.risingQueries.map((q) => `${q.title} (${q.traffic})`).join(" · ")}</p></details>
+          )}
+        </section>
+      )}
+      <section className="card">
+        <h2>Log</h2>
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>When</th><th>Origin</th><th>Term</th><th>Outcome</th><th>Why</th></tr></thead>
+            <tbody>
+              {candidates.map((c) => (
+                <tr key={c.id}>
+                  <td className="small">{toEt(new Date(c.createdAt)).date}</td>
+                  <td className="small">{c.origin}</td>
+                  <td>{c.term}{c.observation ? <div className="small muted">“{c.observation}”</div> : null}</td>
+                  <td><span className={`tag ${c.outcome === "card" ? (c.reason ?? "") : c.outcome}`}>{c.outcome === "card" ? c.reason?.replace("_", " ") : c.outcome}</span>{c.cardId ? <a className="small" href={`#card-${c.cardId}`}>#{c.cardId}</a> : null}</td>
+                  <td className="small secondary">{c.outcome === "card" ? byId.get(c.cardId!)?.gateNotes.join(" · ") : c.reason}{c.trigger?.length ? <div className="muted">flagged by: {c.trigger.map((s) => `${s.source} ${s.changeVs12m === null ? "" : `${s.changeVs12m >= 0 ? "+" : ""}${Math.round(s.changeVs12m * 100)}%`}`).join(", ")}</div> : null}</td>
+                </tr>
+              ))}
+              {candidates.length === 0 && <tr><td colSpan={5} className="muted">Nothing logged in this window.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <h2>Cards</h2>
+      {cards.map((c) => {
+        const tr = t.get(c.id) ?? null;
+        return <CardView key={c.id} c={c} track={tr} actions={<CardActions cardId={c.id} canSend={c.status !== "not_promoted"} sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} />} />;
+      })}
+    </>
+  );
+}
