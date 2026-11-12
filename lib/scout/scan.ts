@@ -80,14 +80,20 @@ export async function runScan(deps: ResearchDeps): Promise<ScanReport> {
   const candidates: Array<{ term: string; kind: string; tickers: string[]; results: SourceResult[]; acc: Acceleration }> = [];
 
   for (const w of items) {
-    const results = await probeAll(deps.sources, { term: w.term, kind: w.kind, tickers: w.tickers, now: deps.now, env: deps.env, fetchImpl: deps.fetchImpl });
+    // A source measured for this term today is not called again (quotas, rate limits); its stored signals are reused.
+    const today = await store.signalsOn(w.term, et.date);
+    const fresh = deps.sources.filter((s) => !today.has(s.id));
+    const results: SourceResult[] = [
+      ...(await probeAll(fresh, { term: w.term, kind: w.kind, tickers: w.tickers, now: deps.now, env: deps.env, fetchImpl: deps.fetchImpl })),
+      ...deps.sources.filter((s) => today.has(s.id)).map((s): SourceResult => ({ source: s.id, status: "ok", detail: "measured earlier today; reused", signals: today.get(s.id)! })),
+    ];
     for (const r of results) {
       const prev = health.get(r.source);
       if (!prev || rank[r.status] > rank[prev.status]) health.set(r.source, r);
     }
     const history = await store.signalHistory(w.term, et.date);
     const signals = withHistory(results.flatMap((r) => r.signals), history);
-    await store.saveSignals(w.term, signals);
+    await store.saveSignals(w.term, signals, et.date);
     const acc = acceleration(signals, w.kind);
     const cool = cooldown.has(w.term.toLowerCase());
     report.measured.push({ term: w.term, kind: w.kind, sources: results.filter((r) => r.signals.length).length, accelerating: acc.accelerating.length, score: Math.round(acc.score * 100) / 100, candidate: acc.isCandidate, cooldown: cool });

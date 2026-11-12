@@ -50,6 +50,10 @@ CREATE TABLE IF NOT EXISTS signals (
   detail jsonb,
   PRIMARY KEY (source, term, metric, as_of)
 );
+ALTER TABLE signals ADD COLUMN IF NOT EXISTS note text;
+-- measured_on: ET date of the scan that measured it (a second scan that day reuses the row).
+ALTER TABLE signals ADD COLUMN IF NOT EXISTS measured_on date;
+CREATE INDEX IF NOT EXISTS signals_measured_idx ON signals (term, measured_on);
 
 -- Source health, one row per source, overwritten on each check.
 CREATE TABLE IF NOT EXISTS source_health (

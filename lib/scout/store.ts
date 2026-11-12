@@ -78,12 +78,12 @@ export async function setWatchStatus(id: number, status: WatchItem["status"]): P
 
 // ----------------------------------------------------------------- signals
 
-export async function saveSignals(term: string, signals: Signal[]): Promise<void> {
+export async function saveSignals(term: string, signals: Signal[], measuredOn: string | null = null): Promise<void> {
   for (const s of signals) {
     await q(
-      `INSERT INTO signals (source, term, metric, as_of, value, baseline, change_vs_12m, detail) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       ON CONFLICT (source, term, metric, as_of) DO UPDATE SET value = excluded.value, baseline = excluded.baseline, change_vs_12m = excluded.change_vs_12m, detail = excluded.detail`,
-      [s.source, term, s.metric, s.asOf, s.value, s.baseline, s.changeVs12m, s.detail ? JSON.stringify(s.detail) : null],
+      `INSERT INTO signals (source, term, metric, as_of, value, baseline, change_vs_12m, detail, note, measured_on) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       ON CONFLICT (source, term, metric, as_of) DO UPDATE SET value = excluded.value, baseline = excluded.baseline, change_vs_12m = excluded.change_vs_12m, detail = excluded.detail, note = excluded.note, measured_on = coalesce(excluded.measured_on, signals.measured_on)`,
+      [s.source, term, s.metric, s.asOf, s.value, s.baseline, s.changeVs12m, s.detail ? JSON.stringify(s.detail) : null, s.note, measuredOn],
     );
   }
 }
@@ -98,9 +98,19 @@ export async function signalHistory(term: string, today: string): Promise<Record
   return Object.fromEntries(rows.map((r) => [`${r.source}:${r.metric}`, { avg: Number(r.avg), n: Number(r.n), first: dstr(r.first)! }]));
 }
 
+const toSignal = (r: Row): Signal => ({ source: r.source, metric: r.metric, value: Number(r.value), baseline: num(r.baseline), changeVs12m: num(r.change_vs_12m), asOf: dstr(r.as_of)!, note: r.note ?? "", detail: r.detail ?? undefined });
+
 export async function recentSignals(term: string, days = 30): Promise<Array<Signal & { term: string }>> {
   const rows = await q(`SELECT * FROM signals WHERE term = $1 AND as_of >= current_date - $2::int ORDER BY as_of DESC`, [term, days]);
-  return rows.map((r) => ({ term: r.term, source: r.source, metric: r.metric, value: Number(r.value), baseline: num(r.baseline), changeVs12m: num(r.change_vs_12m), asOf: dstr(r.as_of)!, note: "", detail: r.detail ?? undefined }));
+  return rows.map((r) => ({ term: r.term, ...toSignal(r) }));
+}
+
+/** Signals a scan already measured for a term on a given ET date, keyed by source: a second scan that day reuses them instead of calling the source again. */
+export async function signalsOn(term: string, date: string): Promise<Map<string, Signal[]>> {
+  const rows = await q(`SELECT * FROM signals WHERE term = $1 AND measured_on = $2 ORDER BY source, metric`, [term, date]);
+  const m = new Map<string, Signal[]>();
+  for (const r of rows) m.set(r.source, [...(m.get(r.source) ?? []), toSignal(r)]);
+  return m;
 }
 
 // ----------------------------------------------------------- source health

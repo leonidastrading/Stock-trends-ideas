@@ -41,3 +41,28 @@ describe("candidate rule", () => {
     expect(acceleration([sig("polymarket", 55, 50, { metric: "yes_odds_points", detail: { week_change_points: 5 } })], "event").isCandidate).toBe(false);
   });
 });
+
+describe("one measurement per source per day", () => {
+  it("a second scan the same day reuses stored signals instead of calling the source", async () => {
+    const { PGlite } = await import("@electric-sql/pglite");
+    const { setQuerierForTests } = await import("@/lib/db");
+    const store = await import("@/lib/scout/store");
+    const { runScan } = await import("@/lib/scout/scan");
+    const pg = new PGlite();
+    setQuerierForTests({ query: async (text, params) => (await pg.query(text, params as unknown[])).rows as Record<string, unknown>[] });
+    try {
+      let calls = 0;
+      const src = { id: "hacker_news", label: "HN", about: "", configured: () => true, probe: async () => ({ source: "hacker_news", status: "ok" as const, signals: [sig("hacker_news", 5, 2, { note: "5 stories" })] }) };
+      const deps = { data: null, sources: [{ ...src, probe: async () => { calls++; return src.probe(); } }], callModel: async () => { throw new Error("no model in this test"); }, now: new Date("2026-11-12T12:00:00Z"), env: {} as NodeJS.ProcessEnv };
+      await store.saveSettings({ ...(await store.loadSettings()), enabled: false });
+      const first = await runScan(deps);
+      const second = await runScan(deps);
+      expect(first.terms).toBeGreaterThan(0);
+      expect(calls).toBe(first.terms); // once per term on the first scan...
+      expect(second.measured.length).toBe(first.terms); // ...and zero new calls on the second
+      expect((await store.signalsOn("robotaxi", "2026-11-12")).get("hacker_news")?.[0].note).toBe("5 stories");
+    } finally {
+      setQuerierForTests(null);
+    }
+  });
+});
