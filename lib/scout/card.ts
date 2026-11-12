@@ -52,7 +52,12 @@ export type Card = z.infer<typeof cardSchema>;
 export type Evidence = z.infer<typeof evidenceSchema>;
 export type CardTicker = z.infer<typeof tickerSchema>;
 
-/** The reply format sent to the model (structured output). Keep in step with cardSchema; it is part of the version hash. */
+/**
+ * The reply format sent to the model (structured output). Keep in step with
+ * cardSchema; it is part of the version hash. Structured outputs accept only a
+ * subset of JSON Schema: no minItems/maxItems, minimum/maximum or pattern, so
+ * ranges are described in words here and enforced by cardSchema after parsing.
+ */
 export const CARD_JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -70,7 +75,7 @@ export const CARD_JSON_SCHEMA = {
       },
     },
     tickers: {
-      type: "array", minItems: 1, maxItems: 5,
+      type: "array", description: "1 to 5 tickers, most direct exposure first",
       items: {
         type: "object", additionalProperties: false, required: ["symbol", "why", "revenue_share_pct", "share_is_estimate", "sector"],
         properties: {
@@ -89,12 +94,12 @@ export const CARD_JSON_SCHEMA = {
     catalyst: { type: "object", additionalProperties: false, required: ["what", "date"], properties: { what: { type: "string" }, date: { type: "string", description: "YYYY-MM-DD or 'unknown'" } } },
     direction: { type: "string", enum: ["long", "short"] },
     invalidation: { type: "string" },
-    time_limit_days: { type: "integer", minimum: 1, maximum: SCOUT.maxTimeLimitDays },
+    time_limit_days: { type: "integer", description: `1 to ${SCOUT.maxTimeLimitDays} days` },
     scores: {
       type: "object", additionalProperties: false, required: ["novelty", "materiality", "breadth_of_evidence", "lateness"],
-      properties: { novelty: { type: "number" }, materiality: { type: "number" }, breadth_of_evidence: { type: "number" }, lateness: { type: "number" } },
+      properties: { novelty: { type: "number", description: "0-10" }, materiality: { type: "number", description: "0-10" }, breadth_of_evidence: { type: "number", description: "0-10" }, lateness: { type: "number", description: "0-10" } },
     },
-    confidence: { type: "number", minimum: 0, maximum: 100 },
+    confidence: { type: "number", description: "0-100" },
     unknowns: { type: "array", items: { type: "string" } },
   },
 } as const;

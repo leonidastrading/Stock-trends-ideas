@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyGates, catalystDate, NoEvidenceError, parseCard, rankScore, type Card } from "@/lib/scout/card";
+import { applyGates, CARD_JSON_SCHEMA, catalystDate, NoEvidenceError, parseCard, rankScore, type Card } from "@/lib/scout/card";
 
 export const sampleCard = (p: Partial<Card> = {}): Card => ({
   title: "Transformer backlog pulls forward grid capex",
@@ -78,5 +78,12 @@ describe("gates", () => {
     const u = applyGates(sampleCard(), { newsStories30d: null, stockMove30dPct: null, stockMove90dPct: null });
     expect(u.card.lateness.stock_move_30d_pct).toBe(3);
     expect(u.notes.join()).toMatch(/not measured/);
+  });
+});
+
+describe("reply schema", () => {
+  it("uses only keywords structured outputs accept", () => {
+    const banned = /"(minItems|maxItems|minimum|maximum|pattern|minLength|maxLength|format)":/;
+    expect(JSON.stringify(CARD_JSON_SCHEMA)).not.toMatch(banned);
   });
 });

@@ -3,14 +3,19 @@
  * the last 30 days vs the monthly average over 12 months. The SEC asks every
  * automated client to identify itself: set SEC_USER_AGENT to "name contact".
  */
-import { getJson } from "../http";
+import { getJson, HttpError } from "../http";
 import { change, dateStr, daysAgo, guarded, pct, r1, type Source } from "./types";
 
 interface Fts { hits: { total: { value: number }; hits: Array<{ _source: { display_names?: string[]; form_type?: string; file_date?: string }; _id: string }> } }
 
 async function count(term: string, start: string, end: string, ua: string, fetchImpl?: typeof fetch): Promise<Fts> {
   const url = `https://efts.sec.gov/LatestSearch/search-index?q=${encodeURIComponent(`"${term}"`)}&forms=8-K,10-K,10-Q&dateRange=custom&startdt=${start}&enddt=${end}`;
-  return getJson<Fts>(url, { headers: { "user-agent": ua, "accept-encoding": "gzip, deflate" }, minIntervalMs: 150, fetchImpl });
+  try {
+    return await getJson<Fts>(url, { headers: { "user-agent": ua, "accept-encoding": "gzip, deflate" }, minIntervalMs: 150, fetchImpl });
+  } catch (err) {
+    if (err instanceof HttpError && err.status === 403) throw new Error("efts.sec.gov refuses requests from this server's address (403 whatever the User-Agent); EDGAR needs a relay from a non-blocked network");
+    throw err;
+  }
 }
 
 export const edgar: Source = {
