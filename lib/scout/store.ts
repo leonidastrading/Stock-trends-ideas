@@ -17,11 +17,12 @@ export interface ScoutSettings {
   effort: Effort;
   dailyCapUsd: number;
   maxCandidatesPerScan: number;
+  discoveryPerScan: number;
   emailDigest: boolean;
 }
 
 export const DEFAULT_SETTINGS: ScoutSettings = {
-  enabled: true, model: SCOUT.defaultModel, effort: SCOUT.defaultEffort, dailyCapUsd: SCOUT.defaultDailyCapUsd, maxCandidatesPerScan: SCOUT.maxCandidatesPerScan, emailDigest: true,
+  enabled: true, model: SCOUT.defaultModel, effort: SCOUT.defaultEffort, dailyCapUsd: SCOUT.defaultDailyCapUsd, maxCandidatesPerScan: SCOUT.maxCandidatesPerScan, discoveryPerScan: SCOUT.discoveryPerScan, emailDigest: true,
 };
 
 export async function loadSettings(): Promise<ScoutSettings> {

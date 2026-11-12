@@ -19,14 +19,18 @@ export const SCOUT = {
   defaultEffort: "high" as const,
   /** Daily LLM spend cap, USD. Settings can lower it; the scout stops for the day when it is hit. */
   defaultDailyCapUsd: 5,
-  /** Candidates researched per daily scan, at most. */
+  /** Watch-list candidates researched per daily scan, at most. */
   maxCandidatesPerScan: 5,
+  /** Candidates the discovery step (reading the day's news and trending lists) may propose and research per scan. */
+  discoveryPerScan: 3,
   /** A term is not researched again within this many days. */
   candidateCooldownDays: 7,
   /** A term is a scan candidate when at least this many sources accelerate... */
   minAcceleratingSources: 2,
-  /** ...by at least this fraction against their 12-month base. */
+  /** ...by at least this fraction against their 12-month base... */
   minChangeVs12m: 0.5,
+  /** ...or a single source up by this much (a tripling) on its own. */
+  minSingleSourceChange: 2.0,
   /** Event kind: Polymarket odds moving by this many points in 7 days is a candidate on its own. */
   minOddsMovePoints: 10,
 

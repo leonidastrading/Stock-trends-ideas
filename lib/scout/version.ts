@@ -4,10 +4,11 @@ import { SCOUT, SECTORS } from "@/config/scout";
 import { UNIVERSE } from "@/config/universe";
 import { SOURCE_IDS, SOURCE_REVISIONS } from "../sources";
 import { CARD_JSON_SCHEMA } from "./card";
+import { TRIAGE_JSON_SCHEMA, TRIAGE_SYSTEM_PROMPT } from "./discovery";
 import { SYSTEM_PROMPT } from "./prompt";
 
 export function versionSpec(model: string, effort: string) {
-  return { model, effort, systemPrompt: SYSTEM_PROMPT, replySchema: CARD_JSON_SCHEMA, rules: SCOUT, sources: SOURCE_IDS, sourceRevisions: SOURCE_REVISIONS, sectors: SECTORS, universe: UNIVERSE };
+  return { model, effort, systemPrompt: SYSTEM_PROMPT, replySchema: CARD_JSON_SCHEMA, triagePrompt: TRIAGE_SYSTEM_PROMPT, triageSchema: TRIAGE_JSON_SCHEMA, rules: SCOUT, sources: SOURCE_IDS, sourceRevisions: SOURCE_REVISIONS, sectors: SECTORS, universe: UNIVERSE };
 }
 
 export function versionHash(spec: unknown): string {

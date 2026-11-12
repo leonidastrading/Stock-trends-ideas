@@ -3,8 +3,9 @@
  * the measurements as history, flag the terms that accelerate, and research
  * the strongest few. Pure helpers are exported for tests.
  */
-import { SCOUT } from "@/config/scout";
+import { SCOUT, type Kind } from "@/config/scout";
 import { probeAll, type Signal, type SourceResult } from "../sources";
+import { buildTriagePrompt, gatherPulse, parseTriage, triggerFor } from "./discovery";
 import { trendingNow } from "../sources/googletrends";
 import { toEt } from "../time";
 import { recordHealth, researchCandidate, type ResearchDeps, type ResearchOutcome } from "./research";
@@ -47,13 +48,14 @@ export function acceleration(signals: Signal[], kind: string | null): Accelerati
     if (!prev || (s.changeVs12m ?? 0) > (prev.changeVs12m ?? 0)) bySource.set(s.source, s);
   }
   const accelerating = [...bySource.values()];
+  const single = accelerating.some((s) => (s.changeVs12m ?? 0) >= SCOUT.minSingleSourceChange);
   const oddsMove = Math.max(0, ...signals.filter((s) => s.source === "polymarket").map((s) => Math.abs(Number((s.detail as { week_change_points?: number } | undefined)?.week_change_points ?? 0))));
   const eventTrigger = kind === "event" && oddsMove >= SCOUT.minOddsMovePoints;
   return {
     accelerating: eventTrigger ? [...accelerating, ...signals.filter((s) => s.source === "polymarket" && !bySource.has("polymarket")).slice(0, 1)] : accelerating,
     score: accelerating.reduce((a, s) => a + (s.changeVs12m ?? 0), 0) + (eventTrigger ? oddsMove / 10 : 0),
     oddsMove,
-    isCandidate: accelerating.length >= SCOUT.minAcceleratingSources || eventTrigger,
+    isCandidate: accelerating.length >= SCOUT.minAcceleratingSources || single || eventTrigger,
   };
 }
 
@@ -63,6 +65,7 @@ export interface ScanReport {
   measured: Array<{ term: string; kind: string; sources: number; accelerating: number; score: number; candidate: boolean; cooldown: boolean }>;
   researched: Array<{ term: string; outcome: string; reason?: string; cardId?: number }>;
   risingQueries: Array<{ title: string; traffic: string }>;
+  discovery: { headlinesRead: number; read: string | null; proposed: Array<{ term: string; kind: string; tickers: string[]; why: string }>; problems: string[]; error: string | null } | null;
   stoppedEarly: string | null;
 }
 
@@ -72,7 +75,7 @@ export async function runScan(deps: ResearchDeps): Promise<ScanReport> {
   const settings = await store.loadSettings();
   const items = await store.watchlist("active");
   const cooldown = await store.recentTerms(SCOUT.candidateCooldownDays);
-  const report: ScanReport = { date: et.date, terms: items.length, measured: [], researched: [], risingQueries: [], stoppedEarly: null };
+  const report: ScanReport = { date: et.date, terms: items.length, measured: [], researched: [], risingQueries: [], discovery: null, stoppedEarly: null };
 
   // Health is the worst status each source showed today, "ok" winning over "no data".
   const health = new Map<string, SourceResult>();
@@ -118,8 +121,52 @@ export async function runScan(deps: ResearchDeps): Promise<ScanReport> {
     report.researched.push(r.outcome === "card" ? { term: c.term, outcome: `card: ${r.card.status}`, cardId: r.card.id } : { term: c.term, outcome: r.outcome, reason: r.reason });
     if (r.outcome === "capped") {
       report.stoppedEarly = r.reason;
+      return report;
+    }
+  }
+
+  // Discovery: read the day's news and trending lists, let the model propose what the watch-list would miss.
+  if (settings.discoveryPerScan > 0) report.discovery = await runDiscovery(deps, settings.discoveryPerScan, cooldown, report);
+  return report;
+}
+
+async function runDiscovery(deps: ResearchDeps, max: number, cooldown: Set<string>, report: ScanReport): Promise<NonNullable<ScanReport["discovery"]>> {
+  const et = toEt(deps.now);
+  const out: NonNullable<ScanReport["discovery"]> = { headlinesRead: 0, read: null, proposed: [], problems: [], error: null };
+  const settings = await store.loadSettings();
+  const spend = await store.spendOn(et.date);
+  if (spend.cost >= settings.dailyCapUsd) {
+    out.error = `daily LLM cap reached ($${spend.cost.toFixed(2)} of $${settings.dailyCapUsd})`;
+    return out;
+  }
+  const pulse = await gatherPulse(deps.data, deps.now, deps.fetchImpl);
+  out.headlinesRead = pulse.headlinesRead;
+  out.problems = pulse.problems;
+  const avoid = [...cooldown, ...report.researched.map((r) => r.term.toLowerCase())];
+  const prompt = buildTriagePrompt(pulse, max, avoid);
+  let triage;
+  try {
+    const reply = await deps.callModel({ model: settings.model, effort: "medium", user: prompt, purpose: "triage" });
+    await store.logLlmCall({ etDate: et.date, model: settings.model, purpose: "triage", usage: reply.usage, costUsd: reply.costUsd, ok: true });
+    triage = parseTriage(reply.text);
+  } catch (err) {
+    await store.logLlmCall({ etDate: et.date, model: settings.model, purpose: "triage", usage: null, costUsd: null, ok: false });
+    out.error = `triage failed: ${err instanceof Error ? err.message : String(err)}`;
+    return out;
+  }
+  out.read = triage.read;
+  for (const c of triage.candidates.slice(0, max)) {
+    out.proposed.push({ term: c.term, kind: c.kind, tickers: c.tickers, why: c.why });
+    if (avoid.includes(c.term.toLowerCase())) continue;
+    const r = await researchCandidate({ origin: "scout", term: c.term, kindHint: c.kind as Kind, tickersHint: c.tickers, observation: null, trigger: triggerFor(c, et.date) }, deps);
+    report.researched.push(r.outcome === "card" ? { term: c.term, outcome: `card: ${r.card.status}`, cardId: r.card.id } : { term: c.term, outcome: r.outcome, reason: r.reason });
+    if (r.outcome === "card" && r.card.status !== "not_promoted") {
+      await store.addWatch({ term: c.term, kind: c.kind, tickers: c.tickers, addedBy: "scout", status: "proposed", note: `discovered ${et.date}: ${c.why.slice(0, 200)}` });
+    }
+    if (r.outcome === "capped") {
+      report.stoppedEarly = r.reason;
       break;
     }
   }
-  return report;
+  return out;
 }

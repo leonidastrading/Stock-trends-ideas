@@ -2,6 +2,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { callCost } from "@/config/scout";
 import { CARD_JSON_SCHEMA } from "./card";
+import { TRIAGE_JSON_SCHEMA, TRIAGE_SYSTEM_PROMPT } from "./discovery";
 import { SYSTEM_PROMPT } from "./prompt";
 
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
@@ -14,19 +15,26 @@ export interface ModelReply {
   costUsd: number | null;
 }
 
-export type CallModel = (args: { model: string; effort: Effort; user: string }) => Promise<ModelReply>;
+export type Purpose = "research" | "triage";
+export type CallModel = (args: { model: string; effort: Effort; user: string; purpose?: Purpose }) => Promise<ModelReply>;
+
+const PROMPTS: Record<Purpose, { system: string; schema: Record<string, unknown> }> = {
+  research: { system: SYSTEM_PROMPT, schema: CARD_JSON_SCHEMA as unknown as Record<string, unknown> },
+  triage: { system: TRIAGE_SYSTEM_PROMPT, schema: TRIAGE_JSON_SCHEMA as unknown as Record<string, unknown> },
+};
 
 /** Models that accept the server-side refusal fallback. */
 const FALLBACK_MODELS = new Set(["claude-fable-5-2", "claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5"]);
 
-export const callResearchModel: CallModel = async ({ model, effort, user }) => {
+export const callResearchModel: CallModel = async ({ model, effort, user, purpose = "research" }) => {
   const client = new Anthropic(); // ANTHROPIC_API_KEY from the environment
+  const { system, schema } = PROMPTS[purpose];
   const base = {
     model,
     max_tokens: 16000,
-    system: [{ type: "text" as const, text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" as const } }],
+    system: [{ type: "text" as const, text: system, cache_control: { type: "ephemeral" as const } }],
     messages: [{ role: "user" as const, content: user }],
-    output_config: { effort, format: { type: "json_schema" as const, schema: CARD_JSON_SCHEMA as unknown as Record<string, unknown> } },
+    output_config: { effort, format: { type: "json_schema" as const, schema } },
   };
   let resp: Anthropic.Beta.BetaMessage;
   try {

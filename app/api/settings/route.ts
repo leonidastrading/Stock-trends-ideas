@@ -13,6 +13,7 @@ const schema = z.object({
   effort: z.enum(["low", "medium", "high", "xhigh", "max"]),
   dailyCapUsd: z.number().min(0).max(1000),
   maxCandidatesPerScan: z.number().int().min(0).max(50),
+  discoveryPerScan: z.number().int().min(0).max(10),
   emailDigest: z.boolean(),
 });
 

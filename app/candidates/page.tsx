@@ -18,7 +18,7 @@ export default async function CandidatesPage({ searchParams }: { searchParams: P
   const t = new Map(tracks.map((x) => [x.cardId, x]));
   const sw = swingConfigured();
   const lastDaily = runs.find((r) => r.action === "daily");
-  const measured = (lastDaily?.detail as { measured?: Array<{ term: string; kind: string; sources: number; accelerating: number; score: number; candidate: boolean; cooldown: boolean }>; risingQueries?: Array<{ title: string; traffic: string }>; stoppedEarly?: string | null } | null) ?? null;
+  const measured = (lastDaily?.detail as { measured?: Array<{ term: string; kind: string; sources: number; accelerating: number; score: number; candidate: boolean; cooldown: boolean }>; risingQueries?: Array<{ title: string; traffic: string }>; stoppedEarly?: string | null; discovery?: { headlinesRead: number; read: string | null; proposed: Array<{ term: string; kind: string; tickers: string[]; why: string }>; problems: string[]; error: string | null } | null } | null) ?? null;
   return (
     <>
       <h1>Candidates</h1>
@@ -27,6 +27,17 @@ export default async function CandidatesPage({ searchParams }: { searchParams: P
         <section className="card">
           <h2>Last scan · {toEt(new Date(lastDaily.startedAt)).date} · {lastDaily.status}{lastDaily.error ? ` · ${lastDaily.error}` : ""}</h2>
           {measured?.stoppedEarly && <p className="warn small">{measured.stoppedEarly}</p>}
+          {measured?.discovery && (
+            <div className="card" style={{ marginBottom: 10 }}>
+              <h3>Discovery · {measured.discovery.headlinesRead} headlines read</h3>
+              {measured.discovery.read && <p className="small">{measured.discovery.read}</p>}
+              {measured.discovery.error && <p className="small neg">{measured.discovery.error}</p>}
+              {measured.discovery.proposed.length > 0 ? (
+                <ul className="small">{measured.discovery.proposed.map((p) => <li key={p.term}><b>{p.term}</b> <span className="tag">{p.kind.replace("_", "-")}</span> {p.tickers.join(", ")} — {p.why}</li>)}</ul>
+              ) : !measured.discovery.error && <p className="small muted">Nothing proposed today.</p>}
+              {measured.discovery.problems.length > 0 && <p className="small muted">Inputs not available: {measured.discovery.problems.join("; ")}</p>}
+            </div>
+          )}
           <div className="table-wrap">
             <table>
               <thead><tr><th>Watch-list term</th><th>Kind</th><th className="num">Sources with data</th><th className="num">Accelerating</th><th className="num">Score</th><th>Result</th></tr></thead>

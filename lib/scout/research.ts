@@ -81,7 +81,7 @@ export async function researchCandidate(input: ResearchInput, deps: ResearchDeps
     const user = attempt === 0 ? prompt : `${prompt}\n\nA previous reply could not be used (${lastError}). Reply with only the JSON card.`;
     let reply;
     try {
-      reply = await deps.callModel({ model: settings.model, effort: settings.effort, user });
+      reply = await deps.callModel({ model: settings.model, effort: settings.effort, user, purpose: "research" });
     } catch (err) {
       const reason = `model call failed: ${err instanceof Error ? err.message : String(err)}`;
       await store.logLlmCall({ etDate: et.date, model: settings.model, purpose: "research", usage: null, costUsd: null, ok: false });

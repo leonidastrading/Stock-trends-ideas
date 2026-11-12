@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export interface FormSettings { enabled: boolean; model: string; effort: string; dailyCapUsd: number; maxCandidatesPerScan: number; emailDigest: boolean }
+export interface FormSettings { enabled: boolean; model: string; effort: string; dailyCapUsd: number; maxCandidatesPerScan: number; discoveryPerScan: number; emailDigest: boolean }
 
 export default function SettingsForm({ initial }: { initial: FormSettings }) {
   const [s, setS] = useState(initial);
@@ -24,7 +24,8 @@ export default function SettingsForm({ initial }: { initial: FormSettings }) {
         <label className="field"><span className="field-label">Model</span><input value={s.model} onChange={(e) => setS({ ...s, model: e.target.value })} /><span className="field-hint">Part of the version.</span></label>
         <label className="field"><span className="field-label">Effort</span><select value={s.effort} onChange={(e) => setS({ ...s, effort: e.target.value })}>{["low", "medium", "high", "xhigh", "max"].map((x) => <option key={x}>{x}</option>)}</select><span className="field-hint">Part of the version.</span></label>
         <label className="field"><span className="field-label">Daily LLM cap ($)</span><input type="number" min="0" step="0.5" value={s.dailyCapUsd} onChange={(e) => setS({ ...s, dailyCapUsd: Number(e.target.value) })} /><span className="field-hint">When hit, the scout stops for the day and says so.</span></label>
-        <label className="field"><span className="field-label">Candidates researched per scan</span><input type="number" min="0" max="50" value={s.maxCandidatesPerScan} onChange={(e) => setS({ ...s, maxCandidatesPerScan: Number(e.target.value) })} /></label>
+        <label className="field"><span className="field-label">Watch-list candidates per scan</span><input type="number" min="0" max="50" value={s.maxCandidatesPerScan} onChange={(e) => setS({ ...s, maxCandidatesPerScan: Number(e.target.value) })} /><span className="field-hint">Terms that accelerate against their 12-month base.</span></label>
+        <label className="field"><span className="field-label">Discovery candidates per scan</span><input type="number" min="0" max="10" value={s.discoveryPerScan} onChange={(e) => setS({ ...s, discoveryPerScan: Number(e.target.value) })} /><span className="field-hint">Proposed by the model from the day's headlines and trending lists. 0 turns discovery off.</span></label>
         <label className="field"><span className="field-label">Weekly digest email</span><span className="inline"><input type="checkbox" checked={s.emailDigest} onChange={(e) => setS({ ...s, emailDigest: e.target.checked })} /> send on Mondays (needs Resend)</span></label>
       </div>
       <div className="actions"><button className="primary" type="submit" disabled={busy}>Save</button>{msg && <span className="small secondary">{msg}</span>}</div>

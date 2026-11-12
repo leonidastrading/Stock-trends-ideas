@@ -22,16 +22,20 @@ describe("12-month base from stored history", () => {
 
 describe("candidate rule", () => {
   it("needs two sources up 50% or more", () => {
-    expect(acceleration([sig("reddit", 30, 10), sig("wikipedia", 12, 10)], "consumer").isCandidate).toBe(false);
-    const a = acceleration([sig("reddit", 30, 10), sig("wikipedia", 16, 10), sig("hacker_news", 40, 10)], "consumer");
+    expect(acceleration([sig("reddit", 25, 10), sig("wikipedia", 12, 10)], "consumer").isCandidate).toBe(false);
+    const a = acceleration([sig("reddit", 25, 10), sig("wikipedia", 16, 10), sig("hacker_news", 20, 10)], "consumer");
     expect(a.isCandidate).toBe(true);
     expect(a.accelerating.map((s) => s.source).sort()).toEqual(["hacker_news", "reddit", "wikipedia"]);
-    expect(a.score).toBeCloseTo(2 + 0.6 + 3);
+    expect(a.score).toBeCloseTo(1.5 + 0.6 + 1);
+  });
+  it("one source tripling is a candidate on its own", () => {
+    expect(acceleration([sig("hacker_news", 29, 10)], "platform").isCandidate).toBe(false);
+    expect(acceleration([sig("hacker_news", 30, 10)], "platform").isCandidate).toBe(true);
   });
   it("keeps one signal per source and ignores unknown changes", () => {
-    const a = acceleration([sig("reddit", 30, 10), sig("reddit", 50, 10, { metric: "other" }), sig("youtube", 100, null)], "platform");
+    const a = acceleration([sig("reddit", 20, 10), sig("reddit", 28, 10, { metric: "other" }), sig("youtube", 100, null)], "platform");
     expect(a.accelerating).toHaveLength(1);
-    expect(a.accelerating[0].value).toBe(50);
+    expect(a.accelerating[0].value).toBe(28);
     expect(a.isCandidate).toBe(false);
   });
   it("an event's odds moving 10+ points is a candidate on its own, only for event terms", () => {

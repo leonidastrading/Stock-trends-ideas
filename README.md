@@ -25,9 +25,18 @@ measurements; cards are only written for new candidates; the tracker only moves 
 
 ### Two ways an idea starts
 
-- **The scout finds it.** A watch-list term is a candidate when at least **2 sources** are up **50% or more** against
-  their 12-month base, or (for event terms) a Polymarket market's odds moved **10+ points** in a week. Terms researched
-  in the last 7 days are skipped. The top candidates (default 5 a day) go to the research step.
+- **The scout finds it**, two ways, both in the daily scan:
+  - **Discovery.** The scan reads what moved in the last 24 hours: every headline on the news stream (aggregated by
+    ticker, with the headlines whose wording points at backlog, capacity, shortages, supply deals or raised guidance
+    pulled out), Stocktwits' trending list with its "why it's trending" notes, the largest 7-day odds moves on
+    Polymarket, Hacker News' front page and Google's rising queries. One model call proposes up to 3 candidates
+    (term, kind, tickers, one sentence on what it saw), told to look one step behind the obvious names. Each proposal
+    goes through the research step and gates like any other; a promoted or late one is also proposed for the
+    watch-list so it keeps being measured.
+  - **Watch-list acceleration.** A term is a candidate when at least **2 sources** are up **50% or more** against
+    their 12-month base, one source has **tripled**, or (for event terms) a Polymarket market's odds moved
+    **10+ points** in a week. Terms researched in the last 7 days are skipped; the top candidates (default 5 a day)
+    go to the research step.
 - **Vadim notices it.** The **"I noticed something"** page: one or two sentences, optionally a term, kind and tickers.
   The research step runs at once and returns the card in a minute or two. These cards are tagged **human-originated**
   and scored separately. A human card also lands on the watch-list as a proposal, so the scout keeps measuring it.

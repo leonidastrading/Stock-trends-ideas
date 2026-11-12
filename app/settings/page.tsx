@@ -79,6 +79,7 @@ function summarize(d: unknown): string {
   const parts: string[] = [];
   if (Array.isArray(o.measured)) parts.push(`${o.measured.length} terms measured`);
   if (Array.isArray(o.researched)) parts.push(`${o.researched.length} researched`);
+  if (o.discovery && typeof o.discovery === "object") parts.push(`discovery: ${(o.discovery as { headlinesRead: number }).headlinesRead} headlines, ${((o.discovery as { proposed: unknown[] }).proposed ?? []).length} proposed`);
   if (typeof o.digest === "string") parts.push(`digest: ${o.digest}`);
   if (typeof o.barsWritten === "number") parts.push(`${o.barsWritten} bars`);
   if (Array.isArray(o.entered)) parts.push(`${o.entered.length} entered, ${(o.exited as unknown[]).length} exited, ${o.open} open`);
