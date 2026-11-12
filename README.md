@@ -44,7 +44,7 @@ it sends and on the digest page. **missing** means no key or no data source.
 | YouTube Data API | videos on the term uploaded in 7 days vs the prior 4 weeks, plus their views | `YOUTUBE_API_KEY` |
 | Reddit | posts mentioning the term across subreddits, 7 days vs the prior month; growth from a low base, not rank | `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` from an app Reddit has **approved** for Data API access (its policy requires a request first); off and marked missing until then |
 | Wikipedia pageviews | the term's article: 7-day average views vs 12-month average | nothing |
-| Apple App Store top charts | rank in the US top 200 free apps (12-month base from stored history); Google Play has no public feed and is marked missing | nothing |
+| Apple App Store top charts | rank in the US top 100 free apps (12-month base from stored history); Google Play has no public feed and is marked missing | nothing |
 | Hacker News | stories in 7 days vs the 12-month weekly average | nothing |
 | SEC EDGAR full-text search | 8-K/10-Q/10-K filings mentioning the term in 30 days vs the 12-month monthly average, with recent filers | `SEC_USER_AGENT` (the SEC requires a contact) |
 | News stream (Alpaca/Benzinga) | stories tagged with the idea's tickers in 30 days, and how many came from mainstream outlets | `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` |

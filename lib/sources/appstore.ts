@@ -1,6 +1,6 @@
 /**
  * App-store top charts. Apple publishes a public JSON feed of the US top free
- * apps; Google Play has no public feed, so it is marked missing. Rank changes
+ * apps (rss.applemarketingtools.com); Google Play has no public feed. Rank changes
  * need history: the base comes from the scout's own stored daily ranks.
  */
 import { getJson } from "../http";
@@ -18,13 +18,13 @@ export function findRank(results: Array<{ name: string; artistName: string }>, t
 export const appStore: Source = {
   id: "app_store",
   label: "Apple App Store top charts",
-  about: "Rank changes for apps owned by listed companies (US top 200 free apps). Google Play: no public feed, marked missing.",
+  about: "Rank changes for apps owned by listed companies (US top 100 free apps). Google Play: no public feed, marked missing.",
   configured: () => true,
   probe: (ctx) =>
     guarded("app_store", async () => {
-      const feed = await getJson<Feed>("https://rss.marketingtools.apple.com/api/v2/us/apps/top-free/200/apps.json", { fetchImpl: ctx.fetchImpl, cacheMs: 60 * 60000 });
+      const feed = await getJson<Feed>("https://rss.applemarketingtools.com/api/v2/us/apps/top-free/100/apps.json", { fetchImpl: ctx.fetchImpl, cacheMs: 60 * 60000 });
       const hit = findRank(feed.feed.results, [ctx.term]);
-      if (!hit) return { source: "app_store", status: "ok", detail: `no top-200 app matches "${ctx.term}"`, signals: [] };
+      if (!hit) return { source: "app_store", status: "ok", detail: `no top-100 app matches "${ctx.term}"`, signals: [] };
       return {
         source: "app_store", status: "ok", signals: [{
           source: "app_store", metric: "top_free_rank", value: hit.rank, baseline: null, changeVs12m: null, asOf: dateStr(ctx.now),

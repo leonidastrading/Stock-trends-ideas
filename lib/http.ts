@@ -58,8 +58,15 @@ export async function getText(url: string, opts: GetOptions = {}): Promise<strin
       await sleep(ra > 0 ? Math.min(ra * 1000, 30000) : 500 * 2 ** attempt);
       continue;
     }
-    throw new HttpError(`${host} ${res.status}: ${body.slice(0, 200)}`, res.status, body);
+    throw new HttpError(`${host} ${res.status}: ${summarize(body)}`, res.status, body);
   }
+}
+
+/** Error bodies are often whole HTML pages: keep the title or the first line of text. */
+export function summarize(body: string): string {
+  const title = /<title>([^<]*)<\/title>/i.exec(body)?.[1]?.trim();
+  if (title) return title.slice(0, 120);
+  return body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160);
 }
 
 export async function getJson<T>(url: string, opts: GetOptions = {}): Promise<T> {
