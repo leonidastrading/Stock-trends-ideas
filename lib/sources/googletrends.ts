@@ -10,6 +10,21 @@ import { change, dateStr, guarded, pct, r1, type Source } from "./types";
 const UA = { "user-agent": "Mozilla/5.0 (compatible; trend-scout/0.1)", accept: "application/json, text/plain, */*", "accept-language": "en-US,en;q=0.9" };
 const strip = (s: string) => JSON.parse(s.replace(/^\)\]\}',?\s*/, ""));
 
+/** Google answers the API endpoints far more often when the request carries the NID cookie the site sets on a first visit. */
+let cookie: string | null = null;
+async function headers(fetchImpl: typeof fetch = fetch): Promise<Record<string, string>> {
+  if (cookie === null) {
+    try {
+      const res = await fetchImpl("https://trends.google.com/trends/explore?geo=US&hl=en-US", { headers: UA, redirect: "manual" });
+      const set = res.headers.get("set-cookie") ?? "";
+      cookie = /NID=[^;]+/.exec(set)?.[0] ?? "";
+    } catch {
+      cookie = "";
+    }
+  }
+  return cookie ? { ...UA, cookie } : UA;
+}
+
 /** Pure: last 4 weekly points vs the 12-month average from a 0–100 timeline. */
 export function interestSummary(points: Array<{ date: string; value: number }>) {
   if (points.length < 8) return null;
@@ -21,10 +36,11 @@ export function interestSummary(points: Array<{ date: string; value: number }>) 
 
 export async function interestOverTime(term: string, fetchImpl?: typeof fetch): Promise<Array<{ date: string; value: number }>> {
   const req = JSON.stringify({ comparisonItem: [{ keyword: term, geo: "US", time: "today 12-m" }], category: 0, property: "" });
-  const explore = strip(await getText(`https://trends.google.com/trends/api/explore?hl=en-US&tz=0&req=${encodeURIComponent(req)}`, { headers: UA, minIntervalMs: 2000, fetchImpl, retries: 1 }));
+  const h = await headers(fetchImpl);
+  const explore = strip(await getText(`https://trends.google.com/trends/api/explore?hl=en-US&tz=0&req=${encodeURIComponent(req)}`, { headers: h, minIntervalMs: 3000, fetchImpl, retries: 1 }));
   const w = (explore.widgets as Array<{ id: string; token: string; request: unknown }>).find((x) => x.id === "TIMESERIES");
   if (!w) throw new Error("no TIMESERIES widget");
-  const data = strip(await getText(`https://trends.google.com/trends/api/widgetdata/multiline?hl=en-US&tz=0&req=${encodeURIComponent(JSON.stringify(w.request))}&token=${encodeURIComponent(w.token)}`, { headers: UA, minIntervalMs: 2000, fetchImpl, retries: 1 }));
+  const data = strip(await getText(`https://trends.google.com/trends/api/widgetdata/multiline?hl=en-US&tz=0&req=${encodeURIComponent(JSON.stringify(w.request))}&token=${encodeURIComponent(w.token)}`, { headers: h, minIntervalMs: 3000, fetchImpl, retries: 1 }));
   return (data.default.timelineData as Array<{ formattedAxisTime: string; time: string; value: number[] }>).map((p) => ({ date: new Date(Number(p.time) * 1000).toISOString().slice(0, 10), value: p.value[0] }));
 }
 

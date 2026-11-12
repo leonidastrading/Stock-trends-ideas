@@ -21,14 +21,22 @@ const FALLBACK_MODELS = new Set(["claude-fable-5-2", "claude-fable-5-1", "claude
 
 export const callResearchModel: CallModel = async ({ model, effort, user }) => {
   const client = new Anthropic(); // ANTHROPIC_API_KEY from the environment
-  const resp = await client.beta.messages.create({
+  const base = {
     model,
     max_tokens: 16000,
-    system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-    messages: [{ role: "user", content: user }],
-    output_config: { effort, format: { type: "json_schema", schema: CARD_JSON_SCHEMA as unknown as Record<string, unknown> } },
-    ...(FALLBACK_MODELS.has(model) ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
-  });
+    system: [{ type: "text" as const, text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" as const } }],
+    messages: [{ role: "user" as const, content: user }],
+    output_config: { effort, format: { type: "json_schema" as const, schema: CARD_JSON_SCHEMA as unknown as Record<string, unknown> } },
+  };
+  let resp: Anthropic.Beta.BetaMessage;
+  try {
+    resp = await client.beta.messages.create({ ...base, ...(FALLBACK_MODELS.has(model) ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}) });
+  } catch (err) {
+    // If the account or platform rejects the refusal-fallback option, send the same request without it.
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!(err instanceof Anthropic.BadRequestError) || !/fallback|beta/i.test(msg)) throw err;
+    resp = await client.beta.messages.create(base);
+  }
   if (resp.stop_reason === "refusal") throw new Error("model refused the request");
   if (resp.stop_reason === "max_tokens") throw new Error("reply truncated (max_tokens)");
   const text = resp.content.filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text").map((b) => b.text).join("");
