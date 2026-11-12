@@ -1,9 +1,14 @@
 /**
  * Reddit: posts mentioning the term across all subreddits, last 7 days vs the
- * weekly average of the prior month (the public search API reaches back one
- * month at most; the 12-month base comes from the scout's own stored history
- * once it has one). Uses OAuth (REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET) when
- * set, otherwise the public JSON endpoints at their lower rate limit.
+ * weekly average of the prior month (the search API reaches back one month at
+ * most; the 12-month base comes from the scout's own stored history once it
+ * has one).
+ *
+ * Reddit's Responsible Builder Policy requires a request and explicit approval
+ * before any Data API access, so this source stays OFF (reported as missing)
+ * until REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET from an approved app are set.
+ * It then uses OAuth against oauth.reddit.com; the unauthenticated public JSON
+ * endpoints are never used.
  */
 import { getJson } from "../http";
 import { change, dateStr, guarded, pct, r1, type Source } from "./types";
@@ -14,7 +19,7 @@ let token: { value: string; exp: number } | null = null;
 async function auth(env: NodeJS.ProcessEnv, fetchImpl: typeof fetch = fetch): Promise<Record<string, string>> {
   const id = env.REDDIT_CLIENT_ID;
   const secret = env.REDDIT_CLIENT_SECRET;
-  if (!id || !secret) return { "user-agent": UA };
+  if (!id || !secret) throw new Error("Reddit credentials not set");
   if (!token || token.exp < Date.now()) {
     const res = await fetchImpl("https://www.reddit.com/api/v1/access_token", {
       method: "POST",
@@ -50,12 +55,13 @@ async function count(term: string, t: "week" | "month", headers: Record<string, 
 export const reddit: Source = {
   id: "reddit",
   label: "Reddit",
-  about: "Mention counts across subreddits; growth from a low base, not rank.",
-  configured: () => true,
+  about: "Mention counts across subreddits; growth from a low base, not rank. Off until Reddit approves Data API access (set the approved app's credentials).",
+  configured: (env) => !!(env.REDDIT_CLIENT_ID && env.REDDIT_CLIENT_SECRET),
   probe: (ctx) =>
     guarded("reddit", async () => {
+      if (!ctx.env.REDDIT_CLIENT_ID || !ctx.env.REDDIT_CLIENT_SECRET) return { source: "reddit", status: "missing", detail: "awaiting Reddit Data API approval: set REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET from the approved app", signals: [] };
       const headers = await auth(ctx.env, ctx.fetchImpl);
-      const host = headers.authorization ? "https://oauth.reddit.com" : "https://www.reddit.com";
+      const host = "https://oauth.reddit.com";
       const week = await count(ctx.term, "week", headers, host, ctx.fetchImpl);
       const month = await count(ctx.term, "month", headers, host, ctx.fetchImpl);
       const weeklyBase = r1(month.n / 4.35);

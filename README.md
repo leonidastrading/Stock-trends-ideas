@@ -42,7 +42,7 @@ it sends and on the digest page. **missing** means no key or no data source.
 |---|---|---|
 | Google Trends | 12-month US search interest (0–100), last 4 weeks vs 12-month average; rising queries for watch-list proposals | nothing (unofficial endpoints, rate-limited; failures show as down) |
 | YouTube Data API | videos on the term uploaded in 7 days vs the prior 4 weeks, plus their views | `YOUTUBE_API_KEY` |
-| Reddit | posts mentioning the term across subreddits, 7 days vs the prior month; growth from a low base, not rank | optional `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` |
+| Reddit | posts mentioning the term across subreddits, 7 days vs the prior month; growth from a low base, not rank | `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` from an app Reddit has **approved** for Data API access (its policy requires a request first); off and marked missing until then |
 | Wikipedia pageviews | the term's article: 7-day average views vs 12-month average | nothing |
 | Apple App Store top charts | rank in the US top 200 free apps (12-month base from stored history); Google Play has no public feed and is marked missing | nothing |
 | Hacker News | stories in 7 days vs the 12-month weekly average | nothing |
