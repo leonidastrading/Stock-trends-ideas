@@ -2,9 +2,11 @@ import SetupNotice from "@/components/SetupNotice";
 import { SCOUT } from "@/config/scout";
 import { hasDatabase } from "@/lib/db";
 import { envStatus } from "@/lib/env-status";
+import { marketDataFromEnv } from "@/lib/alpaca";
 import { allSources } from "@/lib/sources";
 import * as store from "@/lib/scout/store";
 import { toEt } from "@/lib/time";
+import RunButtons from "./RunButtons";
 import SettingsForm from "./SettingsForm";
 
 export const dynamic = "force-dynamic";
@@ -15,13 +17,14 @@ export default async function SettingsPage() {
   if (!hasDatabase()) return <SetupNotice />;
   const [settings, health, spend, runs, versions] = await Promise.all([store.loadSettings(), store.allHealth(), store.spendByDay(30), store.recentRuns(15), store.listVersions()]);
   const h = new Map(health.map((x) => [x.source, x]));
-  const sources = allSources(null);
+  const sources = allSources(marketDataFromEnv());
   const today = toEt(new Date()).date;
   const todaySpend = spend.find((s) => s.date === today);
   return (
     <>
       <h1>Settings</h1>
       <section className="card"><h2>Scout</h2><SettingsForm initial={settings} /></section>
+      <section className="card"><h2>Run now</h2><RunButtons /></section>
 
       <section className="card">
         <h2>Source health</h2>
