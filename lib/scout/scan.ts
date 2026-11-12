@@ -11,7 +11,8 @@ import { recordHealth, researchCandidate, type ResearchDeps, type ResearchOutcom
 import * as store from "./store";
 
 /** Metrics where a lower value is the stronger signal (chart rank). */
-const LOWER_IS_BETTER = new Set(["app_store:top_free_rank"]);
+const LOWER_IS_BETTER = new Set(["app_store:top_free_rank", "stocktwits:trending_rank"]);
+const lowerIsBetter = (s: Signal) => LOWER_IS_BETTER.has(`${s.source}:${s.metric.split(":")[0]}`);
 /** Needs this many stored days before the scout's own history is used as the 12-month base. */
 const MIN_HISTORY_DAYS = 30;
 
@@ -21,7 +22,7 @@ export function withHistory(signals: Signal[], history: Record<string, { avg: nu
     if (s.baseline !== null && s.changeVs12m !== null) return s;
     const h = history[`${s.source}:${s.metric}`];
     if (!h || h.n < MIN_HISTORY_DAYS || h.avg <= 0) return s;
-    const lower = LOWER_IS_BETTER.has(`${s.source}:${s.metric}`);
+    const lower = lowerIsBetter(s);
     const change = lower ? (s.value > 0 ? h.avg / s.value - 1 : null) : s.value / h.avg - 1;
     return { ...s, baseline: Math.round(h.avg * 10) / 10, changeVs12m: change, note: `${s.note}; 12-month base from ${h.n} stored days: ${Math.round(h.avg * 10) / 10}` };
   });

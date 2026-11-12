@@ -49,9 +49,9 @@ it sends and on the digest page. **missing** means no key or no data source.
 | SEC EDGAR full-text search | 8-K/10-Q/10-K filings mentioning the term in 30 days vs the 12-month monthly average, with recent filers | `SEC_USER_AGENT` (the SEC requires a contact) |
 | News stream (Alpaca/Benzinga) | stories tagged with the idea's tickers in 30 days, and how many came from mainstream outlets | `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` |
 | Polymarket | odds and weekly odds change for open markets matching the term | nothing |
-| Stocktwits | message volume by ticker | **MISSING: no data source yet.** Adding one starts a new version. |
+| Stocktwits | per ticker: message rate per hour and bullish share from the public symbol stream; trending rank, score and watchers from the trending list (the same public endpoints as the Trending Five app) | nothing |
 
-Sources that give no 12-month base of their own (Reddit, YouTube, app ranks) get one from the scout's stored daily
+Sources that give no 12-month base of their own (Reddit, YouTube, app ranks, Stocktwits) get one from the scout's stored daily
 measurements once 30 days exist. Every source is rate-limited per host, cached, and never scraped behind a login.
 X and TikTok (paid) are left for a later version.
 

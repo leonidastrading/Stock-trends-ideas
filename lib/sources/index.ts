@@ -18,6 +18,12 @@ export function allSources(data: MarketData | null): Source[] {
 
 export const SOURCE_IDS = ["google_trends", "youtube", "reddit", "wikipedia", "app_store", "hacker_news", "edgar", "news", "polymarket", "stocktwits"] as const;
 
+/** Bump a source's revision when its data source or measurement changes: it starts a new version. */
+export const SOURCE_REVISIONS: Record<(typeof SOURCE_IDS)[number], number> = {
+  google_trends: 1, youtube: 1, reddit: 1, wikipedia: 1, app_store: 1, hacker_news: 1, edgar: 1, news: 1, polymarket: 1,
+  stocktwits: 2, // 1 = missing; 2 = public trending list + symbol streams (the Trending Five endpoints)
+};
+
 /** Probe every source for one term, in parallel, never throwing. */
 export async function probeAll(sources: Source[], ctx: ProbeContext): Promise<SourceResult[]> {
   return Promise.all(sources.map((s) => (s.configured(ctx.env) ? s.probe(ctx) : Promise.resolve<SourceResult>({ source: s.id, status: "missing", detail: "not configured", signals: [] }))));
