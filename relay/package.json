@@ -1,0 +1,9 @@
+{
+  "name": "edgar-relay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Forwards the trend scout's EDGAR full-text searches from a network the SEC accepts. No dependencies.",
+  "scripts": { "start": "node server.mjs" },
+  "engines": { "node": ">=20" }
+}

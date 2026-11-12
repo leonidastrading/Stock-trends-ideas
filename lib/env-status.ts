@@ -12,6 +12,8 @@ export function envStatus(env: NodeJS.ProcessEnv = process.env): EnvStatus[] {
     row("ALPACA_API_KEY_ID", true, "prices and news (read-only)"),
     row("ALPACA_API_SECRET_KEY", true, "prices and news (read-only)"),
     row("SEC_USER_AGENT", false, "EDGAR"),
+    row("EDGAR_PROXY_URL", false, "EDGAR relay (relay/ on Railway)"),
+    row("EDGAR_PROXY_TOKEN", false, "EDGAR relay"),
     row("YOUTUBE_API_KEY", false, "YouTube"),
     row("REDDIT_CLIENT_ID", false, "Reddit (after Data API approval)"),
     row("REDDIT_CLIENT_SECRET", false, "Reddit (after Data API approval)"),

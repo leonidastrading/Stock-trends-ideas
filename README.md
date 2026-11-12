@@ -46,7 +46,7 @@ it sends and on the digest page. **missing** means no key or no data source.
 | Wikipedia pageviews | the term's article: 7-day average views vs 12-month average | nothing |
 | Apple App Store top charts | rank in the US top 100 free apps (12-month base from stored history); Google Play has no public feed and is marked missing | nothing |
 | Hacker News | stories in 7 days vs the 12-month weekly average | nothing |
-| SEC EDGAR full-text search | 8-K/10-Q/10-K filings mentioning the term in 30 days vs the 12-month monthly average, with recent filers | `SEC_USER_AGENT` (the SEC requires a contact) |
+| SEC EDGAR full-text search | 8-K/10-Q/10-K filings mentioning the term in 30 days vs the 12-month monthly average, with recent filers | `SEC_USER_AGENT` (the SEC requires a contact). `efts.sec.gov` refuses Vercel's addresses, so in practice the relay in `relay/` on Railway plus `EDGAR_PROXY_URL` / `EDGAR_PROXY_TOKEN` |
 | News stream (Alpaca/Benzinga) | stories tagged with the idea's tickers in 30 days, and how many came from mainstream outlets | `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` |
 | Polymarket | odds and weekly odds change for open markets matching the term | nothing |
 | Stocktwits | per ticker: message rate per hour and bullish share from the public symbol stream; trending rank, score and watchers from the trending list (the same public endpoints as the Trending Five app) | nothing |
@@ -156,6 +156,13 @@ npm run scan                      # run the daily job locally
 npm run scan -- track             # run the tracker locally
 ```
 
+## EDGAR relay
+
+`relay/` holds a one-file Node service that forwards EDGAR full-text searches from a network the SEC accepts, because
+`efts.sec.gov` returns 403 to Vercel's addresses whatever the User-Agent. Deploy it on Railway (root directory `relay`),
+set `RELAY_TOKEN` and `SEC_USER_AGENT` there, and point the scout at it with `EDGAR_PROXY_URL` / `EDGAR_PROXY_TOKEN`.
+Details in `relay/README.md`.
+
 ## Layout
 
 ```
@@ -173,5 +180,6 @@ lib/scout/tracking.ts  paper entries, exits and drawdowns
 lib/scout/scoring.ts   the report and the random-sector baseline — pure
 lib/scout/swing.ts   the post to the Swing ideas log
 lib/schema.ts        idempotent SQL with append-only triggers
+relay/               the EDGAR relay (deploy on Railway)
 tests/               vitest
 ```
