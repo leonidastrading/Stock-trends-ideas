@@ -15,6 +15,7 @@ import { dateStr, daysAgo } from "../sources/types";
 import { addDays, toEt } from "../time";
 import { preferencesText } from "./preferences";
 import { researchCandidate, type ResearchDeps } from "./research";
+import { normalizeTicker } from "./tickers";
 import * as store from "./store";
 
 // ------------------------------------------------------------- detection
@@ -97,7 +98,7 @@ export const storyTriageSchema = z.object({
     skip: z.boolean(),
     skip_reason: z.string().max(300),
     trades: z.array(z.object({
-      ticker: z.string().trim().toUpperCase().regex(/^[A-Z]{1,5}(\.[A-Z])?$/),
+      ticker: z.string().min(1),
       direction: z.enum(["long", "short"]),
       role: z.enum(["direct", "second_order"]),
       horizon_days: z.number().int().min(1).max(180),
@@ -126,7 +127,7 @@ export const STORY_JSON_SCHEMA = {
             items: {
               type: "object", additionalProperties: false, required: ["ticker", "direction", "role", "horizon_days", "thesis", "why_not_priced", "invalidation"],
               properties: {
-                ticker: { type: "string" }, direction: { type: "string", enum: ["long", "short"] }, role: { type: "string", enum: ["direct", "second_order"] },
+                ticker: { type: "string", description: "US ticker symbol only, e.g. NVDA or BRK.B; no $ sign, no exchange prefix" }, direction: { type: "string", enum: ["long", "short"] }, role: { type: "string", enum: ["direct", "second_order"] },
                 horizon_days: { type: "integer", description: "1 to 180" }, thesis: { type: "string" }, why_not_priced: { type: "string" }, invalidation: { type: "string" },
               },
             },
@@ -148,7 +149,8 @@ export function buildStoryPrompt(stories: Story[], date: string, preferences: st
   return L.join("\n");
 }
 
-export function parseStoryTriage(text: string): StoryTriage {
+/** Parse the desk's reply. A trade with a ticker that is not a US symbol is dropped (noted in `dropped`), never the whole reply. */
+export function parseStoryTriage(text: string): StoryTriage & { dropped: string[] } {
   let raw: unknown;
   try {
     raw = JSON.parse(text);
@@ -157,7 +159,19 @@ export function parseStoryTriage(text: string): StoryTriage {
   }
   const r = storyTriageSchema.safeParse(raw);
   if (!r.success) throw new Error(`story reply failed validation: ${r.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
-  return r.data;
+  const dropped: string[] = [];
+  const stories = r.data.stories.map((s) => {
+    const trades = s.trades.flatMap((t) => {
+      const ticker = normalizeTicker(t.ticker);
+      if (!ticker) {
+        dropped.push(`${s.key}: ${t.ticker}`);
+        return [];
+      }
+      return [{ ...t, ticker }];
+    });
+    return { ...s, trades, skip: s.skip || (!s.trades.length ? s.skip : trades.length === 0), skip_reason: s.skip ? s.skip_reason : trades.length === 0 && s.trades.length ? `no US-listed ticker among the proposed trades (${s.trades.map((t) => t.ticker).join(", ")})` : s.skip_reason };
+  });
+  return { stories, dropped };
 }
 
 // ------------------------------------------------------------------- run
@@ -213,15 +227,24 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
     return report;
   }
 
-  let triage: StoryTriage;
-  try {
-    const preferences = preferencesText(await store.recentFeedback());
-    const reply = await deps.callModel({ model: settings.model, effort: "medium", user: buildStoryPrompt(fresh.slice(0, max), et.date, preferences), purpose: "stories" });
-    await store.logLlmCall({ etDate: et.date, model: settings.model, purpose: "stories", usage: reply.usage, costUsd: reply.costUsd, ok: true });
-    triage = parseStoryTriage(reply.text);
-  } catch (err) {
-    await store.logLlmCall({ etDate: et.date, model: settings.model, purpose: "stories", usage: null, costUsd: null, ok: false });
-    report.error = `story triage failed: ${err instanceof Error ? err.message : String(err)}`;
+  let triage: StoryTriage | null = null;
+  const preferences = preferencesText(await store.recentFeedback());
+  const prompt = buildStoryPrompt(fresh.slice(0, max), et.date, preferences);
+  let lastError = "";
+  for (let attempt = 0; attempt < 2 && !triage; attempt++) {
+    try {
+      const reply = await deps.callModel({ model: settings.model, effort: "medium", user: attempt ? `${prompt}\n\nA previous reply could not be used (${lastError}). Reply with only the JSON object; tickers are plain US symbols.` : prompt, purpose: "stories" });
+      await store.logLlmCall({ etDate: et.date, model: settings.model, purpose: "stories", usage: reply.usage, costUsd: reply.costUsd, ok: true });
+      const parsed = parseStoryTriage(reply.text);
+      if (parsed.dropped.length) report.error = `dropped trades with non-US tickers: ${parsed.dropped.join("; ")}`;
+      triage = parsed;
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+      await store.logLlmCall({ etDate: et.date, model: settings.model, purpose: "stories", usage: null, costUsd: null, ok: false });
+    }
+  }
+  if (!triage) {
+    report.error = `story triage failed twice: ${lastError}`;
     return report;
   }
 

@@ -15,6 +15,7 @@ import { marketOdds } from "../sources/polymarket";
 import type { StTrending } from "../sources/stocktwits";
 import { dateStr, daysAgo } from "../sources/types";
 import type { Signal } from "../sources";
+import { normalizeTicker } from "./tickers";
 
 // --------------------------------------------------------------- the pulse
 
@@ -101,7 +102,7 @@ export const triageSchema = z.object({
   candidates: z.array(z.object({
     term: z.string().min(2).max(80),
     kind: z.enum(KINDS),
-    tickers: z.array(z.string().trim().toUpperCase().regex(/^[A-Z]{1,5}(\.[A-Z])?$/)).min(1).max(5),
+    tickers: z.array(z.string()).min(1).max(8),
     why: z.string().min(1).max(400),
     seen_in: z.array(z.string()).max(5),
   })).max(10),
@@ -119,7 +120,7 @@ export const TRIAGE_JSON_SCHEMA = {
         properties: {
           term: { type: "string", description: "short searchable term: product, app, theme or supply-chain phrase" },
           kind: { type: "string", enum: [...KINDS] },
-          tickers: { type: "array", items: { type: "string" }, description: "1 to 5 tickers, most direct exposure first" },
+          tickers: { type: "array", items: { type: "string" }, description: "1 to 5 US ticker symbols (e.g. NVDA, BRK.B; no $ sign), most direct exposure first" },
           why: { type: "string", description: "one sentence: what you saw" },
           seen_in: { type: "array", items: { type: "string" }, description: "which inputs: news, stocktwits, polymarket, hacker_news, rising_queries" },
         },
@@ -164,7 +165,11 @@ export function parseTriage(text: string): Triage {
   }
   const r = triageSchema.safeParse(raw);
   if (!r.success) throw new Error(`triage failed validation: ${r.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
-  return r.data;
+  // Tickers that are not US symbols are dropped; a candidate with none left is dropped.
+  const candidates = r.data.candidates
+    .map((c) => ({ ...c, tickers: c.tickers.map(normalizeTicker).filter((t): t is string => !!t).slice(0, 5) }))
+    .filter((c) => c.tickers.length);
+  return { ...r.data, candidates };
 }
 
 /** The trigger stored with a discovered candidate, in the same shape as the scan's accelerating signals. */

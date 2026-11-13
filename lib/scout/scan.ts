@@ -145,14 +145,20 @@ async function runDiscovery(deps: ResearchDeps, max: number, cooldown: Set<strin
   out.problems = pulse.problems;
   const avoid = [...cooldown, ...report.researched.map((r) => r.term.toLowerCase())];
   const prompt = buildTriagePrompt(pulse, max, avoid, preferencesText(await store.recentFeedback()));
-  let triage;
-  try {
-    const reply = await deps.callModel({ model: settings.model, effort: "medium", user: prompt, purpose: "triage" });
-    await store.logLlmCall({ etDate: et.date, model: settings.model, purpose: "triage", usage: reply.usage, costUsd: reply.costUsd, ok: true });
-    triage = parseTriage(reply.text);
-  } catch (err) {
-    await store.logLlmCall({ etDate: et.date, model: settings.model, purpose: "triage", usage: null, costUsd: null, ok: false });
-    out.error = `triage failed: ${err instanceof Error ? err.message : String(err)}`;
+  let triage: ReturnType<typeof parseTriage> | null = null;
+  let lastError = "";
+  for (let attempt = 0; attempt < 2 && !triage; attempt++) {
+    try {
+      const reply = await deps.callModel({ model: settings.model, effort: "medium", user: attempt ? `${prompt}\n\nA previous reply could not be used (${lastError}). Reply with only the JSON object.` : prompt, purpose: "triage" });
+      await store.logLlmCall({ etDate: et.date, model: settings.model, purpose: "triage", usage: reply.usage, costUsd: reply.costUsd, ok: true });
+      triage = parseTriage(reply.text);
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+      await store.logLlmCall({ etDate: et.date, model: settings.model, purpose: "triage", usage: null, costUsd: null, ok: false });
+    }
+  }
+  if (!triage) {
+    out.error = `triage failed twice: ${lastError}`;
     return out;
   }
   out.read = triage.read;
