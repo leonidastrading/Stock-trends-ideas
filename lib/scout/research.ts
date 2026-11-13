@@ -110,7 +110,7 @@ export async function researchCandidate(input: ResearchInput, deps: ResearchDeps
   const measured = await measureLateness(deps.data, card.tickers[0].symbol, deps.now);
   let gated;
   try {
-    gated = applyGates(card, measured);
+    gated = applyGates(card, measured, { wholeCompany: !!input.context });
   } catch (err) {
     if (!(err instanceof NoEvidenceError)) throw err;
     return { outcome: "rejected", reason: err.message, candidate: await store.addCandidate({ ...base, outcome: "rejected", reason: err.message }) };

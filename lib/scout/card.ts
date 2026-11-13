@@ -141,7 +141,12 @@ export class NoEvidenceError extends Error {}
  *  3. lateness: measured 30-day move above 30% or more than 20 stories in 30 days = already obvious = "late".
  * The card's lateness block is replaced with the measured numbers where they exist.
  */
-export function applyGates(input: Card, measured: MeasuredLateness): GateResult {
+export interface GateOptions {
+  /** Story trades: the thesis is about the whole company, so a missing revenue share means 100%, not "unknown". */
+  wholeCompany?: boolean;
+}
+
+export function applyGates(input: Card, measured: MeasuredLateness, opts: GateOptions = {}): GateResult {
   const notes: string[] = [];
   const evidence = input.evidence.filter((e) => e.source.trim() && /^\d{4}-\d{2}-\d{2}$/.test(e.as_of) && !Number.isNaN(Date.parse(e.as_of)));
   if (evidence.length < input.evidence.length) notes.push(`${input.evidence.length - evidence.length} evidence item(s) dropped: missing source or date`);
@@ -163,7 +168,11 @@ export function applyGates(input: Card, measured: MeasuredLateness): GateResult 
   if (input.lateness.already_obvious && !late30 && !lateNews) notes.push("model itself judged the idea already obvious");
   lateness.already_obvious = late30 || lateNews || input.lateness.already_obvious;
 
-  const primary = input.tickers[0];
+  let primary = input.tickers[0];
+  if (opts.wholeCompany && primary.revenue_share_pct === null) {
+    primary = { ...primary, revenue_share_pct: 100, share_is_estimate: false };
+    notes.push(`whole-company story trade: revenue share taken as 100% for ${primary.symbol}`);
+  }
   let status: CardStatus = "promoted";
   if (primary.revenue_share_pct === null) {
     status = "not_promoted";
@@ -176,7 +185,7 @@ export function applyGates(input: Card, measured: MeasuredLateness): GateResult 
   }
   if (primary.revenue_share_pct !== null && primary.share_is_estimate) notes.push(`revenue share for ${primary.symbol} is the model's estimate`);
 
-  return { status, notes, card: { ...input, evidence, lateness } };
+  return { status, notes, card: { ...input, evidence, lateness, tickers: [primary, ...input.tickers.slice(1)] } };
 }
 
 /** Digest ranking: novelty × materiality. */

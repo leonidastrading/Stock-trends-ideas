@@ -87,3 +87,16 @@ describe("reply schema", () => {
     expect(JSON.stringify(CARD_JSON_SCHEMA)).not.toMatch(banned);
   });
 });
+
+describe("whole-company story trades", () => {
+  it("a missing revenue share means 100% for a story trade, so the card is tracked as late rather than dropped", () => {
+    const t = sampleCard().tickers[0];
+    const card = sampleCard({ kind: "event", direction: "short", tickers: [{ ...t, symbol: "NVDA", revenue_share_pct: null, sector: "technology" }] });
+    const measured = { newsStories30d: 288, stockMove30dPct: -8, stockMove90dPct: 5 };
+    expect(applyGates(card, measured).status).toBe("not_promoted");
+    const g = applyGates(card, measured, { wholeCompany: true });
+    expect(g.status).toBe("late");
+    expect(g.card.tickers[0]).toMatchObject({ revenue_share_pct: 100, share_is_estimate: false });
+    expect(g.notes.join()).toMatch(/whole-company/);
+  });
+});

@@ -14,7 +14,7 @@ Rules:
 - "lateness": give your best figures; the code replaces them with measured ones where it can and applies the gates itself (a stock already up more than ${SCOUT.lateStockMove30dPct}% in 30 days, or more than ${SCOUT.lateNewsStories30d} mainstream stories in 30 days, is already obvious).
 - "time_limit_days": how long the thesis needs to show up in results, at most ${SCOUT.maxTimeLimitDays}. "catalyst.date" is YYYY-MM-DD or "unknown".
 - Scores are 0-10: novelty (how far ahead of consensus), materiality (how much it moves the company's numbers), breadth_of_evidence (independent sources agreeing), lateness (10 = nobody is talking about it, 0 = everyone is).
-- Story trades: when the candidate comes from the story desk (a breaking story and a proposed trade), write the card for that trade. The lateness gate will often mark these "late"; that is expected and they are still tracked. Put the real reason the repricing may continue in why_not_priced.
+- Story trades: when the candidate comes from the story desk (a breaking story and a proposed trade), write the card for that trade. When the thesis is about the whole company rather than one product line (a CEO scandal, a ban, a war trade on a fund), set revenue_share_pct to 100 with share_is_estimate false. The lateness gate will often mark these "late"; that is expected and they are still tracked. Put the real reason the repricing may continue in why_not_priced.
 - Options are never a recommendation. A card may note that the thesis has a dated catalyst, nothing more.
 - Plain language. State the observation with numbers and dates. Put anything you could not check in "unknowns".`;
 

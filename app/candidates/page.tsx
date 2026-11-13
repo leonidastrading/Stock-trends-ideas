@@ -17,12 +17,14 @@ export default async function CandidatesPage({ searchParams }: { searchParams: P
   const byId = new Map(cards.map((c) => [c.id, c]));
   const t = new Map(tracks.map((x) => [x.cardId, x]));
   const sw = swingConfigured();
-  const lastDaily = runs.find((r) => r.action === "daily");
+  const running = runs.find((r) => r.action === "daily" && r.status === "running");
+  const lastDaily = runs.find((r) => r.action === "daily" && r.status !== "running");
   const measured = (lastDaily?.detail as { measured?: Array<{ term: string; kind: string; sources: number; accelerating: number; score: number; candidate: boolean; cooldown: boolean }>; risingQueries?: Array<{ title: string; traffic: string }>; stoppedEarly?: string | null; discovery?: { headlinesRead: number; read: string | null; proposed: Array<{ term: string; kind: string; tickers: string[]; why: string }>; problems: string[]; error: string | null } | null } | null) ?? null;
   return (
     <>
       <h1>Candidates</h1>
       <p className="small secondary">Everything the scout logged in the last {days} days, including what it rejected and why. <a href="?days=7">7d</a> · <a href="?days=30">30d</a> · <a href="?days=90">90d</a></p>
+      {running && <p className="small warn">A scan started at {running.startedAt.replace("T", " ").slice(0, 16)}Z is still running; refresh in a few minutes.</p>}
       {lastDaily && (
         <section className="card">
           <h2>Last scan · {toEt(new Date(lastDaily.startedAt)).date} · {lastDaily.status}{lastDaily.error ? ` · ${lastDaily.error}` : ""}</h2>
