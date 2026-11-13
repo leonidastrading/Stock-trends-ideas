@@ -107,3 +107,23 @@ describe("private-company liquidity events", () => {
     expect(summarizeNews(items).deals.map((d) => d.headline)).toEqual(expect.arrayContaining(["Anthropic IPO: what the S-1 shows", "Zoom shares jump as Anthropic files to go public"]));
   });
 });
+
+describe("story freshness", () => {
+  it("lists the freshest story first and headlines newest first, with full timestamps", () => {
+    const at = (h: string, ts: string, symbols: string[]) => ({ ...n(h, symbols), ts });
+    const items = [
+      at("Old: Nvidia CEO ousted", "2026-11-13T08:00:00Z", ["NVDA"]), at("Old: Nvidia probe", "2026-11-13T09:00:00Z", ["NVDA"]), at("Old: Nvidia scandal", "2026-11-13T09:30:00Z", ["NVDA"]),
+      at("Microsoft outage hits Teams", "2026-11-13T14:00:00Z", ["MSFT"]), at("Microsoft outage spreads", "2026-11-13T15:00:00Z", ["MSFT"]), at("Microsoft probe of outage", "2026-11-13T16:30:00Z", ["MSFT"]),
+    ];
+    const s = detectStories(items);
+    expect(s.map((x) => x.key)).toEqual(["MSFT", "NVDA"]);
+    expect(s[0].latest).toBe("2026-11-13T16:30:00Z");
+    expect(s[0].headlines[0].headline).toBe("Microsoft probe of outage");
+    expect(buildStoryPrompt(s, "2026-11-13")).toMatch(/- 16:30Z \[reuters · MSFT\] Microsoft probe of outage/);
+  });
+  it("formats ET timestamps", async () => {
+    const { fmtEt } = await import("@/lib/time");
+    expect(fmtEt("2026-11-13T19:14:00Z")).toBe("Nov 13, 2:14 PM ET");
+    expect(fmtEt("nonsense")).toBe("");
+  });
+});

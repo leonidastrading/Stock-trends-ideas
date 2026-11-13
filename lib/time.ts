@@ -67,3 +67,11 @@ export function parseCalendar(rows: Array<{ date: string; open: string; close: s
 export function nextSession(sessions: Session[], date: string): Session | undefined {
   return sessions.find((s) => s.date > date);
 }
+
+const shortFmt = new Intl.DateTimeFormat("en-US", { timeZone: ET_TZ, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+/** "Nov 13, 2:14 PM ET" for an ISO timestamp. */
+export function fmtEt(iso: string | Date): string {
+  const d = typeof iso === "string" ? new Date(iso) : iso;
+  return Number.isNaN(d.getTime()) ? "" : `${shortFmt.format(d)} ET`;
+}

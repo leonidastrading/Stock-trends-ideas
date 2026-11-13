@@ -4,7 +4,7 @@ import SetupNotice from "@/components/SetupNotice";
 import { hasDatabase } from "@/lib/db";
 import * as store from "@/lib/scout/store";
 import { swingConfigured } from "@/lib/scout/swing";
-import { toEt } from "@/lib/time";
+import { fmtEt, toEt } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,7 +23,7 @@ export default async function CandidatesPage({ searchParams }: { searchParams: P
   return (
     <>
       <h1>Candidates</h1>
-      <p className="small secondary">Everything the scout logged in the last {days} days, including what it rejected and why. <a href="?days=7">7d</a> · <a href="?days=30">30d</a> · <a href="?days=90">90d</a></p>
+      <p className="small secondary">Everything the scout logged in the last {days} days, newest first, including what it rejected and why. <a href="?days=7">7d</a> · <a href="?days=30">30d</a> · <a href="?days=90">90d</a></p>
       {running && <p className="small warn">A scan started at {running.startedAt.replace("T", " ").slice(0, 16)}Z is still running; refresh in a few minutes.</p>}
       {lastDaily && (
         <section className="card">
@@ -66,7 +66,7 @@ export default async function CandidatesPage({ searchParams }: { searchParams: P
             <tbody>
               {candidates.map((c) => (
                 <tr key={c.id}>
-                  <td className="small">{toEt(new Date(c.createdAt)).date}</td>
+                  <td className="small" style={{ whiteSpace: "nowrap" }}>{fmtEt(c.createdAt)}</td>
                   <td className="small">{c.origin}</td>
                   <td>{c.term}{c.observation ? <div className="small muted">“{c.observation}”</div> : null}</td>
                   <td><span className={`tag ${c.outcome === "card" ? (c.reason ?? "") : c.outcome}`}>{c.outcome === "card" ? c.reason?.replace("_", " ") : c.outcome}</span>{c.cardId ? <a className="small" href={`#card-${c.cardId}`}>#{c.cardId}</a> : null}</td>

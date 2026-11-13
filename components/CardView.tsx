@@ -2,7 +2,7 @@ import { KIND_LABEL, type Kind } from "@/config/scout";
 import Direction from "@/components/Direction";
 import Feedback from "@/components/Feedback";
 import type { Feedback as FeedbackRow, StoredCard, Track } from "@/lib/scout/store";
-import { toEt } from "@/lib/time";
+import { fmtEt } from "@/lib/time";
 
 const pct = (x: number | null | undefined, d = 1) => (x === null || x === undefined ? "—" : `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(d)}%`);
 
@@ -16,7 +16,7 @@ export default function CardView({ c, track, actions, feedback }: { c: StoredCar
           <span className={`tag ${c.status}`}>{c.status.replace("_", " ")}</span>
           <span className="tag">{KIND_LABEL[c.kind as Kind] ?? c.kind}</span>
           <span className="tag">{c.origin === "human" ? "human-originated" : "scout"}</span>
-          <span className="small muted">#{c.id} · {toEt(new Date(c.createdAt)).date} · {c.model} · v{c.versionId}</span>
+          <span className="small muted">#{c.id} · {fmtEt(c.createdAt)} · {c.model} · v{c.versionId}</span>
         </div>
         <div style={{ margin: "8px 0 4px" }}><Direction direction={c.direction} ticker={c.primaryTicker} /></div>
         <h2 style={{ margin: "6px 0 2px" }}>{k.title}</h2>

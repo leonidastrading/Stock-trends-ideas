@@ -22,7 +22,7 @@ export default async function DigestPage() {
     <>
       <h1>Weekly digest</h1>
       <section className="card notice small">
-        The top {SCOUT.digestCards} promoted cards of the last 7 days, ranked by novelty × materiality, with lateness shown. One tap sends a card to the Swing ideas log as a paper idea.
+        The top {SCOUT.digestCards} promoted cards of the last 7 days, ranked by novelty × materiality (not by time; each card shows when it was written), with lateness shown. One tap sends a card to the Swing ideas log as a paper idea.
         Every promoted and late card is tracked on paper here whether or not you tap it, from the next open after the card to the earlier of the day after its catalyst, its time limit, or the invalidation being met.
         {down.length > 0 && <div className="warn" style={{ marginTop: 6 }}>Sources not reporting: {down.map((h) => `${h.source} (${h.status})`).join(", ")}. See Settings.</div>}
         {!sw && <div className="muted" style={{ marginTop: 6 }}>Sending to the Swing ideas log is not configured yet (SWING_API_URL / SWING_API_USER / SWING_API_PASSWORD).</div>}

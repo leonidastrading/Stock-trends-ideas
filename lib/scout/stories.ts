@@ -45,6 +45,9 @@ export interface Story {
   stories: number;
   mainstream: number;
   shockHits: number;
+  /** Time of the newest headline in the story (ISO). */
+  latest: string;
+  /** Newest first; `at` is the headline's full ISO timestamp. */
   headlines: Array<{ at: string; headline: string; source: string; symbols: string[] }>;
 }
 
@@ -66,20 +69,22 @@ export function detectStories(items: NewsItem[], opts: DetectOptions = {}): Stor
     const text = `${n.headline} ${n.summary}`;
     const shock = eventWord(text);
     const main = isMainstream(n);
-    const h = { at: n.ts.slice(0, 10), headline: n.headline, source: n.source, symbols: n.symbols };
+    const h = { at: n.ts, headline: n.headline, source: n.source, symbols: n.symbols };
     if (n.symbols.length > 0 && n.symbols.length <= 6) {
       for (const s of n.symbols) {
-        const t = byTicker.get(s) ?? { key: s, label: s, symbols: [s], stories: 0, mainstream: 0, shockHits: 0, headlines: [] };
+        const t = byTicker.get(s) ?? { key: s, label: s, symbols: [s], stories: 0, mainstream: 0, shockHits: 0, latest: "", headlines: [] };
         t.stories++;
+        if (n.ts > t.latest) t.latest = n.ts;
         if (main) t.mainstream++;
         if (shock) t.shockHits++;
         if (t.headlines.length < 8 && (shock || main)) t.headlines.push(h);
         byTicker.set(s, t);
       }
     } else if (shock && n.symbols.length === 0) {
-      const m = macro.get(shock) ?? { key: `macro:${shock}`, label: shock, symbols: [], stories: 0, mainstream: 0, shockHits: 0, headlines: [] };
+      const m = macro.get(shock) ?? { key: `macro:${shock}`, label: shock, symbols: [], stories: 0, mainstream: 0, shockHits: 0, latest: "", headlines: [] };
       m.stories++;
       m.shockHits++;
+      if (n.ts > m.latest) m.latest = n.ts;
       if (main) m.mainstream++;
       // Deal buckets collect many unrelated headlines: keep more, mainstream first.
       const cap = ["ipo", "funding", "deal"].includes(shock) ? 15 : 8;
@@ -102,7 +107,12 @@ export function detectStories(items: NewsItem[], opts: DetectOptions = {}): Stor
     const deal = ["macro:ipo", "macro:funding", "macro:deal"].includes(m.key);
     if ((m.stories >= minStories && m.mainstream >= minMainstream) || (deal && m.mainstream >= 2)) out.push(m);
   }
-  return out.sort((a, b) => b.shockHits * 3 + b.mainstream - (a.shockHits * 3 + a.mainstream)).slice(0, maxStories);
+  // The strongest stories make the cut; they are then listed freshest first, headlines newest first.
+  return out
+    .sort((a, b) => b.shockHits * 3 + b.mainstream - (a.shockHits * 3 + a.mainstream))
+    .slice(0, maxStories)
+    .map((s) => ({ ...s, headlines: s.headlines.slice().sort((a, b) => b.at.localeCompare(a.at)) }))
+    .sort((a, b) => b.latest.localeCompare(a.latest));
 }
 
 // ---------------------------------------------------------------- triage
@@ -168,7 +178,7 @@ export function buildStoryPrompt(stories: Story[], date: string, preferences: st
   if (preferences) L.push(`\n${preferences}`);
   for (const s of stories) {
     L.push(`\n## ${s.key} — ${s.symbols.length ? s.symbols.join(", ") : "macro"}: ${s.stories} headlines, ${s.mainstream} mainstream, ${s.shockHits} with shock wording`);
-    for (const h of s.headlines) L.push(`- [${h.source}${h.symbols.length ? ` · ${h.symbols.join(",")}` : ""}] ${h.headline}`);
+    for (const h of s.headlines) L.push(`- ${h.at.slice(11, 16)}Z [${h.source}${h.symbols.length ? ` · ${h.symbols.join(",")}` : ""}] ${h.headline}`);
   }
   L.push("\nReply with the JSON object, one entry per story key.");
   return L.join("\n");
@@ -207,7 +217,7 @@ export const storyTerm = (key: string, ticker: string) => `story: ${key} → ${t
 export interface StoriesReport {
   date: string;
   headlinesRead: number;
-  detected: Array<{ key: string; symbols: string[]; stories: number; mainstream: number; shockHits: number; sample: string[] }>;
+  detected: Array<{ key: string; symbols: string[]; stories: number; mainstream: number; shockHits: number; latest: string; sample: string[]; samples: Array<{ at: string; headline: string }> }>;
   triage: Array<{ key: string; summary: string; skipped: string | null; trades: Array<{ ticker: string; direction: string; role: string; horizon_days: number }> }>;
   researched: Array<{ term: string; outcome: string; reason?: string; cardId?: number }>;
   error: string | null;
@@ -236,7 +246,7 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
   report.headlinesRead = items.length;
   const dailyAvg = await store.tickerDailyAverages(addDays(et.date, -30), et.date);
   const stories = detectStories(items, { dailyAvg });
-  report.detected = stories.map((s) => ({ key: s.key, symbols: s.symbols, stories: s.stories, mainstream: s.mainstream, shockHits: s.shockHits, sample: s.headlines.slice(0, 3).map((h) => h.headline) }));
+  report.detected = stories.map((s) => ({ key: s.key, symbols: s.symbols, stories: s.stories, mainstream: s.mainstream, shockHits: s.shockHits, latest: s.latest, sample: s.headlines.slice(0, 3).map((h) => h.headline), samples: s.headlines.slice(0, 3).map((h) => ({ at: h.at, headline: h.headline })) }));
   await store.saveTickerCounts(et.date, items);
   if (!stories.length) return report;
 
