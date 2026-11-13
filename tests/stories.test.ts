@@ -37,12 +37,12 @@ describe("story detection", () => {
     expect(t.stories[0].trades[0].ticker).toBe("RDDT");
     expect(() => parseStoryTriage("[]")).toThrow(/validation/);
     const lenient = parseStoryTriage(JSON.stringify({ stories: [
-      { key: "A", summary: "s", skip: false, skip_reason: "", trades: [{ ticker: "$brk-b", direction: "long", role: "direct", horizon_days: 5, thesis: "t", why_not_priced: "w", invalidation: "i" }, { ticker: "SHEL.L", direction: "long", role: "second_order", horizon_days: 5, thesis: "t", why_not_priced: "w", invalidation: "i" }] },
+      { key: "A", summary: "s", skip: false, skip_reason: "", trades: [{ ticker: "$brk-b", direction: "long", role: "direct", horizon_days: 5, thesis: "t", why_not_priced: "w", invalidation: "i" }, { ticker: "RDSA.AS", direction: "long", role: "second_order", horizon_days: 5, thesis: "t", why_not_priced: "w", invalidation: "i" }] },
       { key: "B", summary: "s", skip: false, skip_reason: "", trades: [{ ticker: "TSMC TAIWAN", direction: "long", role: "direct", horizon_days: 5, thesis: "t", why_not_priced: "w", invalidation: "i" }] },
     ] }));
     expect(lenient.stories[0].trades.map((t) => t.ticker)).toEqual(["BRK.B"]);
     expect(lenient.stories[1]).toMatchObject({ skip: true, skip_reason: /no US-listed ticker/ });
-    expect(lenient.dropped).toEqual(["A: SHEL.L", "B: TSMC TAIWAN"]);
+    expect(lenient.dropped).toEqual(["A: RDSA.AS", "B: TSMC TAIWAN"]);
     expect(storyTerm("RDDT", "GOOGL")).toBe("story: RDDT → GOOGL");
   });
 });

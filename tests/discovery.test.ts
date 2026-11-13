@@ -32,7 +32,7 @@ describe("discovery, pure parts", () => {
     const t = parseTriage(JSON.stringify({ candidates: [{ term: "grid transformer backlog", kind: "second_order", tickers: ["hubb"], why: "w", seen_in: ["news"] }], read: "quiet" }));
     expect(t.candidates[0].tickers).toEqual(["HUBB"]);
     expect(() => parseTriage("{}")).toThrow(/validation/);
-    const lenient = parseTriage(JSON.stringify({ candidates: [{ term: "x", kind: "platform", tickers: ["$hood", "NOT A TICKER"], why: "w", seen_in: [] }, { term: "y", kind: "platform", tickers: ["7203.T"], why: "w", seen_in: [] }], read: "r" }));
+    const lenient = parseTriage(JSON.stringify({ candidates: [{ term: "retail brokers", kind: "platform", tickers: ["$hood", "NOT A TICKER"], why: "w", seen_in: [] }, { term: "toyota", kind: "platform", tickers: ["7203.T"], why: "w", seen_in: [] }], read: "r" }));
     expect(lenient.candidates).toHaveLength(1);
     expect(lenient.candidates[0].tickers).toEqual(["HOOD"]);
   });
