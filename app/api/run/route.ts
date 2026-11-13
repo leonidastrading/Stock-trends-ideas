@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { checkBasicAuth } from "@/lib/auth";
 import { hasDatabase } from "@/lib/db";
-import { runDaily, runTrack } from "@/lib/scout/engine";
+import { runDaily, runStoriesJob, runTrack } from "@/lib/scout/engine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,7 +15,8 @@ export async function POST(request: Request) {
   try {
     if (body.job === "track") return NextResponse.json({ ok: true, result: await runTrack() });
     if (body.job === "daily") return NextResponse.json({ ok: true, result: await runDaily() });
-    return NextResponse.json({ ok: false, errors: ["job must be 'daily' or 'track'"] }, { status: 422 });
+    if (body.job === "stories") return NextResponse.json({ ok: true, result: await runStoriesJob() });
+    return NextResponse.json({ ok: false, errors: ["job must be 'daily', 'stories' or 'track'"] }, { status: 422 });
   } catch (err) {
     return NextResponse.json({ ok: false, errors: [err instanceof Error ? err.message : String(err)] }, { status: 500 });
   }

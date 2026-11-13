@@ -30,6 +30,8 @@ export interface ResearchInput {
   kindHint: Kind | null;
   tickersHint: string[];
   observation: string | null;
+  /** Extra context for the model (a story and the trade the story desk proposed). */
+  context?: string;
   trigger?: Signal[];
   /** Results already gathered by the scan for this term (skips re-probing). */
   results?: SourceResult[];
@@ -68,7 +70,7 @@ export async function researchCandidate(input: ResearchInput, deps: ResearchDeps
     await recordHealth(results);
   }
 
-  const prompt = buildUserPrompt({ origin: input.origin, term: input.term, kindHint: input.kindHint, tickersHint: input.tickersHint, observation: input.observation, today: et.date, results, trigger: input.trigger });
+  const prompt = buildUserPrompt({ origin: input.origin, term: input.term, kindHint: input.kindHint, tickersHint: input.tickersHint, observation: input.observation, context: input.context, today: et.date, results, trigger: input.trigger });
 
   // Call the model; one retry on a parse/validation failure with the error fed back.
   let card: Card | null = null;

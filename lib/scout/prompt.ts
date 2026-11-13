@@ -14,6 +14,7 @@ Rules:
 - "lateness": give your best figures; the code replaces them with measured ones where it can and applies the gates itself (a stock already up more than ${SCOUT.lateStockMove30dPct}% in 30 days, or more than ${SCOUT.lateNewsStories30d} mainstream stories in 30 days, is already obvious).
 - "time_limit_days": how long the thesis needs to show up in results, at most ${SCOUT.maxTimeLimitDays}. "catalyst.date" is YYYY-MM-DD or "unknown".
 - Scores are 0-10: novelty (how far ahead of consensus), materiality (how much it moves the company's numbers), breadth_of_evidence (independent sources agreeing), lateness (10 = nobody is talking about it, 0 = everyone is).
+- Story trades: when the candidate comes from the story desk (a breaking story and a proposed trade), write the card for that trade. The lateness gate will often mark these "late"; that is expected and they are still tracked. Put the real reason the repricing may continue in why_not_priced.
 - Options are never a recommendation. A card may note that the thesis has a dated catalyst, nothing more.
 - Plain language. State the observation with numbers and dates. Put anything you could not check in "unknowns".`;
 
@@ -23,6 +24,8 @@ export interface PromptInput {
   kindHint: string | null;
   tickersHint: string[];
   observation: string | null;
+  /** Story context from the story desk, when the candidate is a story trade. */
+  context?: string;
   today: string;
   results: SourceResult[];
   /** Signals the scan found accelerating (scout origin). */
@@ -39,6 +42,7 @@ export function buildUserPrompt(p: PromptInput): string {
   lines.push(`Today: ${p.today}. Origin: ${p.origin === "human" ? "human (Vadim noticed this himself)" : "scout (found by the daily scan)"}.`);
   lines.push(`Candidate term: "${p.term}"${p.kindHint ? `; kind hint: ${p.kindHint}` : ""}${p.tickersHint.length ? `; linked tickers on the watch-list: ${p.tickersHint.join(", ")}` : ""}.`);
   if (p.observation) lines.push(`\nVadim's observation, in his words:\n"""${p.observation}"""`);
+  if (p.context) lines.push(`\nStory desk context (the trade to write up; keep its direction and ticker unless the measurements contradict it):\n${p.context}`);
   if (p.trigger?.length) lines.push(`\nWhy the scan flagged it:\n${p.trigger.map(fmtSignal).join("\n")}`);
   lines.push("\nMeasurements from the scout's sources (the only admissible evidence):");
   for (const r of p.results) {

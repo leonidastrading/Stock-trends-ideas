@@ -273,6 +273,38 @@ export async function lastBarDate(symbol: string): Promise<string | null> {
   return dstr((await q(`SELECT max(date) AS d FROM daily_bars WHERE symbol = $1`, [symbol]))[0]?.d);
 }
 
+// ------------------------------------------------------- ticker news counts
+
+export async function saveTickerCounts(date: string, items: Array<{ symbols: string[]; source: string; url: string }>): Promise<void> {
+  const { isMainstream } = await import("../sources/news");
+  const by = new Map<string, { stories: number; mainstream: number }>();
+  for (const n of items) {
+    if (n.symbols.length > 6) continue;
+    const main = isMainstream(n as never);
+    for (const sym of n.symbols) {
+      const c = by.get(sym) ?? { stories: 0, mainstream: 0 };
+      c.stories++;
+      if (main) c.mainstream++;
+      by.set(sym, c);
+    }
+  }
+  const rows = [...by.entries()];
+  for (let i = 0; i < rows.length; i += 500) {
+    const c = rows.slice(i, i + 500);
+    await q(
+      `INSERT INTO ticker_news_daily (date, symbol, stories, mainstream) SELECT $1::date, * FROM unnest($2::text[], $3::int[], $4::int[])
+       ON CONFLICT (date, symbol) DO UPDATE SET stories = greatest(ticker_news_daily.stories, excluded.stories), mainstream = greatest(ticker_news_daily.mainstream, excluded.mainstream)`,
+      [date, c.map(([s]) => s), c.map(([, v]) => v.stories), c.map(([, v]) => v.mainstream)],
+    );
+  }
+}
+
+/** Average stories per day per ticker over [from, to), over the days with any coverage. */
+export async function tickerDailyAverages(from: string, to: string): Promise<Record<string, number>> {
+  const rows = await q(`SELECT symbol, avg(stories) AS avg, count(*) AS n FROM ticker_news_daily WHERE date >= $1 AND date < $2 GROUP BY symbol HAVING count(*) >= 5`, [from, to]);
+  return Object.fromEntries(rows.map((r) => [r.symbol, Number(r.avg)]));
+}
+
 // --------------------------------------------------------------- llm spend
 
 export async function logLlmCall(c: { etDate: string; model: string; purpose: string; usage: unknown; costUsd: number | null; ok: boolean }): Promise<void> {

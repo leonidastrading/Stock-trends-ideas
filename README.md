@@ -41,6 +41,29 @@ measurements; cards are only written for new candidates; the tracker only moves 
   The research step runs at once and returns the card in a minute or two. These cards are tagged **human-originated**
   and scored separately. A human card also lands on the watch-list as a proposal, so the scout keeps measuring it.
 
+### Stories (event-driven trades)
+
+A separate desk for discrete shocks: a CEO scandal or death, a war or ceasefire, a ban, tariff or sanction, a
+regulator's move, an indictment, a recall, a pivot, a guidance cut. `lib/scout/stories.ts`:
+
+- **Detection** is mechanical. The last 24 hours of the news stream are grouped by ticker; a ticker is a story when it
+  has at least 3 mainstream headlines and either 2 headlines with shock wording, 12 or more headlines, or 4× its
+  trailing daily average (kept in `ticker_news_daily`). Shock wording in headlines with no ticker makes a macro story
+  (a war, a tariff) when at least 6 headlines carry it.
+- **The story desk** is one model call that, for each story, lays out at most two trades: the direct one and the
+  second-order one (a rival, a supplier, a platform losing traffic), with direction, horizon, thesis, why the market
+  may still misprice it, and invalidation. It may skip a story and say why.
+- **Each trade is researched as an event card** through the normal research step and gates, with the story and the
+  proposed trade as context. Most story cards are logged **late**, since the story is everywhere by definition, and
+  they are tracked on paper like any other. The Scoring page's "promoted versus late" table is where this style gets
+  its verdict against SPY.
+- A story's trades are researched once per 3 days. The desk runs inside the morning scan, from "Scan stories now" on
+  Settings, and from `GET /api/cron/stories` (bearer `CRON_SECRET`), which is safe to call hourly: on the Hobby plan
+  Vercel cron is daily only, so for intraday stories add a cron-job.org job every hour, 09:00–17:00 ET, with the
+  header `Authorization: Bearer <CRON_SECRET>` (and `x-vercel-protection-bypass` if the deployment is protected).
+- The **Stories** page shows the last detection, the desk's read and trades, and the story cards grouped by story,
+  each with the Send and Invalidation buttons.
+
 ### Sources (version 1)
 
 Each connector returns measurements with a source, metric, value, comparison base and as-of date. The Settings page

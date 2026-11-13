@@ -5,6 +5,7 @@ import { callResearchModel } from "./llm";
 import { maybeSendDigest } from "./digest";
 import type { ResearchDeps } from "./research";
 import { runScan } from "./scan";
+import { runStories } from "./stories";
 import * as store from "./store";
 import { updateTracks } from "./tracking";
 
@@ -18,15 +19,35 @@ export async function runDaily(deps = defaultDeps()) {
   const run = await store.startRun("daily");
   try {
     const scan = await runScan(deps);
+    let stories;
+    try {
+      stories = await runStories(deps);
+    } catch (err) {
+      stories = { error: err instanceof Error ? err.message : String(err) };
+    }
     let digest = "skipped";
     try {
       digest = await maybeSendDigest(deps.now, deps.env);
     } catch (err) {
       digest = `failed: ${err instanceof Error ? err.message : String(err)}`;
     }
-    const detail = { ...scan, digest };
+    const detail = { ...scan, stories, digest };
     await store.finishRun(run, scan.stoppedEarly ? "skipped" : "ok", detail);
     return { status: "ok" as const, ...detail };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await store.finishRun(run, "error", null, message);
+    throw err;
+  }
+}
+
+/** The story desk on its own: safe to call hourly (cron-job.org or the Run now button). */
+export async function runStoriesJob(deps = defaultDeps()) {
+  const run = await store.startRun("stories");
+  try {
+    const r = await runStories(deps);
+    await store.finishRun(run, r.error && !r.researched.length ? "skipped" : "ok", r);
+    return { status: "ok" as const, ...r };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await store.finishRun(run, "error", null, message);

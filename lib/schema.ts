@@ -151,6 +151,15 @@ CREATE TABLE IF NOT EXISTS daily_bars (
   PRIMARY KEY (symbol, date)
 );
 
+-- Headline counts per ticker per day from the news stream, for story spike detection.
+CREATE TABLE IF NOT EXISTS ticker_news_daily (
+  date date NOT NULL,
+  symbol text NOT NULL,
+  stories int NOT NULL,
+  mainstream int NOT NULL,
+  PRIMARY KEY (date, symbol)
+);
+
 -- Every model call, for the daily spend cap.
 CREATE TABLE IF NOT EXISTS llm_calls (
   id bigserial PRIMARY KEY,
