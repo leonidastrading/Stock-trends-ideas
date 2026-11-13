@@ -49,7 +49,11 @@ regulator's move, an indictment, a recall, a pivot, a guidance cut. `lib/scout/s
 - **Detection** is mechanical. The last 24 hours of the news stream are grouped by ticker; a ticker is a story when it
   has at least 3 mainstream headlines and either 2 headlines with shock wording, 12 or more headlines, or 4× its
   trailing daily average (kept in `ticker_news_daily`). Shock wording in headlines with no ticker makes a macro story
-  (a war, a tariff) when at least 6 headlines carry it.
+  (a war, a tariff) when at least 6 headlines carry it. Deal events (an IPO filing or pricing, a large funding round,
+  an acquisition) count too, and because they are usually about a private company, an IPO, funding or deal story
+  needs only 2 mainstream headlines; the desk is told to look for the listed companies that hold stakes, especially
+  where the stake is large against the holder's market value (the Zoom / Anthropic kind of trade). Discovery sees
+  the same deal headlines in their own section.
 - **The story desk** is one model call that, for each story, lays out at most two trades: the direct one and the
   second-order one (a rival, a supplier, a platform losing traffic), with direction, horizon, thesis, why the market
   may still misprice it, and invalidation. It may skip a story and say why.

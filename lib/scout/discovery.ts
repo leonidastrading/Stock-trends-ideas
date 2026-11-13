@@ -16,6 +16,7 @@ import type { StTrending } from "../sources/stocktwits";
 import { dateStr, daysAgo } from "../sources/types";
 import type { Signal } from "../sources";
 import { normalizeTicker } from "./tickers";
+import { CATALYST } from "./stories";
 
 // --------------------------------------------------------------- the pulse
 
@@ -27,6 +28,8 @@ export interface Pulse {
   topTickers: TickerPulse[];
   /** Headlines whose wording points at demand, supply or capacity changes (second-order material). */
   supplyDemand: Array<{ at: string; headline: string; symbols: string[] }>;
+  /** IPO, funding, acquisition headlines, mostly about private companies: the listed winners are their holders. */
+  deals: Array<{ at: string; headline: string; symbols: string[] }>;
   stocktwits: Array<{ symbol: string; rank: number; watchers: number | null; why: string | null }>;
   polymarket: Array<{ question: string; yes: number; weekChange: number; endDate: string | null }>;
   hackerNews: string[];
@@ -37,7 +40,7 @@ export interface Pulse {
 const SUPPLY_DEMAND = /\b(backlog|sold out|sell(?:ing)? out|waitlist|shortage|capacity|record (?:demand|orders|bookings)|order(?:s)? (?:surge|jump|double)|price (?:increase|hike)|raises? (?:guidance|outlook|forecast)|supply (?:deal|agreement|constraint)|multi-?year (?:contract|agreement)|expands? (?:production|capacity)|new (?:plant|factory|facility)|lead times?)\b/i;
 
 /** Pure: aggregate a day's headlines by ticker and pull out the supply/demand wording. */
-export function summarizeNews(items: NewsItem[], topN = 30): Pick<Pulse, "topTickers" | "supplyDemand" | "headlinesRead"> {
+export function summarizeNews(items: NewsItem[], topN = 30): Pick<Pulse, "topTickers" | "supplyDemand" | "deals" | "headlinesRead"> {
   const by = new Map<string, TickerPulse>();
   for (const n of items) {
     if (n.symbols.length > 6) continue; // sector round-ups
@@ -52,12 +55,13 @@ export function summarizeNews(items: NewsItem[], topN = 30): Pick<Pulse, "topTic
   }
   const topTickers = [...by.values()].sort((a, b) => b.stories - a.stories).slice(0, topN);
   const supplyDemand = items.filter((n) => n.symbols.length <= 6 && SUPPLY_DEMAND.test(`${n.headline} ${n.summary}`)).slice(0, 60).map((n) => ({ at: n.ts.slice(0, 10), headline: n.headline, symbols: n.symbols }));
-  return { topTickers, supplyDemand, headlinesRead: items.length };
+  const deals = items.filter((n) => n.symbols.length <= 3 && CATALYST.test(n.headline)).sort((a, b) => Number(isMainstream(b)) - Number(isMainstream(a))).slice(0, 30).map((n) => ({ at: n.ts.slice(0, 10), headline: n.headline, symbols: n.symbols }));
+  return { topTickers, supplyDemand, deals, headlinesRead: items.length };
 }
 
 export async function gatherPulse(data: MarketData | null, now: Date, fetchImpl?: typeof fetch): Promise<Pulse> {
   const problems: string[] = [];
-  const pulse: Pulse = { date: dateStr(now), headlinesRead: 0, topTickers: [], supplyDemand: [], stocktwits: [], polymarket: [], hackerNews: [], risingQueries: [], problems };
+  const pulse: Pulse = { date: dateStr(now), headlinesRead: 0, topTickers: [], supplyDemand: [], deals: [], stocktwits: [], polymarket: [], hackerNews: [], risingQueries: [], problems };
   if (data) {
     try {
       Object.assign(pulse, summarizeNews(await data.getNews([], daysAgo(now, 1), now, 1500)));
@@ -94,6 +98,7 @@ What makes a good candidate:
 - Platform: an app, site or service gaining users or usage fast.
 - Re-rating: a large company whose business line or cost change the market is undervaluing.
 - Event: a policy, legal or macro outcome with a clear listed winner or loser, where the odds just moved.
+- Stake unlock: a private company's IPO, funding round or sale that revalues a stake a listed company holds, where the stake is large against the holder's market value.
 - Consumer: a product selling out or going viral.
 
 What to avoid: the names dominating today's headlines (they are already obvious), earnings reactions, analyst upgrades, and anything whose only evidence is price action. Prefer the thing one step behind the headline. A candidate is a short searchable term (a product, app, theme or supply-chain phrase), a kind, and the tickers most directly exposed. Tickers must be listed on a US exchange: for a foreign company use its exchange-listed US ADR (TSM, ASML, SONY), never the home-exchange symbol, and not an OTC-only ADR such as BESIY, which cannot be priced or paper-traded. Propose at most the number asked for, fewer if nothing qualifies, and say in one sentence what you saw that made you propose it.`;
@@ -140,6 +145,10 @@ export function buildTriagePrompt(p: Pulse, maxCandidates: number, avoid: string
   if (p.supplyDemand.length) {
     L.push(`\nHeadlines with supply, demand or capacity wording:`);
     for (const h of p.supplyDemand) L.push(`- [${h.symbols.join(",") || "no ticker"}] ${h.headline}`);
+  }
+  if (p.deals.length) {
+    L.push(`\nIPO, funding and deal headlines (often private companies: think of the listed companies that hold stakes, especially where the stake is large against the holder's market value):`);
+    for (const h of p.deals) L.push(`- [${h.symbols.join(",") || "no ticker"}] ${h.headline}`);
   }
   if (p.stocktwits.length) {
     L.push(`\nStocktwits trending list (rank, watchers, why):`);

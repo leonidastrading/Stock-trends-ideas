@@ -23,6 +23,20 @@ import * as store from "./store";
 /** Wording that marks a shock rather than ordinary coverage. */
 export const SHOCK = /\b(shot|killed|dies|death|assassinat\w*|resign\w*|steps? down|ousted?|fired|scandal|affair|indict\w*|arrest\w*|charged|fraud|probe|investigat\w*|subpoena|lawsuit|sued|verdict|ruling|antitrust|ban(?:s|ned)?|block(?:s|ed)|tariffs?|sanction\w*|executive order|regulat\w*|legislation|bill passes|war|strikes?|missile|ceasefire|invasion|blockade|outage|hack(?:ed)?|breach|recall|halt(?:s|ed)?|bankrupt\w*|chapter 11|default|downgrade|pivot\w*|guidance cut|cuts? (?:guidance|outlook|forecast)|FDA (?:approv|reject|warn)\w*|short report|short seller)\b/i;
 
+/** Deal and liquidity events: often about a private company, so the listed winners are its holders, not the headline's ticker. */
+export const CATALYST = /\b(IPO|initial public offering|S-1|files? (?:confidentially )?(?:to go public|for (?:an )?IPO)|direct listing|goes public|going public|funding round|raises \$[\d.]+ ?(?:billion|bn|B)|tender offer|valuation of \$|valued at \$|acquires?|acquisition|takeover|buyout|merger|spin-?off|stake)\b/i;
+
+/** First shock or catalyst word in a text, lower-cased; null if none. */
+export function eventWord(text: string): string | null {
+  const m = SHOCK.exec(text) ?? CATALYST.exec(text);
+  if (!m) return null;
+  const w = m[1].toLowerCase();
+  if (/^(ipo|initial public offering|s-1|direct listing|goes public|going public)$/.test(w) || /go public|for (an )?ipo/.test(w)) return "ipo";
+  if (/funding round|raises|valuation of|valued at|tender offer/.test(w)) return "funding";
+  if (/acquire|acquisition|takeover|buyout|merger/.test(w)) return "deal";
+  return w;
+}
+
 export interface Story {
   /** Stable key for the day: the ticker, or the shock word for macro stories. */
   key: string;
@@ -50,7 +64,7 @@ export function detectStories(items: NewsItem[], opts: DetectOptions = {}): Stor
   const macro = new Map<string, Story>();
   for (const n of items) {
     const text = `${n.headline} ${n.summary}`;
-    const shock = SHOCK.exec(text)?.[1]?.toLowerCase() ?? null;
+    const shock = eventWord(text);
     const main = isMainstream(n);
     const h = { at: n.ts.slice(0, 10), headline: n.headline, source: n.source, symbols: n.symbols };
     if (n.symbols.length > 0 && n.symbols.length <= 6) {
@@ -67,7 +81,13 @@ export function detectStories(items: NewsItem[], opts: DetectOptions = {}): Stor
       m.stories++;
       m.shockHits++;
       if (main) m.mainstream++;
-      if (m.headlines.length < 8) m.headlines.push(h);
+      // Deal buckets collect many unrelated headlines: keep more, mainstream first.
+      const cap = ["ipo", "funding", "deal"].includes(shock) ? 15 : 8;
+      if (m.headlines.length < cap) m.headlines.push(h);
+      else if (main) {
+        const i = m.headlines.findIndex((x) => !/reuters|bloomberg|wsj|cnbc|ft|nytimes|apnews/i.test(x.source));
+        if (i >= 0) m.headlines[i] = h;
+      }
       macro.set(shock, m);
     }
   }
@@ -77,16 +97,21 @@ export function detectStories(items: NewsItem[], opts: DetectOptions = {}): Stor
     const spike = avg ? t.stories >= spikeMultiple * avg : false;
     if (t.mainstream >= minMainstream && (t.shockHits >= 2 || spike || t.stories >= minStories * 2)) out.push(t);
   }
-  for (const m of macro.values()) if (m.stories >= minStories && m.mainstream >= minMainstream) out.push(m);
+  for (const m of macro.values()) {
+    // A single big private-company liquidity event is a story; it needs mainstream pick-up, not volume.
+    const deal = ["macro:ipo", "macro:funding", "macro:deal"].includes(m.key);
+    if ((m.stories >= minStories && m.mainstream >= minMainstream) || (deal && m.mainstream >= 2)) out.push(m);
+  }
   return out.sort((a, b) => b.shockHits * 3 + b.mainstream - (a.shockHits * 3 + a.mainstream)).slice(0, maxStories);
 }
 
 // ---------------------------------------------------------------- triage
 
-export const STORY_SYSTEM_PROMPT = `You are the story desk of a paper-only "trend scout". You are shown the day's breaking stories from a market news stream: shocks such as a CEO scandal or death, a war or ceasefire, a ban, tariff or sanction, a regulator's move, an indictment, a recall, a strategic pivot, a guidance cut. For each story you lay out the trades it implies, the way an event-driven trader would in the first hours:
+export const STORY_SYSTEM_PROMPT = `You are the story desk of a paper-only "trend scout". You are shown the day's breaking stories from a market news stream: shocks such as a CEO scandal or death, a war or ceasefire, a ban, tariff or sanction, a regulator's move, an indictment, a recall, a strategic pivot, a guidance cut, and deal events such as an IPO filing, a big funding round or an acquisition. For each story you lay out the trades it implies, the way an event-driven trader would in the first hours:
 
 - The direct trade: the named company or the obvious fund (an oil fund on a war, a defense name on an attack), with direction.
 - The second-order trade: who wins or loses one step away that the headlines are not about yet (a rival that takes share, a supplier, a customer, a platform that loses traffic to the thing in the news).
+- Private-company liquidity events (an IPO filing or pricing, a large funding round or tender offer, an acquisition): the listed winners are the companies that hold stakes, strategic investors and corporate venture arms, especially where the stake is a large share of the holder's market value (a small-cap holding a stake in a hot private company). Name the holder, say roughly what the stake may be worth against its market cap if you know, and flag lock-ups and dilution as risks.
 - For each, how long the repricing should take (days to weeks), what would prove it wrong, and why the market may still be mispricing it after the first move: forced sellers, a slow-burning investigation, an index or fund flow, a second shoe to drop.
 
 Rules: at most two trades per story, the second-order one preferred when it is credible. Skip stories that are noise, already fully played out, or have no listed exposure, and say why. Shares only; never options. Tickers must be listed on a US exchange: for a foreign company use its exchange-listed US ADR (TSM, ASML, SONY), never the home-exchange symbol, and not an OTC-only ADR such as BESIY, which cannot be priced or paper-traded. Be concrete and short.`;

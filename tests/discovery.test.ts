@@ -22,7 +22,7 @@ describe("discovery, pure parts", () => {
     expect(s.supplyDemand.map((h) => h.headline)).toEqual(["Vertiv raises guidance on record data center orders", "Utility signs multi-year supply agreement for transformers"]);
   });
   it("builds the triage prompt and parses the reply; the schema avoids unsupported keywords", () => {
-    const pulse: Pulse = { date: "2026-11-12", headlinesRead: 2, topTickers: [{ symbol: "NVDA", stories: 2, mainstream: 1, headlines: ["x"] }], supplyDemand: [], stocktwits: [{ symbol: "AMD", rank: 1, watchers: 10, why: "why" }], polymarket: [{ question: "Rate cut?", yes: 70, weekChange: 15, endDate: "2026-12-10" }], hackerNews: ["hn"], risingQueries: [{ title: "q", traffic: "200K+" }], problems: ["edgar: down"] };
+    const pulse: Pulse = { date: "2026-11-12", headlinesRead: 2, topTickers: [{ symbol: "NVDA", stories: 2, mainstream: 1, headlines: ["x"] }], supplyDemand: [], deals: [], stocktwits: [{ symbol: "AMD", rank: 1, watchers: 10, why: "why" }], polymarket: [{ question: "Rate cut?", yes: 70, weekChange: 15, endDate: "2026-12-10" }], hackerNews: ["hn"], risingQueries: [{ title: "q", traffic: "200K+" }], problems: ["edgar: down"] };
     const p = buildTriagePrompt(pulse, 3, ["fed rate cut"]);
     expect(p).toMatch(/at most 3 candidates/);
     expect(p).toMatch(/do not propose again\): fed rate cut/);

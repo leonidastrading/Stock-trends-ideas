@@ -93,3 +93,17 @@ describe("story desk end to end", () => {
     expect(purposes).toHaveLength(3);
   });
 });
+
+describe("private-company liquidity events", () => {
+  it("an IPO filing about a private company is a story even with no ticker and modest volume, and discovery lists it", async () => {
+    const { summarizeNews } = await import("@/lib/scout/discovery");
+    const items = [
+      n("Anthropic files publicly for IPO, sets price range", []), n("Anthropic IPO: what the S-1 shows", []), n("Small biotech prices $20 million offering", [], false),
+      n("Zoom shares jump as Anthropic files to go public", ["ZM"]),
+    ];
+    const s = detectStories(items);
+    expect(s.map((x) => x.key)).toContain("macro:ipo");
+    expect(s.find((x) => x.key === "macro:ipo")!.headlines.map((h) => h.headline)).toContain("Anthropic files publicly for IPO, sets price range");
+    expect(summarizeNews(items).deals.map((d) => d.headline)).toEqual(expect.arrayContaining(["Anthropic IPO: what the S-1 shows", "Zoom shares jump as Anthropic files to go public"]));
+  });
+});

@@ -30,7 +30,7 @@ describe("feedback", () => {
     expect(text).toMatch(/Liked:\n- Transformer backlog .* — "more supply-chain plays like this"/);
     expect(text).toMatch(/Did not like:\n- story NVDA — "CEO gossip, not a trade"/);
     expect(preferencesText([])).toBeNull();
-    expect(buildTriagePrompt({ date: "2026-11-13", headlinesRead: 0, topTickers: [], supplyDemand: [], stocktwits: [], polymarket: [], hackerNews: [], risingQueries: [], problems: [] }, 3, [], text)).toMatch(/Vadim's reactions/);
+    expect(buildTriagePrompt({ date: "2026-11-13", headlinesRead: 0, topTickers: [], supplyDemand: [], deals: [], stocktwits: [], polymarket: [], hackerNews: [], risingQueries: [], problems: [] }, 3, [], text)).toMatch(/Vadim's reactions/);
     expect(buildStoryPrompt([], "2026-11-13", text)).toMatch(/Did not like/);
   });
 });

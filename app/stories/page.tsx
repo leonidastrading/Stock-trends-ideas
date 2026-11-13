@@ -44,7 +44,7 @@ export default async function StoriesPage() {
             const tr = d.triage.find((x) => x.key === s.key);
             return (
               <div key={s.key} style={{ borderTop: "1px solid var(--grid)", padding: "8px 0" }}>
-                <b>{s.key}</b> <span className="small muted">{s.stories} headlines · {s.mainstream} mainstream · {s.shockHits} shock words{s.symbols.length > 1 ? ` · ${s.symbols.join(", ")}` : ""}</span>
+                <b>{s.key}</b> <span className="small muted">{s.stories} headlines · {s.mainstream} mainstream · {s.shockHits} event words{s.symbols.length > 1 ? ` · ${s.symbols.join(", ")}` : ""}</span>
                 <div className="small secondary">{s.sample.join(" · ")}</div>
                 {tr && <div className="small" style={{ marginTop: 4 }}>{tr.summary} {tr.skipped ? <span className="muted">— skipped: {tr.skipped}</span> : tr.trades.map((x) => <span key={x.ticker} style={{ display: "inline-block", margin: "4px 6px 0 0" }}><Direction direction={x.direction as "long" | "short"} ticker={x.ticker} size="small" /> <span className="tag">{x.role.replace("_", "-")} · {x.horizon_days}d</span></span>)}</div>}
                 <Feedback target={`story:${s.key}`} initial={fb.get(`story:${s.key}`) ? { vote: fb.get(`story:${s.key}`)!.vote, note: fb.get(`story:${s.key}`)!.note } : null} />
