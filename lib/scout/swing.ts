@@ -38,6 +38,20 @@ export async function sendToSwing(card: StoredCard, env: NodeJS.ProcessEnv = pro
   };
   if (env.SWING_API_BYPASS) headers["x-vercel-protection-bypass"] = env.SWING_API_BYPASS;
   const res = await fetchImpl(`${env.SWING_API_URL!.replace(/\/$/, "")}/api/swing`, { method: "POST", headers, body: JSON.stringify(idea) });
-  const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+  const text = await res.text();
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    body = { errors: [explain401(res, text)] };
+  }
+  if (res.status === 401 && !(body as { errors?: unknown }).errors) body = { errors: [explain401(res, text)] };
   return { ok: res.ok && (body as { ok?: boolean }).ok !== false, status: res.status, body };
+}
+
+/** Which of the two gates in front of the Swing ideas app refused: Vercel's deployment protection, or the app's own login. */
+export function explain401(res: { status: number; headers: { get(name: string): string | null } }, text: string): string {
+  if (res.status !== 401) return `swing log replied ${res.status}: ${text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160)}`;
+  if (res.headers.get("www-authenticate")) return "the Swing ideas app rejected the login: SWING_API_USER / SWING_API_PASSWORD must equal that app's DASHBOARD_USER / DASHBOARD_PASSWORD";
+  return "Vercel's deployment protection on the Swing ideas app blocked the call: SWING_API_BYPASS must be that project's \"Protection Bypass for Automation\" secret";
 }

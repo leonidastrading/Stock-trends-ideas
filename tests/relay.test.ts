@@ -47,3 +47,13 @@ describe("edgar relay", () => {
     expect(bad.status).toBe("down");
   });
 });
+
+describe("swing log 401 diagnosis", () => {
+  it("tells Vercel's protection page from the app's own login", async () => {
+    const { explain401 } = await import("@/lib/scout/swing");
+    const h = (m: Record<string, string>) => ({ get: (k: string) => m[k.toLowerCase()] ?? null });
+    expect(explain401({ status: 401, headers: h({ "www-authenticate": 'Basic realm="book-advisor"' }) }, "Authentication required")).toMatch(/DASHBOARD_USER/);
+    expect(explain401({ status: 401, headers: h({}) }, "<html>Authentication Required</html>")).toMatch(/SWING_API_BYPASS/);
+    expect(explain401({ status: 503, headers: h({}) }, "<p>no paper account</p>")).toMatch(/503: no paper account/);
+  });
+});
