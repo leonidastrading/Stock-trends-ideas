@@ -1,4 +1,5 @@
 import { KIND_LABEL, type Kind } from "@/config/scout";
+import Direction from "@/components/Direction";
 import Feedback from "@/components/Feedback";
 import type { Feedback as FeedbackRow, StoredCard, Track } from "@/lib/scout/store";
 import { toEt } from "@/lib/time";
@@ -15,9 +16,9 @@ export default function CardView({ c, track, actions, feedback }: { c: StoredCar
           <span className={`tag ${c.status}`}>{c.status.replace("_", " ")}</span>
           <span className="tag">{KIND_LABEL[c.kind as Kind] ?? c.kind}</span>
           <span className="tag">{c.origin === "human" ? "human-originated" : "scout"}</span>
-          <span className="tag">{c.direction} {c.primaryTicker}</span>
           <span className="small muted">#{c.id} · {toEt(new Date(c.createdAt)).date} · {c.model} · v{c.versionId}</span>
         </div>
+        <div style={{ margin: "8px 0 4px" }}><Direction direction={c.direction} ticker={c.primaryTicker} /></div>
         <h2 style={{ margin: "6px 0 2px" }}>{k.title}</h2>
         <div className="scores">
           <span>novelty <b>{k.scores.novelty}</b></span><span>materiality <b>{k.scores.materiality}</b></span><span>breadth <b>{k.scores.breadth_of_evidence}</b></span>
@@ -28,7 +29,7 @@ export default function CardView({ c, track, actions, feedback }: { c: StoredCar
         <dt>Observation</dt><dd>{k.observation}</dd>
         <dt>Why not priced</dt><dd>{k.why_not_priced}</dd>
         <dt>Tickers</dt>
-        <dd>{k.tickers.map((t) => <div key={t.symbol}><b>{t.symbol}</b> <span className="small muted">({t.sector.replace("_", " ")}{t.revenue_share_pct === null ? ", share unknown" : `, ${t.revenue_share_pct}% of revenue${t.share_is_estimate ? " (estimate)" : ""}`})</span> — {t.why}</div>)}</dd>
+        <dd>{k.tickers.map((t, i) => <div key={t.symbol}><b className={c.direction === "long" ? "pos" : "neg"}>{c.direction === "long" ? "▲" : "▼"} {t.symbol}</b> {i === 0 ? <span className="tag">tracked on paper</span> : null} <span className="small muted">({t.sector.replace("_", " ")}{t.revenue_share_pct === null ? ", share unknown" : `, ${t.revenue_share_pct}% of revenue${t.share_is_estimate ? " (estimate)" : ""}`})</span> — {t.why}</div>)}</dd>
         <dt>Lateness</dt>
         <dd className={k.lateness.already_obvious ? "warn" : ""}>{pct(k.lateness.stock_move_30d_pct)} over 30 days, {pct(k.lateness.stock_move_90d_pct)} over 90 days, {k.lateness.news_stories_30d} mainstream stories in 30 days{k.lateness.already_obvious ? " — already obvious" : ""}</dd>
         <dt>Catalyst</dt><dd>{k.catalyst.what} <span className="muted">({k.catalyst.date})</span></dd>

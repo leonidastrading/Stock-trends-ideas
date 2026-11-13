@@ -82,3 +82,8 @@ pre { font-size: 12px; white-space: pre-wrap; word-break: break-word; background
 .feedback { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
 .feedback button { padding: 2px 8px; }
 .feedback button.voted { border-color: var(--accent); background: var(--accent); color: #fff; }
+.call { display: inline-block; font-weight: 700; border-radius: 6px; letter-spacing: .01em; white-space: nowrap; }
+.call.big { font-size: 15px; padding: 4px 10px; }
+.call.small { font-size: 12px; padding: 1px 7px; }
+.call.bull { color: var(--pos); border: 1.5px solid var(--pos); background: color-mix(in srgb, var(--pos) 12%, transparent); }
+.call.bear { color: var(--neg); border: 1.5px solid var(--neg); background: color-mix(in srgb, var(--neg) 12%, transparent); }
