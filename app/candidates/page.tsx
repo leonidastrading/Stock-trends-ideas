@@ -13,7 +13,7 @@ export default async function CandidatesPage({ searchParams }: { searchParams: P
   if (!hasDatabase()) return <SetupNotice />;
   const sp = await searchParams;
   const days = Math.min(90, Math.max(1, Number(sp.days ?? 7) || 7));
-  const [candidates, cards, tracks, runs] = await Promise.all([store.candidatesSince(days), store.cardsSince(days), store.allTracks(), store.recentRuns(10)]);
+  const [candidates, cards, tracks, runs, fb] = await Promise.all([store.candidatesSince(days), store.cardsSince(days), store.allTracks(), store.recentRuns(10), store.latestFeedback()]);
   const byId = new Map(cards.map((c) => [c.id, c]));
   const t = new Map(tracks.map((x) => [x.cardId, x]));
   const sw = swingConfigured();
@@ -79,7 +79,7 @@ export default async function CandidatesPage({ searchParams }: { searchParams: P
       <h2>Cards</h2>
       {cards.map((c) => {
         const tr = t.get(c.id) ?? null;
-        return <CardView key={c.id} c={c} track={tr} actions={<CardActions cardId={c.id} canSend={c.status !== "not_promoted"} sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} />} />;
+        return <CardView key={c.id} c={c} track={tr} feedback={fb.get(`card:${c.id}`) ?? null} actions={<CardActions cardId={c.id} canSend={c.status !== "not_promoted"} sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} />} />;
       })}
     </>
   );

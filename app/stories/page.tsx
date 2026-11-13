@@ -1,4 +1,5 @@
 import CardActions from "@/components/CardActions";
+import Feedback from "@/components/Feedback";
 import CardView from "@/components/CardView";
 import SetupNotice from "@/components/SetupNotice";
 import { hasDatabase } from "@/lib/db";
@@ -13,7 +14,7 @@ interface StoriesDetail { headlinesRead: number; detected: Array<{ key: string; 
 
 export default async function StoriesPage() {
   if (!hasDatabase()) return <SetupNotice />;
-  const [runs, cards, tracks, candidates] = await Promise.all([store.recentRuns(30), store.cardsSince(14), store.allTracks(), store.candidatesSince(14)]);
+  const [runs, cards, tracks, candidates, fb] = await Promise.all([store.recentRuns(30), store.cardsSince(14), store.allTracks(), store.candidatesSince(14), store.latestFeedback()]);
   const last = runs.find((r) => r.action === "stories" || (r.action === "daily" && (r.detail as { stories?: unknown } | null)?.stories));
   const d = last ? ((last.action === "stories" ? last.detail : (last.detail as { stories?: StoriesDetail }).stories) as StoriesDetail | null) : null;
   const storyCards = cards.filter((c) => candidates.some((k) => k.cardId === c.id && k.term.startsWith("story: ")));
@@ -45,6 +46,7 @@ export default async function StoriesPage() {
                 <b>{s.key}</b> <span className="small muted">{s.stories} headlines · {s.mainstream} mainstream · {s.shockHits} shock words{s.symbols.length > 1 ? ` · ${s.symbols.join(", ")}` : ""}</span>
                 <div className="small secondary">{s.sample.join(" · ")}</div>
                 {tr && <div className="small" style={{ marginTop: 4 }}>{tr.summary} {tr.skipped ? <span className="muted">— skipped: {tr.skipped}</span> : tr.trades.map((x) => <span key={x.ticker} className="tag">{x.direction} {x.ticker} · {x.role.replace("_", "-")} · {x.horizon_days}d</span>)}</div>}
+                <Feedback target={`story:${s.key}`} initial={fb.get(`story:${s.key}`) ? { vote: fb.get(`story:${s.key}`)!.vote, note: fb.get(`story:${s.key}`)!.note } : null} />
               </div>
             );
           })}
@@ -55,7 +57,7 @@ export default async function StoriesPage() {
           <h2>{key}</h2>
           {cs.map((c) => {
             const tr = t.get(c.id) ?? null;
-            return <CardView key={c.id} c={c} track={tr} actions={<CardActions cardId={c.id} canSend={c.status !== "not_promoted"} sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} />} />;
+            return <CardView key={c.id} c={c} track={tr} feedback={fb.get(`card:${c.id}`) ?? null} actions={<CardActions cardId={c.id} canSend={c.status !== "not_promoted"} sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} />} />;
           })}
         </section>
       ))}

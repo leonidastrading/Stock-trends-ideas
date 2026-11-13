@@ -1,12 +1,12 @@
 import { KIND_LABEL, type Kind } from "@/config/scout";
-import type { StoredCard } from "@/lib/scout/store";
-import type { Track } from "@/lib/scout/store";
+import Feedback from "@/components/Feedback";
+import type { Feedback as FeedbackRow, StoredCard, Track } from "@/lib/scout/store";
 import { toEt } from "@/lib/time";
 
 const pct = (x: number | null | undefined, d = 1) => (x === null || x === undefined ? "—" : `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(d)}%`);
 
 /** One thesis card, fully laid out. Server component; actions are passed in. */
-export default function CardView({ c, track, actions }: { c: StoredCard; track?: Track | null; actions?: React.ReactNode }) {
+export default function CardView({ c, track, actions, feedback }: { c: StoredCard; track?: Track | null; actions?: React.ReactNode; feedback?: FeedbackRow | null }) {
   const k = c.card;
   return (
     <section className="card thesis" id={`card-${c.id}`}>
@@ -43,6 +43,7 @@ export default function CardView({ c, track, actions }: { c: StoredCard; track?:
         <ul className="evidence">{k.evidence.map((e, i) => <li key={i}><span className="src">{e.source}</span>{e.metric}: {e.value} <span className="muted">({e.change_vs_12m} vs 12m, as of {e.as_of})</span></li>)}</ul>
       </div>
       {actions && <div className="actions">{actions}</div>}
+      <Feedback target={`card:${c.id}`} initial={feedback ? { vote: feedback.vote, note: feedback.note } : null} />
     </section>
   );
 }

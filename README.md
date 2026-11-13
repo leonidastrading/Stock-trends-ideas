@@ -64,6 +64,13 @@ regulator's move, an indictment, a recall, a pivot, a guidance cut. `lib/scout/s
 - The **Stories** page shows the last detection, the desk's read and trades, and the story cards grouped by story,
   each with the Send and Invalidation buttons.
 
+### Your reactions
+
+Every card and every detected story has thumbs up / thumbs down and an optional note. Reactions are stored append-only
+(the latest per target counts) and the discovery and story desks see the latest dozen of each, with the notes, when
+they decide what to propose. They steer what gets proposed; they never change how a card is written or gated, so the
+scoring stays honest. Settings lists them.
+
 ### Sources (version 1)
 
 Each connector returns measurements with a source, metric, value, comparison base and as-of date. The Settings page

@@ -151,6 +151,17 @@ CREATE TABLE IF NOT EXISTS daily_bars (
   PRIMARY KEY (symbol, date)
 );
 
+-- Vadim's reactions to cards and stories: thumbs up or down with an optional note. Append-only; the latest per target counts.
+CREATE TABLE IF NOT EXISTS feedback (
+  id bigserial PRIMARY KEY,
+  at timestamptz NOT NULL DEFAULT now(),
+  target text NOT NULL,              -- 'card:<id>' | 'story:<key>'
+  vote text NOT NULL CHECK (vote IN ('up', 'down')),
+  note text
+);
+CREATE INDEX IF NOT EXISTS feedback_target_idx ON feedback (target, id DESC);
+CREATE OR REPLACE TRIGGER feedback_ro BEFORE UPDATE OR DELETE ON feedback FOR EACH ROW EXECUTE FUNCTION forbid_change();
+
 -- Headline counts per ticker per day from the news stream, for story spike detection.
 CREATE TABLE IF NOT EXISTS ticker_news_daily (
   date date NOT NULL,

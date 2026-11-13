@@ -6,6 +6,7 @@
 import { SCOUT, type Kind } from "@/config/scout";
 import { probeAll, type Signal, type SourceResult } from "../sources";
 import { buildTriagePrompt, gatherPulse, parseTriage, triggerFor } from "./discovery";
+import { preferencesText } from "./preferences";
 import { trendingNow } from "../sources/googletrends";
 import { toEt } from "../time";
 import { recordHealth, researchCandidate, type ResearchDeps, type ResearchOutcome } from "./research";
@@ -143,7 +144,7 @@ async function runDiscovery(deps: ResearchDeps, max: number, cooldown: Set<strin
   out.headlinesRead = pulse.headlinesRead;
   out.problems = pulse.problems;
   const avoid = [...cooldown, ...report.researched.map((r) => r.term.toLowerCase())];
-  const prompt = buildTriagePrompt(pulse, max, avoid);
+  const prompt = buildTriagePrompt(pulse, max, avoid, preferencesText(await store.recentFeedback()));
   let triage;
   try {
     const reply = await deps.callModel({ model: settings.model, effort: "medium", user: prompt, purpose: "triage" });

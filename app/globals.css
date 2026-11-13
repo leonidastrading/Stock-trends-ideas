@@ -79,3 +79,6 @@ pre { font-size: 12px; white-space: pre-wrap; word-break: break-word; background
 .scores { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; }
 .scores b { font-variant-numeric: tabular-nums; }
 .inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.feedback { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.feedback button { padding: 2px 8px; }
+.feedback button.voted { border-color: var(--accent); background: var(--accent); color: #fff; }

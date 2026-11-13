@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 
 export default async function DigestPage() {
   if (!hasDatabase()) return <SetupNotice />;
-  const [week, tracks, health] = await Promise.all([store.cardsSince(7), store.allTracks(), store.allHealth()]);
+  const [week, tracks, health, fb] = await Promise.all([store.cardsSince(7), store.allTracks(), store.allHealth(), store.latestFeedback()]);
   const top = digestCards(week);
   const late = week.filter((c) => c.status === "late").sort((a, b) => b.rankScore - a.rankScore);
   const t = new Map(tracks.map((x) => [x.cardId, x]));
@@ -30,7 +30,7 @@ export default async function DigestPage() {
       {top.length === 0 && <section className="card"><p className="muted">No promoted cards this week. The daily scan runs on weekday mornings; see <a href="/candidates">Candidates</a> for what it considered.</p></section>}
       {top.map((c) => {
         const tr = t.get(c.id) ?? null;
-        return <CardView key={c.id} c={c} track={tr} actions={<CardActions cardId={c.id} canSend sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} />} />;
+        return <CardView key={c.id} c={c} track={tr} feedback={fb.get(`card:${c.id}`) ?? null} actions={<CardActions cardId={c.id} canSend sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} />} />;
       })}
       {late.length > 0 && (
         <>
@@ -38,7 +38,7 @@ export default async function DigestPage() {
           <p className="small secondary">Already up more than {SCOUT.lateStockMove30dPct}% in 30 days or past {SCOUT.lateNewsStories30d} mainstream stories. Tracked on paper so the lateness gate can be checked: if these do as well as the promoted cards, the gate is not helping.</p>
           {late.map((c) => {
             const tr = t.get(c.id) ?? null;
-            return <CardView key={c.id} c={c} track={tr} actions={<CardActions cardId={c.id} canSend sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} />} />;
+            return <CardView key={c.id} c={c} track={tr} feedback={fb.get(`card:${c.id}`) ?? null} actions={<CardActions cardId={c.id} canSend sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} />} />;
           })}
         </>
       )}

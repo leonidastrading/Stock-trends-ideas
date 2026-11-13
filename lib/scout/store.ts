@@ -273,6 +273,33 @@ export async function lastBarDate(symbol: string): Promise<string | null> {
   return dstr((await q(`SELECT max(date) AS d FROM daily_bars WHERE symbol = $1`, [symbol]))[0]?.d);
 }
 
+// ---------------------------------------------------------------- feedback
+
+export interface Feedback { id: number; at: string; target: string; vote: "up" | "down"; note: string | null }
+
+export async function addFeedback(target: string, vote: "up" | "down", note: string | null): Promise<void> {
+  await q(`INSERT INTO feedback (target, vote, note) VALUES ($1, $2, $3)`, [target, vote, note]);
+}
+
+/** Latest reaction per target. */
+export async function latestFeedback(): Promise<Map<string, Feedback>> {
+  const rows = await q(`SELECT DISTINCT ON (target) id, at, target, vote, note FROM feedback ORDER BY target, id DESC`);
+  return new Map(rows.map((r) => [r.target, { id: Number(r.id), at: iso(r.at)!, target: r.target, vote: r.vote, note: r.note }]));
+}
+
+/** Recent reactions with what they were about, newest first, for the prompts and the Settings page. */
+export async function recentFeedback(limit = 40): Promise<Array<Feedback & { about: string }>> {
+  const rows = await q(
+    `SELECT f.id, f.at, f.target, f.vote, f.note,
+            CASE WHEN f.target LIKE 'card:%' THEN c.title || ' [' || c.kind || ', ' || c.direction || ' ' || c.primary_ticker || ']' ELSE replace(f.target, 'story:', 'story ') END AS about
+     FROM (SELECT DISTINCT ON (target) * FROM feedback ORDER BY target, id DESC) f
+     LEFT JOIN cards c ON f.target = 'card:' || c.id
+     ORDER BY f.id DESC LIMIT $1`,
+    [limit],
+  );
+  return rows.map((r) => ({ id: Number(r.id), at: iso(r.at)!, target: r.target, vote: r.vote, note: r.note, about: r.about ?? r.target }));
+}
+
 // ------------------------------------------------------- ticker news counts
 
 export async function saveTickerCounts(date: string, items: Array<{ symbols: string[]; source: string; url: string }>): Promise<void> {

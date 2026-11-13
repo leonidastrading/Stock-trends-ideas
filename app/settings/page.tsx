@@ -15,7 +15,7 @@ export const runtime = "nodejs";
 export default async function SettingsPage() {
   const env = envStatus();
   if (!hasDatabase()) return <SetupNotice />;
-  const [settings, health, spend, runs, versions] = await Promise.all([store.loadSettings(), store.allHealth(), store.spendByDay(30), store.recentRuns(15), store.listVersions()]);
+  const [settings, health, spend, runs, versions, feedback] = await Promise.all([store.loadSettings(), store.allHealth(), store.spendByDay(30), store.recentRuns(15), store.listVersions(), store.recentFeedback(30)]);
   const h = new Map(health.map((x) => [x.source, x]));
   const sources = allSources(marketDataFromEnv());
   const today = toEt(new Date()).date;
@@ -55,6 +55,12 @@ export default async function SettingsPage() {
         <p className="small secondary">A version is the sha256 of the model, effort, prompt, reply schema, gates, source list and baseline universe. Changing any of them starts a new version. Never tune the prompt on the version being scored.</p>
         <ul className="small">{versions.map((v) => <li key={v.id}>v{v.id} · {v.model} · {v.effort} · {v.hash.slice(0, 16)} · since {toEt(new Date(v.createdAt)).date}</li>)}{versions.length === 0 && <li className="muted">No version yet (created on the first model call).</li>}</ul>
         <p className="small secondary">Gates: materiality under {SCOUT.minRevenueSharePct}% of revenue or no estimate = logged, not promoted; stock up more than {SCOUT.lateStockMove30dPct}% in 30 days or more than {SCOUT.lateNewsStories30d} mainstream stories in 30 days = late. Candidate rule: at least {SCOUT.minAcceleratingSources} sources up {SCOUT.minChangeVs12m * 100}% or more against their 12-month base, or an event's odds moving {SCOUT.minOddsMovePoints}+ points in a week; {SCOUT.candidateCooldownDays}-day cooldown per term.</p>
+      </section>
+
+      <section className="card">
+        <h2>Your reactions</h2>
+        <p className="small secondary">Thumbs up and down from the cards and stories, newest first. The discovery and story desks see the latest 12 of each kind, with your notes, when they decide what to propose. They do not change how cards are written or gated.</p>
+        <ul className="small">{feedback.map((f) => <li key={f.id}>{f.vote === "up" ? "👍" : "👎"} {f.about}{f.note ? <span className="muted"> — “{f.note}”</span> : null}</li>)}{feedback.length === 0 && <li className="muted">None yet.</li>}</ul>
       </section>
 
       <section className="card">

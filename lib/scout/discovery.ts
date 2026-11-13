@@ -129,9 +129,10 @@ export const TRIAGE_JSON_SCHEMA = {
   },
 } as const;
 
-export function buildTriagePrompt(p: Pulse, maxCandidates: number, avoid: string[]): string {
+export function buildTriagePrompt(p: Pulse, maxCandidates: number, avoid: string[], preferences: string | null = null): string {
   const L: string[] = [];
   L.push(`Date: ${p.date}. Propose at most ${maxCandidates} candidates. Give platform, second-order and re-rating ideas at least as much attention as consumer trends.`);
+  if (preferences) L.push(`\n${preferences}`);
   if (avoid.length) L.push(`Already researched recently (do not propose again): ${avoid.join("; ")}.`);
   L.push(`\nNews stream: ${p.headlinesRead} headlines in 24h. Tickers with the most headlines (these are the obvious names; look one step behind them):`);
   for (const t of p.topTickers) L.push(`- ${t.symbol}: ${t.stories} stories (${t.mainstream} mainstream). ${t.headlines.join(" | ")}`);

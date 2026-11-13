@@ -13,6 +13,7 @@ import { isMainstream } from "../sources/news";
 import type { Signal } from "../sources";
 import { dateStr, daysAgo } from "../sources/types";
 import { addDays, toEt } from "../time";
+import { preferencesText } from "./preferences";
 import { researchCandidate, type ResearchDeps } from "./research";
 import * as store from "./store";
 
@@ -136,8 +137,9 @@ export const STORY_JSON_SCHEMA = {
   },
 } as const;
 
-export function buildStoryPrompt(stories: Story[], date: string): string {
+export function buildStoryPrompt(stories: Story[], date: string, preferences: string | null = null): string {
   const L = [`Date: ${date}. ${stories.length} stories from the last 24 hours of the news stream.`];
+  if (preferences) L.push(`\n${preferences}`);
   for (const s of stories) {
     L.push(`\n## ${s.key} — ${s.symbols.length ? s.symbols.join(", ") : "macro"}: ${s.stories} headlines, ${s.mainstream} mainstream, ${s.shockHits} with shock wording`);
     for (const h of s.headlines) L.push(`- [${h.source}${h.symbols.length ? ` · ${h.symbols.join(",")}` : ""}] ${h.headline}`);
@@ -213,7 +215,8 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
 
   let triage: StoryTriage;
   try {
-    const reply = await deps.callModel({ model: settings.model, effort: "medium", user: buildStoryPrompt(fresh.slice(0, max), et.date), purpose: "stories" });
+    const preferences = preferencesText(await store.recentFeedback());
+    const reply = await deps.callModel({ model: settings.model, effort: "medium", user: buildStoryPrompt(fresh.slice(0, max), et.date, preferences), purpose: "stories" });
     await store.logLlmCall({ etDate: et.date, model: settings.model, purpose: "stories", usage: reply.usage, costUsd: reply.costUsd, ok: true });
     triage = parseStoryTriage(reply.text);
   } catch (err) {
