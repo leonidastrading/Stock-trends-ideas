@@ -89,7 +89,7 @@ export const STORY_SYSTEM_PROMPT = `You are the story desk of a paper-only "tren
 - The second-order trade: who wins or loses one step away that the headlines are not about yet (a rival that takes share, a supplier, a customer, a platform that loses traffic to the thing in the news).
 - For each, how long the repricing should take (days to weeks), what would prove it wrong, and why the market may still be mispricing it after the first move: forced sellers, a slow-burning investigation, an index or fund flow, a second shoe to drop.
 
-Rules: at most two trades per story, the second-order one preferred when it is credible. Skip stories that are noise, already fully played out, or have no listed exposure, and say why. Shares only; never options. Be concrete and short.`;
+Rules: at most two trades per story, the second-order one preferred when it is credible. Skip stories that are noise, already fully played out, or have no listed exposure, and say why. Shares only; never options. Tickers must be US-tradable symbols: for a foreign company use its US ADR (BESIY, TSM, SONY), never the home-exchange symbol. Be concrete and short.`;
 
 export const storyTriageSchema = z.object({
   stories: z.array(z.object({

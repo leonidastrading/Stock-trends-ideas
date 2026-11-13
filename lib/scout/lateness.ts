@@ -20,6 +20,7 @@ export async function measureLateness(data: MarketData | null, symbol: string, n
   const today = now.toISOString().slice(0, 10);
   try {
     const bars = await data.getDailyBars([symbol], addDays(today, -100), today);
+    out.hasPrices = bars.length > 0;
     out.stockMove30dPct = moveSince(bars, addDays(today, -30));
     out.stockMove90dPct = moveSince(bars, addDays(today, -90));
   } catch {

@@ -122,6 +122,8 @@ export interface MeasuredLateness {
   newsStories30d: number | null;
   stockMove30dPct: number | null;
   stockMove90dPct: number | null;
+  /** false = the price feed returned no bars for the primary ticker (a foreign or unlisted symbol); undefined = not checked. */
+  hasPrices?: boolean;
 }
 
 export type CardStatus = "promoted" | "late" | "not_promoted";
@@ -174,7 +176,10 @@ export function applyGates(input: Card, measured: MeasuredLateness, opts: GateOp
     notes.push(`whole-company story trade: revenue share taken as 100% for ${primary.symbol}`);
   }
   let status: CardStatus = "promoted";
-  if (primary.revenue_share_pct === null) {
+  if (measured.hasPrices === false) {
+    status = "not_promoted";
+    notes.push(`no US price data for ${primary.symbol} (foreign or unlisted symbol?): not tracked`);
+  } else if (primary.revenue_share_pct === null) {
     status = "not_promoted";
     notes.push(`materiality: no revenue-share estimate for ${primary.symbol}`);
   } else if (primary.revenue_share_pct < SCOUT.minRevenueSharePct) {

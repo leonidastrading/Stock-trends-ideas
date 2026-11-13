@@ -100,3 +100,14 @@ describe("whole-company story trades", () => {
     expect(g.notes.join()).toMatch(/whole-company/);
   });
 });
+
+describe("tickers without US prices", () => {
+  it("a primary ticker the price feed knows nothing about is logged but not tracked", () => {
+    const t = sampleCard().tickers[0];
+    const card = sampleCard({ tickers: [{ ...t, symbol: "BESI" }] });
+    const g = applyGates(card, { newsStories30d: 2, stockMove30dPct: null, stockMove90dPct: null, hasPrices: false });
+    expect(g.status).toBe("not_promoted");
+    expect(g.notes.join()).toMatch(/no US price data for BESI/);
+    expect(applyGates(card, { newsStories30d: 2, stockMove30dPct: 1, stockMove90dPct: 2, hasPrices: true }).status).toBe("promoted");
+  });
+});

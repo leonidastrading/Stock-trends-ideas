@@ -96,7 +96,7 @@ What makes a good candidate:
 - Event: a policy, legal or macro outcome with a clear listed winner or loser, where the odds just moved.
 - Consumer: a product selling out or going viral.
 
-What to avoid: the names dominating today's headlines (they are already obvious), earnings reactions, analyst upgrades, and anything whose only evidence is price action. Prefer the thing one step behind the headline. A candidate is a short searchable term (a product, app, theme or supply-chain phrase), a kind, and the tickers most directly exposed. Propose at most the number asked for, fewer if nothing qualifies, and say in one sentence what you saw that made you propose it.`;
+What to avoid: the names dominating today's headlines (they are already obvious), earnings reactions, analyst upgrades, and anything whose only evidence is price action. Prefer the thing one step behind the headline. A candidate is a short searchable term (a product, app, theme or supply-chain phrase), a kind, and the tickers most directly exposed. Tickers must be US-tradable symbols: for a foreign company use its US ADR (BESIY, TSM, SONY), never the home-exchange symbol. Propose at most the number asked for, fewer if nothing qualifies, and say in one sentence what you saw that made you propose it.`;
 
 export const triageSchema = z.object({
   candidates: z.array(z.object({
