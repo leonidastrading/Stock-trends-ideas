@@ -90,7 +90,7 @@ export default async function ScoringPage({ searchParams }: { searchParams: Prom
                 return (
                   <tr key={i.cardId}>
                     <td>{i.cardId}</td>
-                    <td><b className={i.direction === "long" ? "pos" : "neg"}>{i.direction === "long" ? "▲ Buy" : "▼ Sell short"}</b> <b>{i.symbol}</b> <span className="small secondary">{c.title}</span><div className="small muted">{KIND_LABEL[c.kind as Kind]} · {i.origin}{i.tapped ? " · tapped" : ""} · rank {i.rankScore}</div></td>
+                    <td><b className={i.direction === "long" ? "pos" : "neg"}>{i.direction === "long" ? "▲" : "▼"} {i.symbol}</b> <span className="small secondary">{c.title}</span><div className="small muted">{KIND_LABEL[c.kind as Kind]} · {i.origin}{i.tapped ? " · tapped" : ""} · rank {i.rankScore}</div></td>
                     <td><span className={`tag ${i.status}`}>{i.status}</span>{!i.closed && <span className="tag">open</span>}</td>
                     <td className="small">{i.entryDate}</td><td className="small">{i.exitDate ?? "—"}</td>
                     <td className={`num ${cls(i.ret)}`}>{pct(i.ret)}</td><td className="num">{pct(i.spyRet)}</td><td className={`num ${cls(i.excess)}`}>{pct(i.excess)}</td><td className={`num ${cls(i.excessSector)}`}>{pct(i.excessSector)}</td>

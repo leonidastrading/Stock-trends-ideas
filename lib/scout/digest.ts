@@ -17,7 +17,7 @@ export function buildDigestEmail(cards: StoredCard[], weekKey: string, dashboard
   const rows = cards.map((c) => {
     const k = c.card;
     const late = `${k.lateness.stock_move_30d_pct >= 0 ? "+" : ""}${k.lateness.stock_move_30d_pct.toFixed(1)}% / 30d, ${k.lateness.news_stories_30d} stories`;
-    const call = c.direction === "long" ? `<span style="color:#067647;font-weight:700">▲ BULLISH · BUY ${esc(c.primaryTicker)}</span>` : `<span style="color:#b42318;font-weight:700">▼ BEARISH · SELL SHORT ${esc(c.primaryTicker)}</span>`;
+    const call = c.direction === "long" ? `<span style="color:#067647;font-weight:700">▲ ${esc(c.primaryTicker)}</span>` : `<span style="color:#b42318;font-weight:700">▼ ${esc(c.primaryTicker)}</span>`;
     return `<tr><td style="padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top">${call}<br><b>${esc(k.title)}</b><br><span style="color:#555;font-size:12px">${esc(KIND_LABEL[c.kind as Kind] ?? c.kind)} · ${c.origin} · novelty ${k.scores.novelty} × materiality ${k.scores.materiality} = ${c.rankScore}</span><br><span style="font-size:13px">${esc(k.observation)}</span></td><td style="padding:6px 8px;border-bottom:1px solid #eee;white-space:nowrap;font-size:12px">${esc(late)}</td></tr>`;
   }).join("\n");
   const html = `<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;font-size:14px;max-width:680px">
@@ -26,7 +26,7 @@ export function buildDigestEmail(cards: StoredCard[], weekKey: string, dashboard
 <table style="border-collapse:collapse;width:100%"><thead><tr><th style="text-align:left;padding:6px 8px;font-size:12px;color:#555">Card</th><th style="text-align:left;padding:6px 8px;font-size:12px;color:#555">Lateness</th></tr></thead><tbody>${rows || `<tr><td colspan="2" style="padding:8px;color:#777">No promoted cards this week.</td></tr>`}</tbody></table>
 ${dashboardUrl ? `<p style="font-size:12px"><a href="${esc(dashboardUrl)}/digest">Open the digest</a> to send a card to the Swing ideas log.</p>` : ""}
 </div>`;
-  const text = [`Trend scout ${weekKey} (paper only)`, ...cards.map((c) => `- ${c.direction === "long" ? "BULLISH: BUY" : "BEARISH: SELL SHORT"} ${c.primaryTicker}: ${c.card.title} [${c.kind}, ${c.origin}] rank ${c.rankScore}; lateness ${c.card.lateness.stock_move_30d_pct.toFixed(1)}% / ${c.card.lateness.news_stories_30d} stories`)].join("\n");
+  const text = [`Trend scout ${weekKey} (paper only)`, ...cards.map((c) => `- ${c.direction === "long" ? "▲" : "▼"} ${c.primaryTicker}: ${c.card.title} [${c.kind}, ${c.origin}] rank ${c.rankScore}; lateness ${c.card.lateness.stock_move_30d_pct.toFixed(1)}% / ${c.card.lateness.news_stories_30d} stories`)].join("\n");
   return { subject, html, text };
 }
 
