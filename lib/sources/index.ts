@@ -20,7 +20,8 @@ export const SOURCE_IDS = ["google_trends", "youtube", "reddit", "wikipedia", "a
 
 /** Bump a source's revision when its data source or measurement changes: it starts a new version. */
 export const SOURCE_REVISIONS: Record<(typeof SOURCE_IDS)[number], number> = {
-  google_trends: 1, youtube: 1, reddit: 1, wikipedia: 1, app_store: 1, hacker_news: 1, edgar: 1, news: 1, polymarket: 1,
+  google_trends: 1, youtube: 1, reddit: 1, wikipedia: 1, app_store: 1, hacker_news: 1, news: 1, polymarket: 1,
+  edgar: 2, // 1 = full-text search only (blocked from cloud); 2 = data.sec.gov per-ticker filings, 8-K events, revenue YoY
   stocktwits: 2, // 1 = missing; 2 = public trending list + symbol streams (the Trending Five endpoints)
 };
 

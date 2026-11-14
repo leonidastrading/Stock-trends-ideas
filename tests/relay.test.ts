@@ -37,14 +37,15 @@ describe("edgar relay", () => {
   });
   it("the scout's EDGAR source goes through the relay when configured", async () => {
     expect(route({} as NodeJS.ProcessEnv)).toBeNull();
-    expect(route({ SEC_USER_AGENT: "a b" } as unknown as NodeJS.ProcessEnv)?.viaRelay).toBe(false);
+    expect(route({ SEC_USER_AGENT: "a b" } as unknown as NodeJS.ProcessEnv)).toBeNull();
     const env = { EDGAR_PROXY_URL: `${base}/`, EDGAR_PROXY_TOKEN: "t0k" } as unknown as NodeJS.ProcessEnv;
-    expect(route(env)?.viaRelay).toBe(true);
+    expect(route(env)).not.toBeNull();
     const r = await edgar.probe({ term: "transformer shortage", kind: null, tickers: [], now: new Date("2026-11-12T12:00:00Z"), env });
     expect(r.status).toBe("ok");
     expect(r.signals[0]).toMatchObject({ metric: "filings_30d", value: 11, baseline: 3 });
     const bad = await edgar.probe({ term: "x", kind: null, tickers: [], now: new Date(), env: { ...env, EDGAR_PROXY_TOKEN: "wrong" } as unknown as NodeJS.ProcessEnv });
-    expect(bad.status).toBe("down");
+    expect(bad.signals).toEqual([]);
+    expect(bad.status).toBe("missing"); // relay refused and no SEC_USER_AGENT for the JSON APIs
   });
 });
 
