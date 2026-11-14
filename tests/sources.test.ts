@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findRank } from "@/lib/sources/appstore";
+import { findRank, resetAppChart, topFreeApps } from "@/lib/sources/appstore";
 import { interestSummary } from "@/lib/sources/googletrends";
 import { coverage, isMainstream } from "@/lib/sources/news";
 import { marketOdds } from "@/lib/sources/polymarket";
@@ -39,6 +39,25 @@ describe("pure source helpers", () => {
     const r = findRank([{ name: "Foo", artistName: "A" }, { name: "Robinhood: Stocks", artistName: "Robinhood Markets" }], ["robinhood"]);
     expect(r).toEqual({ rank: 2, name: "Robinhood: Stocks", artist: "Robinhood Markets" });
     expect(findRank([], ["x"])).toBeNull();
+  });
+  it("app store: one shared download, iTunes fallback, failures not retried per term", async () => {
+    resetAppChart();
+    const calls: string[] = [];
+    const fake = (async (url: string) => {
+      calls.push(new URL(url).host);
+      if (url.includes("marketingtools")) return new Response("busy", { status: 404 });
+      return new Response(JSON.stringify({ feed: { entry: [{ "im:name": { label: "Robinhood" }, "im:artist": { label: "Robinhood Markets" } }] } }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const [a, b] = await Promise.all([topFreeApps(fake, 1_000), topFreeApps(fake, 2_000)]);
+    expect(a).toEqual([{ name: "Robinhood", artistName: "Robinhood Markets" }]);
+    expect(b).toBe(a);
+    expect(calls).toEqual(["rss.marketingtools.apple.com", "itunes.apple.com"]);
+    resetAppChart();
+    const down = (async () => new Response("no", { status: 404 })) as unknown as typeof fetch;
+    await expect(topFreeApps(down, 0)).rejects.toThrow(/404/);
+    await expect(topFreeApps(fake, 60_000)).rejects.toThrow(/404/); // remembered for 10 minutes
+    expect((await topFreeApps(fake, 11 * 60_000)).length).toBe(1);
+    resetAppChart();
   });
   it("news: mainstream detection and coverage counts", () => {
     const item = (url: string, source = "benzinga") => ({ id: 1, ts: "2026-11-10T00:00:00Z", headline: "h", summary: "", symbols: ["X"], source, url });
