@@ -7,7 +7,7 @@ import { fmtEt } from "@/lib/time";
 const pct = (x: number | null | undefined, d = 1) => (x === null || x === undefined ? "—" : `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(d)}%`);
 
 /** One thesis card, fully laid out. Server component; actions are passed in. */
-export default function CardView({ c, track, actions, feedback }: { c: StoredCard; track?: Track | null; actions?: React.ReactNode; feedback?: FeedbackRow | null }) {
+export default function CardView({ c, track, actions, feedback, opposing }: { c: StoredCard; track?: Track | null; actions?: React.ReactNode; feedback?: FeedbackRow | null; opposing?: number[] }) {
   const k = c.card;
   return (
     <section className="card thesis" id={`card-${c.id}`}>
@@ -18,7 +18,8 @@ export default function CardView({ c, track, actions, feedback }: { c: StoredCar
           <span className="tag">{c.origin === "human" ? "human-originated" : "scout"}</span>
           <span className="small muted">#{c.id} · {fmtEt(c.createdAt)} · {c.model} · v{c.versionId}</span>
         </div>
-        <div style={{ margin: "8px 0 4px" }}><Direction direction={c.direction} ticker={c.primaryTicker} /></div>
+        <div style={{ margin: "8px 0 4px" }}><Direction direction={c.direction} ticker={c.primaryTicker} />
+          {opposing?.length ? <span className="tag warn" style={{ marginLeft: 8 }}>⚠ opposite call on {c.primaryTicker}: {opposing.map((id) => <a key={id} href={`/candidates?days=90#card-${id}`}>#{id} </a>)}</span> : null}</div>
         <h2 style={{ margin: "6px 0 2px" }}>{k.title}</h2>
         <div className="scores">
           <span>novelty <b>{k.scores.novelty}</b></span><span>materiality <b>{k.scores.materiality}</b></span><span>breadth <b>{k.scores.breadth_of_evidence}</b></span>

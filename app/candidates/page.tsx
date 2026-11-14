@@ -2,6 +2,7 @@ import CardActions from "@/components/CardActions";
 import CardView from "@/components/CardView";
 import SetupNotice from "@/components/SetupNotice";
 import { hasDatabase } from "@/lib/db";
+import { opposingCalls, upcomingCatalysts } from "@/lib/scout/calendar";
 import * as store from "@/lib/scout/store";
 import { swingConfigured } from "@/lib/scout/swing";
 import { fmtEt, toEt } from "@/lib/time";
@@ -13,7 +14,8 @@ export default async function CandidatesPage({ searchParams }: { searchParams: P
   if (!hasDatabase()) return <SetupNotice />;
   const sp = await searchParams;
   const days = Math.min(90, Math.max(1, Number(sp.days ?? 7) || 7));
-  const [candidates, cards, tracks, runs, fb] = await Promise.all([store.candidatesSince(days), store.cardsSince(days), store.allTracks(), store.recentRuns(10), store.latestFeedback()]);
+  const [candidates, cards, tracks, runs, fb, recent] = await Promise.all([store.candidatesSince(days), store.cardsSince(days), store.allTracks(), store.recentRuns(10), store.latestFeedback(), store.cardsSince(120)]);
+  const opp = opposingCalls(recent, tracks);
   const byId = new Map(cards.map((c) => [c.id, c]));
   const t = new Map(tracks.map((x) => [x.cardId, x]));
   const sw = swingConfigured();
@@ -81,7 +83,7 @@ export default async function CandidatesPage({ searchParams }: { searchParams: P
       <h2>Cards</h2>
       {cards.map((c) => {
         const tr = t.get(c.id) ?? null;
-        return <CardView key={c.id} c={c} track={tr} feedback={fb.get(`card:${c.id}`) ?? null} actions={<CardActions cardId={c.id} canSend={c.status !== "not_promoted"} sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} />} />;
+        return <CardView key={c.id} c={c} track={tr} feedback={fb.get(`card:${c.id}`) ?? null} opposing={opp.get(c.id)} actions={<CardActions cardId={c.id} canSend={c.status !== "not_promoted"} sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} />} />;
       })}
     </>
   );

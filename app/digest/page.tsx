@@ -1,18 +1,23 @@
 import CardActions from "@/components/CardActions";
 import CardView from "@/components/CardView";
+import Direction from "@/components/Direction";
 import SetupNotice from "@/components/SetupNotice";
 import { SCOUT } from "@/config/scout";
 import { hasDatabase } from "@/lib/db";
 import { digestCards } from "@/lib/scout/digest";
+import { opposingCalls, upcomingCatalysts } from "@/lib/scout/calendar";
 import * as store from "@/lib/scout/store";
 import { swingConfigured } from "@/lib/scout/swing";
+import { toEt } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export default async function DigestPage() {
   if (!hasDatabase()) return <SetupNotice />;
-  const [week, tracks, health, fb] = await Promise.all([store.cardsSince(7), store.allTracks(), store.allHealth(), store.latestFeedback()]);
+  const [week, tracks, health, fb, recent] = await Promise.all([store.cardsSince(7), store.allTracks(), store.allHealth(), store.latestFeedback(), store.cardsSince(120)]);
+  const opp = opposingCalls(recent, tracks);
+  const coming = upcomingCatalysts(recent, tracks, toEt(new Date()).date);
   const top = digestCards(week);
   const late = week.filter((c) => c.status === "late").sort((a, b) => b.rankScore - a.rankScore);
   const t = new Map(tracks.map((x) => [x.cardId, x]));
@@ -27,10 +32,24 @@ export default async function DigestPage() {
         {down.length > 0 && <div className="warn" style={{ marginTop: 6 }}>Sources not reporting: {down.map((h) => `${h.source} (${h.status})`).join(", ")}. See Settings.</div>}
         {!sw && <div className="muted" style={{ marginTop: 6 }}>Sending to the Swing ideas log is not configured yet (SWING_API_URL / SWING_API_USER / SWING_API_PASSWORD).</div>}
       </section>
+      {coming.length > 0 && (
+        <section className="card">
+          <h2>Coming up: dated catalysts on open paper tracks (next 3 weeks)</h2>
+          <div className="table-wrap"><table><tbody>
+            {coming.map((u) => (
+              <tr key={u.cardId}>
+                <td className="small" style={{ whiteSpace: "nowrap" }}>{u.date}</td>
+                <td><Direction direction={u.direction} ticker={u.ticker} size="small" /></td>
+                <td className="small">{u.what} <span className="muted">— <a href={`/candidates?days=90#card-${u.cardId}`}>#{u.cardId}</a> {u.title}</span></td>
+              </tr>
+            ))}
+          </tbody></table></div>
+        </section>
+      )}
       {top.length === 0 && <section className="card"><p className="muted">No promoted cards this week. The daily scan runs on weekday mornings; see <a href="/candidates">Candidates</a> for what it considered.</p></section>}
       {top.map((c) => {
         const tr = t.get(c.id) ?? null;
-        return <CardView key={c.id} c={c} track={tr} feedback={fb.get(`card:${c.id}`) ?? null} actions={<CardActions cardId={c.id} canSend sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} />} />;
+        return <CardView key={c.id} c={c} track={tr} feedback={fb.get(`card:${c.id}`) ?? null} opposing={opp.get(c.id)} actions={<CardActions cardId={c.id} canSend sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} />} />;
       })}
       {late.length > 0 && (
         <>
@@ -38,7 +57,7 @@ export default async function DigestPage() {
           <p className="small secondary">Already up more than {SCOUT.lateStockMove30dPct}% in 30 days or past {SCOUT.lateNewsStories30d} mainstream stories. Tracked on paper so the lateness gate can be checked: if these do as well as the promoted cards, the gate is not helping.</p>
           {late.map((c) => {
             const tr = t.get(c.id) ?? null;
-            return <CardView key={c.id} c={c} track={tr} feedback={fb.get(`card:${c.id}`) ?? null} actions={<CardActions cardId={c.id} canSend sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} />} />;
+            return <CardView key={c.id} c={c} track={tr} feedback={fb.get(`card:${c.id}`) ?? null} opposing={opp.get(c.id)} actions={<CardActions cardId={c.id} canSend sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} />} />;
           })}
         </>
       )}

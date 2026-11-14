@@ -1,6 +1,7 @@
 import CardView from "@/components/CardView";
 import SetupNotice from "@/components/SetupNotice";
 import { hasDatabase } from "@/lib/db";
+import { opposingCalls, upcomingCatalysts } from "@/lib/scout/calendar";
 import * as store from "@/lib/scout/store";
 import ImportForm from "./ImportForm";
 import NoticeForm from "./NoticeForm";
@@ -11,6 +12,7 @@ export const runtime = "nodejs";
 export default async function NoticePage() {
   if (!hasDatabase()) return <SetupNotice />;
   const [cards, tracks, spend, fb] = await Promise.all([store.cardsSince(90), store.allTracks(), store.spendByDay(1), store.latestFeedback()]);
+  const opp = opposingCalls(cards, tracks);
   const human = cards.filter((c) => c.origin === "human").slice(0, 10);
   const t = new Map(tracks.map((x) => [x.cardId, x]));
   return (
@@ -24,7 +26,7 @@ export default async function NoticePage() {
       <section className="card"><NoticeForm /></section>
       <section className="card"><h2>Import the daily stream file</h2><ImportForm /></section>
       {human.length > 0 && <h2>Your recent cards</h2>}
-      {human.map((c) => <CardView key={c.id} c={c} track={t.get(c.id) ?? null} feedback={fb.get(`card:${c.id}`) ?? null} />)}
+      {human.map((c) => <CardView key={c.id} c={c} track={t.get(c.id) ?? null} feedback={fb.get(`card:${c.id}`) ?? null} opposing={opp.get(c.id)} />)}
     </>
   );
 }

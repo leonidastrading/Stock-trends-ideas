@@ -30,3 +30,18 @@ describe("scoring", () => {
     expect([a(), a(), a()]).toEqual([b(), b(), b()]);
   });
 });
+
+describe("calendar and conflicting calls", () => {
+  it("lists dated catalysts on open tracks and flags opposite calls on the same ticker", async () => {
+    const { opposingCalls, upcomingCatalysts } = await import("@/lib/scout/calendar");
+    const card = (id: number, ticker: string, direction: "long" | "short", catalystDate: string | null) => ({ id, primaryTicker: ticker, direction, catalystDate, card: { catalyst: { what: `cat ${id}` }, title: `t${id}` } }) as never;
+    const track = (cardId: number, exitDate: string | null = null) => ({ cardId, exitDate }) as never;
+    const cards = [card(1, "CRWV", "short", null), card(2, "CRWV", "long", "2026-11-25"), card(3, "ZM", "long", "2026-11-18"), card(4, "NVDA", "short", "2026-11-17"), card(5, "TTWO", "long", "2027-03-01")];
+    const tracks = [track(1), track(2), track(3), track(4, "2026-11-13"), track(5)];
+    expect(upcomingCatalysts(cards, tracks, "2026-11-14").map((u) => u.cardId)).toEqual([3, 2]);
+    const opp = opposingCalls(cards, tracks);
+    expect(opp.get(1)).toEqual([2]);
+    expect(opp.get(2)).toEqual([1]);
+    expect(opp.has(3)).toBe(false);
+  });
+});
