@@ -17,6 +17,17 @@ export default async function InboxPage() {
   const tokenSet = !!process.env.GITHUB_INBOX_TOKEN?.trim();
   const [files, runs, cards] = await Promise.all([store.inboxRecent(100), store.runsByAction("import", 100), store.cardsSince(365)]);
   const rows = trackRecord(files, runs);
+  // Files in the repo not read yet (one GitHub call; skipped quietly if the repo cannot be listed).
+  const waiting = await (async () => {
+    const { inboxConfig, listInbox, pickFiles } = await import("@/lib/scout/inbox");
+    const cfg = inboxConfig();
+    if (!cfg) return [] as string[];
+    try {
+      return pickFiles(await listInbox(cfg), await store.inboxSeen()).map((p) => p.use.path);
+    } catch {
+      return [] as string[];
+    }
+  })();
   const cardById = new Map(cards.map((c) => [c.id, c]));
   const base = (process.env.DASHBOARD_URL?.trim() || "https://<this app>").replace(/\/$/, "");
   return (
@@ -33,6 +44,7 @@ export default async function InboxPage() {
       <section className="card">
         <h2>Track record</h2>
         <p className="small secondary">Every document received, newest first, and what the scout did with each idea.</p>
+        {waiting.length > 0 && <p className="small warn">Waiting to be read: {waiting.join(", ")}. Up to three files are read on each hourly check; &quot;Check the GitHub inbox&quot; on Settings reads them now.</p>}
         <div className="table-wrap"><table>
           <thead><tr><th>Received</th><th>Document</th><th>How it was read</th><th className="num">Ideas</th><th>What the scout did</th></tr></thead>
           <tbody>
