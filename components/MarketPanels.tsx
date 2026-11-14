@@ -1,5 +1,7 @@
+import { bySymbol } from "@/lib/scout/congress";
 import { loadPanels } from "@/lib/scout/dashboard-warm";
-import { fmtEt } from "@/lib/time";
+import * as store from "@/lib/scout/store";
+import { addDays, fmtEt, toEt } from "@/lib/time";
 
 const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
 const money = (v: number) => (v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${Math.round(v / 1e3)}k`);
@@ -25,7 +27,8 @@ function Bar({ left, right, share, color = "split" }: { left: React.ReactNode; r
 
 /** Market panels for the top of the Digest: breadth and mood, market and rates, earnings, federal contracts, buzz. */
 export default async function MarketPanels() {
-  const { market, earnings, contracts, buzz, breadth } = await loadPanels();
+  const since = addDays(toEt(new Date()).date, -30);
+  const [{ market, earnings, contracts, buzz, breadth }, congress] = await Promise.all([loadPanels(), store.congressTradesSince(since).then((t) => bySymbol(t, since).filter((a) => a.buyers.length > 0).slice(0, 10)).catch(() => [])]);
   const b = breadth.data;
   return (
     <>
@@ -79,6 +82,15 @@ export default async function MarketPanels() {
             {!buzz.data?.length && <span className="small muted">Builds up as the chatter test records its first days.</span>}
           </div>
           <p className="small muted">Chatter spike against the stock&apos;s own normal (0–8), news against its usual pace (0–6), Stocktwits trending (0–6). Hover a chip for the parts.</p>
+        </section>
+
+        <section className="card panel">
+          <div className="panel-head"><span>Congress buys · 30 days</span><a className="small" href="/congress">All trades →</a></div>
+          <div className="chips">
+            {congress.map((a) => <a key={a.symbol} href={`/congress?symbol=${a.symbol}`} className="chip" title={`Bought by ${a.buyers.join(", ")}${a.sellers.length ? `; sold by ${a.sellers.join(", ")}` : ""}`}><b>{a.symbol}</b> <span className="muted">{a.buyers.length} {a.buyers.length === 1 ? "member" : "members"}</span></a>)}
+            {!congress.length && <span className="small muted">Loads as House transaction reports are read (hourly).</span>}
+          </div>
+          <p className="small muted">House members&apos; reported purchases by filing date, most buyers first. Reports can be up to 45 days after the trade.</p>
         </section>
       </div>
     </>

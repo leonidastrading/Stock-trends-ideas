@@ -195,6 +195,18 @@ anything else happens. Cards, versions and track events are append-only, enforce
   news against its usual pace 0–6, Stocktwits trending 0–6). Each panel is cached in `dashboard_cache`, refreshed
   in housekeeping and on a page view when stale, and falls back to the last good copy. FDA and trial dates have no
   reliable free source and are not shown.
+- **Congress** (`/congress`, `lib/sources/house.ts`, `lib/scout/congress.ts`): House members' STOCK Act periodic
+  transaction reports, read from the House Clerk's official files (the yearly `{year}FD.zip` index, then each report's
+  PDF text layer). Rows with an exchange ticker and asset type ST (stock) or OP (option) are kept, with owner (self,
+  spouse, joint, child), buy / sell / partial sale, trade and notification dates and the reported amount range; bonds,
+  T-bills, funds and private holdings have no ticker and are skipped, and scanned paper filings are recorded as
+  unreadable. Reports and trades are append-only (`congress_filings`, `congress_trades`). Housekeeping reads new reports
+  filed in the last 120 days (up to a minute per call), then prices every stock buy with Alpaca bars: return since the
+  trade date and since the filing date, each against SPY. The page shows stocks bought by several members in the last 30
+  days (a cluster: 3+ members buying, or 2 with $100k+ between them, with fewer sellers), the latest trades with links to
+  the official PDFs, and per member: trades, typical reporting delay and how their buys did after the report was public.
+  `?member=` and `?symbol=` filter it; the Digest shows the most-bought stocks. Senate reports and the President's OGE
+  278-T are not read yet.
 - **I noticed something**: the text box from section 2B.
 - **Candidates**: everything logged in the window, including rejections and why; the last scan's measurements per term;
   Google's rising queries for anything worth adding to the watch-list.

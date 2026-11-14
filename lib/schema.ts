@@ -306,6 +306,41 @@ CREATE TABLE IF NOT EXISTS inbox_files (
   PRIMARY KEY (path, sha)
 );
 
+-- Congress trades (STOCK Act periodic transaction reports): each report read once, and its listed trades, never edited.
+CREATE TABLE IF NOT EXISTS congress_filings (
+  doc_id text PRIMARY KEY,
+  chamber text NOT NULL,
+  member text NOT NULL,
+  state_dst text,
+  filed date NOT NULL,
+  year int NOT NULL,
+  status text NOT NULL,
+  trades int NOT NULL DEFAULT 0,
+  read_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE OR REPLACE TRIGGER congress_filings_ro BEFORE UPDATE OR DELETE ON congress_filings FOR EACH ROW EXECUTE FUNCTION forbid_change();
+CREATE TABLE IF NOT EXISTS congress_trades (
+  doc_id text NOT NULL,
+  ord int NOT NULL,
+  chamber text NOT NULL,
+  member text NOT NULL,
+  state_dst text,
+  filed date NOT NULL,
+  owner text NOT NULL,
+  symbol text NOT NULL,
+  asset_type text NOT NULL,
+  tx text NOT NULL,
+  tx_date date NOT NULL,
+  notified date,
+  amount_low double precision,
+  amount_high double precision,
+  amount text NOT NULL,
+  PRIMARY KEY (doc_id, ord)
+);
+CREATE INDEX IF NOT EXISTS congress_trades_filed_idx ON congress_trades (filed);
+CREATE INDEX IF NOT EXISTS congress_trades_symbol_idx ON congress_trades (symbol);
+CREATE OR REPLACE TRIGGER congress_trades_ro BEFORE UPDATE OR DELETE ON congress_trades FOR EACH ROW EXECUTE FUNCTION forbid_change();
+
 -- Dashboard panels (market quotes, earnings calendar, contracts, breadth): cached fetches, refreshed hourly.
 CREATE TABLE IF NOT EXISTS dashboard_cache (
   key text PRIMARY KEY,

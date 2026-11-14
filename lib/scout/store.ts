@@ -652,3 +652,32 @@ export async function buzzInputs(): Promise<Array<{ symbol: string; perHour: num
   for (const [symbol, n] of news) if (!out.has(symbol) && n >= 3) out.set(symbol, { symbol, perHour: 0, history: [], trendingRank: null, news: n, newsAvg: avg.get(symbol) ?? null });
   return [...out.values()];
 }
+
+// ------------------------------------------------------------ Congress trades
+
+export interface CongressTradeRow { docId: string; ord: number; chamber: string; member: string; stateDst: string | null; filed: string; owner: string; symbol: string; assetType: string; tx: string; txDate: string; notified: string | null; amountLow: number | null; amountHigh: number | null; amount: string; year?: number }
+
+export async function congressSeen(): Promise<Set<string>> {
+  return new Set((await q(`SELECT doc_id FROM congress_filings`)).map((r) => String(r.doc_id)));
+}
+
+/** One report: its trades first, then the read record (so a crash between the two re-reads the report; trades are keyed and skipped). */
+export async function addCongressFiling(f: { docId: string; chamber: string; member: string; stateDst: string | null; filed: string; year: number; status: string }, trades: CongressTradeRow[]): Promise<void> {
+  for (const t of trades) {
+    await q(`INSERT INTO congress_trades (doc_id, ord, chamber, member, state_dst, filed, owner, symbol, asset_type, tx, tx_date, notified, amount_low, amount_high, amount) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) ON CONFLICT (doc_id, ord) DO NOTHING`,
+      [t.docId, t.ord, t.chamber, t.member, t.stateDst, t.filed, t.owner, t.symbol, t.assetType, t.tx, t.txDate, t.notified, t.amountLow, t.amountHigh, t.amount]);
+  }
+  await q(`INSERT INTO congress_filings (doc_id, chamber, member, state_dst, filed, year, status, trades) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (doc_id) DO NOTHING`, [f.docId, f.chamber, f.member, f.stateDst, f.filed, f.year, f.status, trades.length]);
+}
+
+export async function congressTradesSince(from: string): Promise<CongressTradeRow[]> {
+  return (await q(`SELECT t.*, f.year FROM congress_trades t LEFT JOIN congress_filings f USING (doc_id) WHERE t.filed >= $1 ORDER BY t.filed DESC, t.doc_id DESC, t.ord`, [from])).map((r) => ({
+    docId: r.doc_id, ord: Number(r.ord), chamber: r.chamber, member: r.member, stateDst: r.state_dst ?? null, filed: dstr(r.filed)!, owner: r.owner, symbol: r.symbol, assetType: r.asset_type, tx: r.tx,
+    txDate: dstr(r.tx_date)!, notified: dstr(r.notified), amountLow: num(r.amount_low), amountHigh: num(r.amount_high), amount: r.amount, year: r.year === null || r.year === undefined ? undefined : Number(r.year),
+  }));
+}
+
+export async function congressFilingsStatus(): Promise<{ read: number; withTrades: number; scanned: number; errors: number; latest: string | null }> {
+  const r = (await q(`SELECT count(*) AS read, count(*) FILTER (WHERE trades > 0) AS with_trades, count(*) FILTER (WHERE status LIKE 'scanned%') AS scanned, count(*) FILTER (WHERE status LIKE 'error%') AS errors, max(filed) AS latest FROM congress_filings`))[0] ?? {};
+  return { read: Number(r.read ?? 0), withTrades: Number(r.with_trades ?? 0), scanned: Number(r.scanned ?? 0), errors: Number(r.errors ?? 0), latest: dstr(r.latest) };
+}
