@@ -17,8 +17,8 @@ export const importItemSchema = z.object({
   tickers: z.array(z.string()).max(8).default([]),
   direction: z.enum(["long", "short"]).optional(),
   catalyst_date: z.string().optional(),
-  /** host / agent: the daily stream file; bot: a document from the GitHub inbox. */
-  source: z.enum(["host", "agent", "bot"]).catch("host"),
+  /** host / agent: the daily stream file; bot: a document from the GitHub inbox; you: text pasted into "I noticed something". */
+  source: z.enum(["host", "agent", "bot", "you"]).catch("host"),
   confirmed: z.string().optional(),
   stream_time: z.string().optional(),
   /** Optional extras from outside bots (see the Inbox tab's format). */
@@ -70,13 +70,13 @@ function validateItems(raw: unknown[]): { items: ImportItem[]; errors: string[] 
   return { items, errors };
 }
 
-export const importTerm = (it: ImportItem) => (it.source === "bot" ? `inbox: ${it.term}` : `stream ${it.source}: ${it.term}`).slice(0, 80);
+export const importTerm = (it: ImportItem) => (it.source === "you" ? it.term : it.source === "bot" ? `inbox: ${it.term}` : `stream ${it.source}: ${it.term}`).slice(0, 80);
 
 export function importObservation(it: ImportItem, label: string): string {
-  const who = it.source === "host" ? "the stream host's idea" : it.source === "bot" ? "an idea from Vadim's research bot" : "the file agent's own idea";
+  const who = it.source === "host" ? "the stream host's idea" : it.source === "bot" ? "an idea from Vadim's research bot" : it.source === "you" ? "an idea in text Vadim pasted in" : "the file agent's own idea";
   const bits = [
     it.observation,
-    it.source === "bot" ? `(From the inbox document "${label}"; ${who}` : `(From the ${label} daily stream file; ${who}`,
+    it.source === "bot" ? ` (From the inbox document "${label}"; ${who}` : it.source === "you" ? ` (From ${who}` : ` (From the ${label} daily stream file; ${who}`,
     it.direction ? `; proposed direction: ${it.direction}` : "",
     it.catalyst_date ? `; catalyst date: ${it.catalyst_date}` : "",
     it.confirmed ? `; facts confirmed: ${it.confirmed}` : "",

@@ -13,3 +13,14 @@ describe("daily file import", () => {
     expect(parseImport("nothing here").errors[0]).toMatch(/no JSON array/);
   });
 });
+
+describe("text pasted into I noticed something", () => {
+  it("ideas pulled from a paste keep their own term and score as Vadim's", async () => {
+    const { importItemSchema, importTerm, importObservation } = await import("@/lib/scout/importer");
+    const { playerOf } = await import("@/lib/scout/scoreboard");
+    const it = importItemSchema.parse({ observation: "Nicotine pouch site traffic doubled since spring", term: "nicotine pouch traffic", kind: "consumer", tickers: ["PM"], source: "you" });
+    expect(importTerm(it)).toBe("nicotine pouch traffic");
+    expect(playerOf("human", importTerm(it))).toBe("you");
+    expect(importObservation(it, "pasted 2026-11-14")).toBe("Nicotine pouch site traffic doubled since spring (From an idea in text Vadim pasted in.)");
+  });
+});
