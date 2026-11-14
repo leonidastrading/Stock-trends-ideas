@@ -75,6 +75,21 @@ regulator's move, an indictment, a recall, a pivot, a guidance cut. `lib/scout/s
   mainstream headlines, read at once despite the 3-day cooldown (once a day), labelled stage 2, 3…, and the desk sees
   the earlier stages and is asked who has to act next. Trades are logged as `story: <key> (stage N) → <ticker>`. A new
   stage restarts the reaction-gap clock, so the quiet test is measured from it, not from the first headline.
+- **Building stories.** Attention that grows every day is a signal before any institution acts (the NVDA affair
+  story dominated the news more each day before the resignation letter). A ticker's coverage is "building" when its
+  stories per day rose three weekdays in a row, or the latest weekday is up and at least 1.5× the days before, with at
+  least 4 that day (weekdays only, so a Monday after a quiet weekend is not a jump; today's partial count is
+  ignored). A known story (last 30 days) that is building is read again at once despite the cooldown, once a day,
+  logged as `story: <key> (building) → <ticker>`, and the desk is asked what the growing attention will force next.
+  The reaction-gap check counts a building story as loud even before it reaches twice its old pace.
+- **Public attention.** The desk names the company and up to three people at the centre of each story (stored with
+  the story's day in `story_events`). The scout then reads their daily Wikipedia page views against the 30 days
+  before the story was first seen, with the rising streak ("Jensen Huang: 90k views vs 9,000/day before, 10×, rising
+  3 days in a row"), and puts it in front of the desk on stage, building and follow-up reads and on the Stories page.
+  It is the free stand-in for social-media intensity until Reddit access is approved.
+- **Forced flows.** After good news the desk asks who is now forced to buy or sell: index funds on an inclusion,
+  short sellers on a squeeze, funds underweight a stock that just re-rated, analysts who must raise targets (the
+  2026 Moderna run after its melanoma readout and Nasdaq-100 inclusion is the shape).
 - The desk and the research step also ask whether the company is priced as one person's company, and name what else
   is moving the stock (an inflation print, an election, a sector sell-off, downgrades) so the result is not credited
   to the story alone.
@@ -266,6 +281,7 @@ lib/scout/scoring.ts   the report and the random-sector baseline — pure
 lib/scout/scoreboard.ts players, points, luck check, calibration — pure
 lib/scout/followup.ts  reaction gaps: stories still loud while the stock is quiet
 lib/scout/options.ts   implied vs realized volatility for the how-to-trade note
+lib/scout/attention.ts coverage trend (building) and Wikipedia attention for a story's people
 lib/scout/swing.ts   the post to the Swing ideas log
 lib/schema.ts        idempotent SQL with append-only triggers
 relay/               the EDGAR relay (deploy on Railway)

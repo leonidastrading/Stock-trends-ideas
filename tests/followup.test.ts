@@ -45,7 +45,7 @@ describe("reaction-gap follow-up", () => {
   });
 
   it("the follow-up prompt carries the gap and asks for the reaction trade", () => {
-    const p = buildFollowupPrompt([{ key: "UNH", ticker: "UNH", storyDate: "2026-11-04", ageDays: 3, recentPerDay: 37.5, baselinePerDay: 3, movePct: -2, spyMovePct: 0.5, excessPct: -2.5, loud: true, quiet: true, gap: true, why: "37.5 stories/day lately vs 3/day before (still loud); UNH -2% vs SPY +0.5%", headlines: [{ at: "2026-11-06T14:00:00Z", source: "reuters", headline: "Lawmakers target insurers' claim denials" }] }], "2026-11-07");
+    const p = buildFollowupPrompt([{ key: "UNH", ticker: "UNH", storyDate: "2026-11-04", ageDays: 3, recentPerDay: 37.5, baselinePerDay: 3, movePct: -2, spyMovePct: 0.5, excessPct: -2.5, building: false, loud: true, quiet: true, gap: true, why: "37.5 stories/day lately vs 3/day before (still loud); UNH -2% vs SPY +0.5%", headlines: [{ at: "2026-11-06T14:00:00Z", source: "reuters", headline: "Lawmakers target insurers' claim denials" }] }], "2026-11-07");
     expect(p).toMatch(/## UNH \(follow-up\) — UNH: first seen 2026-11-04 \(3 days ago\)/);
     expect(p).toMatch(/reaction trade/);
     expect(p).toMatch(/Lawmakers target/);

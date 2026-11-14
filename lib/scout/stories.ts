@@ -13,6 +13,7 @@ import { isMainstream } from "../sources/news";
 import type { Signal } from "../sources";
 import { dateStr, daysAgo } from "../sources/types";
 import { addDays, toEt } from "../time";
+import { type Attention, type CoverageTrend, coverageTrend, publicAttention } from "./attention";
 import { preferencesText } from "./preferences";
 import { researchCandidate, type ResearchDeps } from "./research";
 import { normalizeTicker } from "./tickers";
@@ -63,6 +64,9 @@ export interface Story {
   /** Set by runStories when the desk has read this story before: earlier days, and the stage number when an institution acted. */
   history?: Array<{ date: string; stage: number; summary: string }>;
   stage?: number;
+  /** Set by runStories: the ticker's coverage over the last days (building = growing every day), and public attention to the people named earlier. */
+  coverage?: CoverageTrend;
+  attention?: Attention[];
   /** Time of the newest headline in the story (ISO). */
   latest: string;
   /** Newest first; `at` is the headline's full ISO timestamp. */
@@ -78,11 +82,13 @@ export interface DetectOptions {
   maxStories?: number;
   /** Tickers with a story in the last 30 days: a new headline there with an institution acting needs only 2 mainstream headlines. */
   openTickers?: Set<string>;
+  /** Open-story tickers whose coverage is building: like a new stage, they need only 2 mainstream headlines. */
+  building?: Set<string>;
 }
 
 /** Pure: find the day's stories. Ticker stories need mainstream coverage and shock wording or a spike; macro stories are shock wording across many headlines with few tickers. */
 export function detectStories(items: NewsItem[], opts: DetectOptions = {}): Story[] {
-  const { dailyAvg = {}, minMainstream = 3, minStories = 6, spikeMultiple = 4, maxStories = 8, openTickers = new Set<string>() } = opts;
+  const { dailyAvg = {}, minMainstream = 3, minStories = 6, spikeMultiple = 4, maxStories = 8, openTickers = new Set<string>(), building = new Set<string>() } = opts;
   const byTicker = new Map<string, Story>();
   const macro = new Map<string, Story>();
   for (const n of items) {
@@ -125,7 +131,7 @@ export function detectStories(items: NewsItem[], opts: DetectOptions = {}): Stor
   for (const t of byTicker.values()) {
     const avg = dailyAvg[t.key];
     const spike = avg ? t.stories >= spikeMultiple * avg : false;
-    const newStage = openTickers.has(t.key) && t.escalationHits >= 1 && t.mainstream >= 2;
+    const newStage = openTickers.has(t.key) && (t.escalationHits >= 1 || building.has(t.key)) && t.mainstream >= 2;
     if (newStage || (t.mainstream >= minMainstream && (t.shockHits >= 2 || spike || t.stories >= minStories * 2))) out.push(t);
   }
   for (const m of macro.values()) {
@@ -147,10 +153,12 @@ export const STORY_SYSTEM_PROMPT = `You are the story desk of a paper-only "tren
 
 Predicting the event is not the job; asking a better second question is. Before naming trades, ask of each story:
 1. What does it reveal, not just what happened? The headline may be a crime, a resignation or a scandal; the signal may be what the reaction shows: how intensely the public, customers, employees or lawmakers feel, or what the timing implies (a CEO leaving a week before earnings).
-2. Whose incentives just changed? Politicians and regulators who now have a popular target, rivals who can take share, customers who can walk, boards and prosecutors with a reason to dig. Their responses (hearings, bills, investigations, policy reversals, boycotts) arrive over weeks and the market tends to price them late.
+2. Whose incentives just changed? Politicians and regulators who now have a popular target, rivals who can take share, customers who can walk, boards and prosecutors with a reason to dig. Their responses (hearings, bills, investigations, policy reversals, boycotts) arrive over weeks and the market tends to price them late. The same question cuts the other way after good news: who is now forced to buy or sell? Index funds on an index inclusion, short sellers on a squeeze, funds underweight a stock that just re-rated (a drug trial that worked), analysts who must raise targets. Forced flows can carry a move for weeks after the event itself.
 3. Is the market's reaction smaller than the story's intensity? A flat stock while coverage and anger keep growing is the gap to look for. A stock that already fell 15% on the day may have priced it.
 4. Is the company priced as one person's company? When the valuation rests on a founder-CEO, any threat to that person is a threat to the valuation, and the market tends to treat it as unlikely until it suddenly is not.
 5. What else is moving the stock right now (an inflation print, an election, a sector sell-off, downgrades)? Name it, so a result is not credited to the story alone, and compare against the stock's peers: a stock falling while its rivals rise is the story; everything falling together is the market.
+
+Attention that grows every day is a signal before any institution acts: a scandal that dominates the news and social media more each day forces a response sooner or later. When you are shown a story's coverage building day after day, or Wikipedia views of the people in it many times normal and rising, ask what that growing attention will force to happen next, and whether the stock has moved at all.
 
 Stories come in stages. The first headline is rarely the whole story: once an institution acts (a board hires outside investigators, a congressional committee asks for a briefing, a regulator or prosecutor opens a case, an executive resigns), the matter has to go somewhere, and every reporter starts digging. A board that hires a former prosecutor does not clear anyone in a week. When you are shown earlier stages of a story, treat the new one as a fresh catalyst on an old story: ask who has to act next (the board, Congress, export-control or other regulators, prosecutors, reporters), what that next step would do to the price, and whether the move so far has priced it. The cleanest entry is usually right after the first institution acts, before most of the move; by the late stages options are expensive.
 
@@ -161,12 +169,16 @@ Then the trades:
 - Private-company liquidity events (an IPO filing or pricing, a large funding round or tender offer, an acquisition): the listed winners are the companies that hold stakes, strategic investors and corporate venture arms, especially where the stake is a large share of the holder's market value. Name the holder, say roughly what the stake may be worth against its market cap if you know, and flag lock-ups and dilution as risks.
 - For each trade: how long the repricing should take, what would prove it wrong, and why the market may still be mispricing it after the first move (forced sellers, a slow-burning investigation, an index or fund flow, a second shoe to drop, a political process that has not started yet).
 
+For every story also give "company" (the main listed company's name as Wikipedia titles it; empty for a macro story) and "people" (at most three people at the centre of the story, full names as Wikipedia titles them; empty if none), so the scout can measure public attention.
+
 Rules: at most two trades per story, a credible reaction or second-order trade preferred over the obvious direct one. Skip stories that are noise, already fully priced, or have no listed exposure, and say why. Trades are tracked and scored as shares against SPY. Tickers must be listed on a US exchange: for a foreign company use its exchange-listed US ADR (TSM, ASML, SONY), never the home-exchange symbol, and not an OTC-only ADR such as BESIY, which cannot be priced or paper-traded. Be concrete and short.`;
 
 export const storyTriageSchema = z.object({
   stories: z.array(z.object({
     key: z.string().min(1),
     summary: z.string().min(1).max(400),
+    company: z.string().max(120).default(""),
+    people: z.array(z.string().max(80)).max(5).default([]),
     skip: z.boolean(),
     skip_reason: z.string().max(300),
     trades: z.array(z.object({
@@ -188,10 +200,12 @@ export const STORY_JSON_SCHEMA = {
     stories: {
       type: "array",
       items: {
-        type: "object", additionalProperties: false, required: ["key", "summary", "skip", "skip_reason", "trades"],
+        type: "object", additionalProperties: false, required: ["key", "summary", "company", "people", "skip", "skip_reason", "trades"],
         properties: {
           key: { type: "string", description: "the story key exactly as given" },
           summary: { type: "string", description: "what happened, one or two sentences" },
+          company: { type: "string", description: "the main listed company's name as Wikipedia titles it; empty for a macro story" },
+          people: { type: "array", items: { type: "string" }, description: "up to three people at the centre of the story, full names as Wikipedia titles them; empty if none" },
           skip: { type: "boolean" },
           skip_reason: { type: "string", description: "empty when not skipped" },
           trades: {
@@ -215,8 +229,10 @@ export function buildStoryPrompt(stories: Story[], date: string, preferences: st
   if (preferences) L.push(`\n${preferences}`);
   for (const s of stories) {
     L.push(`\n## ${s.key} — ${s.symbols.length ? s.symbols.join(", ") : "macro"}: ${s.stories} headlines, ${s.mainstream} mainstream, ${s.shockHits} with shock wording${s.escalation.length ? `, institutions acting: ${s.escalation.slice(0, 6).join(", ")}` : ""}`);
+    if (s.coverage) L.push(`${s.symbols[0] ?? s.key} ${s.coverage.line}.${s.coverage.building ? " What will this growing attention force to happen next?" : ""}`);
+    for (const x of s.attention ?? []) L.push(`Public attention: ${x.line}.`);
     if (s.history?.length) {
-      L.push(s.stage ? `Stage ${s.stage} of a story first seen ${s.history[0].date}: an institution has acted. Who has to act next?` : `Seen before (first ${s.history[0].date}); no institution acting in today's headlines.`);
+      L.push(s.stage ? `Stage ${s.stage} of a story first seen ${s.history[0].date}: an institution has acted. Who has to act next?` : s.coverage?.building ? `Building story, first seen ${s.history[0].date}: no institution acting yet, but the coverage keeps growing.` : `Seen before (first ${s.history[0].date}); no institution acting in today's headlines.`);
       for (const e of s.history) L.push(`  earlier, ${e.date} (stage ${e.stage}): ${e.summary}`);
     }
     for (const h of s.headlines) L.push(`- ${h.at.slice(11, 16)}Z [${h.source}${h.symbols.length ? ` · ${h.symbols.join(",")}` : ""}] ${h.headline}`);
@@ -258,8 +274,8 @@ export const storyTerm = (key: string, ticker: string) => `story: ${key} → ${t
 export interface StoriesReport {
   date: string;
   headlinesRead: number;
-  detected: Array<{ key: string; symbols: string[]; stories: number; mainstream: number; shockHits: number; stage: number | null; escalation: string[]; latest: string; sample: string[]; samples: Array<{ at: string; headline: string }> }>;
-  triage: Array<{ key: string; summary: string; skipped: string | null; trades: Array<{ ticker: string; direction: string; role: string; horizon_days: number }> }>;
+  detected: Array<{ key: string; symbols: string[]; stories: number; mainstream: number; shockHits: number; stage: number | null; escalation: string[]; building: boolean; coverage: string | null; latest: string; sample: string[]; samples: Array<{ at: string; headline: string }> }>;
+  triage: Array<{ key: string; summary: string; skipped: string | null; trades: Array<{ ticker: string; direction: string; role: string; horizon_days: number }>; attention?: string[] }>;
   researched: Array<{ term: string; outcome: string; reason?: string; cardId?: number }>;
   error: string | null;
 }
@@ -288,16 +304,23 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
   const dailyAvg = await store.tickerDailyAverages(addDays(et.date, -30), et.date);
   const events = await store.storyEventsSince(addDays(et.date, -30));
   const openTickers = new Set(events.filter((e) => !e.key.startsWith("macro:")).map((e) => e.key));
-  const stories = detectStories(items, { dailyAvg, openTickers });
+  const recentCounts = await store.tickerCounts([...openTickers], addDays(et.date, -6), et.date);
+  const building = new Set([...openTickers].filter((t) => coverageTrend(recentCounts.filter((c) => c.symbol === t), et.date).building));
+  const stories = detectStories(items, { dailyAvg, openTickers, building });
   const readToday = new Set(events.filter((e) => e.etDate === et.date).map((e) => e.key));
-  for (const s of stories) attachHistory(s, events, et.date);
-  report.detected = stories.map((s) => ({ key: s.key, symbols: s.symbols, stories: s.stories, mainstream: s.mainstream, shockHits: s.shockHits, stage: s.stage ?? null, escalation: s.escalation.slice(0, 6), latest: s.latest, sample: s.headlines.slice(0, 3).map((h) => h.headline), samples: s.headlines.slice(0, 3).map((h) => ({ at: h.at, headline: h.headline })) }));
+  const storyCounts = await store.tickerCounts(stories.filter((s) => !s.key.startsWith("macro:")).map((s) => s.key), addDays(et.date, -6), et.date);
+  for (const s of stories) {
+    attachHistory(s, events, et.date);
+    if (!s.key.startsWith("macro:")) s.coverage = coverageTrend(storyCounts.filter((c) => c.symbol === s.key), et.date);
+  }
+  report.detected = stories.map((s) => ({ key: s.key, symbols: s.symbols, stories: s.stories, mainstream: s.mainstream, shockHits: s.shockHits, stage: s.stage ?? null, escalation: s.escalation.slice(0, 6), building: !!s.coverage?.building, coverage: s.coverage?.line ?? null, latest: s.latest, sample: s.headlines.slice(0, 3).map((h) => h.headline), samples: s.headlines.slice(0, 3).map((h) => ({ at: h.at, headline: h.headline })) }));
   await store.saveTickerCounts(et.date, items);
   if (!stories.length) return report;
 
   const recent = await store.recentTerms(STORY_COOLDOWN_DAYS);
-  // A new stage (an institution acted) skips the 3-day cooldown, once a day per story.
-  const fresh = stories.filter((s) => (s.stage ? !readToday.has(s.key) : ![...recent].some((t) => t.startsWith(`story: ${s.key.toLowerCase()} `))));
+  // A new stage (an institution acted) or a building story (coverage growing every day) skips the 3-day cooldown, once a day per story.
+  const again = (s: Story) => !!s.stage || (!!s.history?.length && !!s.coverage?.building);
+  const fresh = stories.filter((s) => (again(s) ? !readToday.has(s.key) : ![...recent].some((t) => t.startsWith(`story: ${s.key.toLowerCase()} `))));
   if (!fresh.length) {
     report.error = `all ${stories.length} stories were researched in the last ${STORY_COOLDOWN_DAYS} days`;
     return report;
@@ -310,8 +333,13 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
 
   let triage: StoryTriage | null = null;
   const preferences = preferencesText(await store.recentFeedback());
-  fresh.sort((a, b) => Number(!!b.stage) - Number(!!a.stage)); // new stages of known stories first
-  const prompt = buildStoryPrompt(fresh.slice(0, max), et.date, preferences);
+  fresh.sort((a, b) => Number(!!b.stage) * 2 + Number(again(b)) - (Number(!!a.stage) * 2 + Number(again(a)))); // new stages, then building stories, first
+  const chosen = fresh.slice(0, max);
+  for (const s of chosen) {
+    const ev = s.history?.length ? events.filter((e) => e.key === s.key && (e.people.length || e.company)).at(-1) : undefined;
+    if (ev) s.attention = await publicAttention([...ev.people, ...(ev.company ? [ev.company] : [])], s.history![0].date, et.date, deps.fetchImpl);
+  }
+  const prompt = buildStoryPrompt(chosen, et.date, preferences);
   let lastError = "";
   for (let attempt = 0; attempt < 2 && !triage; attempt++) {
     try {
@@ -333,16 +361,20 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
   for (const t of triage.stories) {
     const story = fresh.find((s) => s.key === t.key);
     if (!story) continue;
-    const stageNo = story.stage ?? (story.history?.length ? new Set(story.history.map((e) => e.date)).size + 1 : 1);
-    await store.addStoryEvent({ etDate: et.date, key: story.key, symbols: story.symbols, stage: stageNo, summary: t.summary, escalation: story.escalation.slice(0, 10) }).catch(() => undefined);
-    const termKey = story.stage ? `${story.key} (stage ${story.stage})` : story.key;
-    report.triage.push({ key: t.key, summary: t.summary, skipped: t.skip ? t.skip_reason || "skipped" : null, trades: t.trades.map((x) => ({ ticker: x.ticker, direction: x.direction, role: x.role, horizon_days: x.horizon_days })) });
+    const stageNo = story.stage ?? (story.history?.length ? Math.max(...story.history.map((e) => e.stage)) : 1);
+    await store.addStoryEvent({ etDate: et.date, key: story.key, symbols: story.symbols, stage: stageNo, summary: t.summary, escalation: story.escalation.slice(0, 10), company: t.company || null, people: t.people.slice(0, 3) }).catch(() => undefined);
+    const termKey = story.stage ? `${story.key} (stage ${story.stage})` : story.history?.length && story.coverage?.building ? `${story.key} (building)` : story.key;
+    // Public attention for a story seen for the first time, now that the desk has named its people (shown on the Stories page).
+    if (!story.attention && (t.people.length || t.company)) story.attention = await publicAttention([...t.people, ...(t.company ? [t.company] : [])], story.history?.[0]?.date ?? et.date, et.date, deps.fetchImpl);
+    report.triage.push({ key: t.key, summary: t.summary, skipped: t.skip ? t.skip_reason || "skipped" : null, trades: t.trades.map((x) => ({ ticker: x.ticker, direction: x.direction, role: x.role, horizon_days: x.horizon_days })), attention: (story.attention ?? []).map((x) => x.line) });
     if (t.skip) {
       await store.addCandidate({ versionId: (await store.listVersions()).at(-1)?.id ?? 1, origin: "scout", term: `story: ${termKey}`, kindHint: "event", tickersHint: story.symbols, observation: null, trigger: storyTrigger(story, et.date), outcome: "rejected", reason: `story desk skipped: ${t.skip_reason}`, cardId: null }).catch(() => undefined);
       continue;
     }
     for (const trade of t.trades.slice(0, 2)) {
-      const stages = story.history?.length ? `\nEarlier stages:\n${story.history.map((e) => `- ${e.date} (stage ${e.stage}): ${e.summary}`).join("\n")}${story.stage ? `\nToday is stage ${story.stage}: ${story.escalation.slice(0, 6).join(", ")}.` : ""}` : "";
+      const stages = (story.history?.length ? `\nEarlier stages:\n${story.history.map((e) => `- ${e.date} (stage ${e.stage}): ${e.summary}`).join("\n")}${story.stage ? `\nToday is stage ${story.stage}: ${story.escalation.slice(0, 6).join(", ")}.` : ""}` : "")
+        + (story.coverage ? `\n${story.symbols[0] ?? story.key} ${story.coverage.line}.` : "")
+        + (story.attention ?? []).map((x) => `\nPublic attention: ${x.line}.`).join("");
       const context = `Story: ${t.summary}${stages}\nProposed trade (${trade.role}): ${trade.direction} ${trade.ticker}, horizon ${trade.horizon_days} days.\nThesis: ${trade.thesis}\nWhy the market may still misprice it: ${trade.why_not_priced}\nInvalidation: ${trade.invalidation}\nHeadlines:\n${story.headlines.map((h) => `- [${h.source}] ${h.headline}`).join("\n")}`;
       const r = await researchCandidate({ origin: "scout", term: storyTerm(termKey, trade.ticker), kindHint: "event", tickersHint: [trade.ticker], observation: null, trigger: storyTrigger(story, et.date, trade.role), context }, deps);
       report.researched.push(r.outcome === "card" ? { term: storyTerm(termKey, trade.ticker), outcome: `card: ${r.card.status}`, cardId: r.card.id } : { term: storyTerm(termKey, trade.ticker), outcome: r.outcome, reason: r.reason });

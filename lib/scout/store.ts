@@ -424,9 +424,9 @@ export async function releaseEmail(key: string): Promise<void> {
 
 // ------------------------------------------------------------ story timeline
 
-export interface StoryEvent { id: number; createdAt: string; etDate: string; key: string; symbols: string[]; stage: number; summary: string; escalation: string[] }
+export interface StoryEvent { id: number; createdAt: string; etDate: string; key: string; symbols: string[]; stage: number; summary: string; escalation: string[]; company: string | null; people: string[] }
 
-const toStoryEvent = (r: Row): StoryEvent => ({ id: Number(r.id), createdAt: iso(r.created_at)!, etDate: dstr(r.et_date)!, key: r.key, symbols: r.symbols ?? [], stage: Number(r.stage), summary: r.summary, escalation: r.escalation ?? [] });
+const toStoryEvent = (r: Row): StoryEvent => ({ id: Number(r.id), createdAt: iso(r.created_at)!, etDate: dstr(r.et_date)!, key: r.key, symbols: r.symbols ?? [], stage: Number(r.stage), summary: r.summary, escalation: r.escalation ?? [], company: r.company ?? null, people: r.people ?? [] });
 
 /** Story stages read since `from` (ET date), oldest first. */
 export async function storyEventsSince(from: string): Promise<StoryEvent[]> {
@@ -434,6 +434,6 @@ export async function storyEventsSince(from: string): Promise<StoryEvent[]> {
 }
 
 /** Record that the desk read a story today; once per key per day (later reads the same day are ignored). */
-export async function addStoryEvent(e: { etDate: string; key: string; symbols: string[]; stage: number; summary: string; escalation: string[] }): Promise<void> {
-  await q(`INSERT INTO story_events (et_date, key, symbols, stage, summary, escalation) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (key, et_date) DO NOTHING`, [e.etDate, e.key, e.symbols, e.stage, e.summary, e.escalation]);
+export async function addStoryEvent(e: { etDate: string; key: string; symbols: string[]; stage: number; summary: string; escalation: string[]; company?: string | null; people?: string[] }): Promise<void> {
+  await q(`INSERT INTO story_events (et_date, key, symbols, stage, summary, escalation, company, people) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (key, et_date) DO NOTHING`, [e.etDate, e.key, e.symbols, e.stage, e.summary, e.escalation, e.company ?? null, e.people ?? []]);
 }

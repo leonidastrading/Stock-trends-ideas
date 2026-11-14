@@ -127,6 +127,31 @@ describe("story desk end to end", () => {
     expect(same.researched).toEqual([]); // stage read once a day
     expect(prompts.filter((p) => p.startsWith("stories:"))).toHaveLength(1);
   });
+
+  it("coverage growing every weekday makes a known story 'building': read again with no institution acting, with public attention", async () => {
+    for (const [date, n] of [["2026-11-10", 1], ["2026-11-11", 2], ["2026-11-12", 3], ["2026-11-16", 9]] as const) await query(`INSERT INTO ticker_news_daily (date, symbol, stories, mainstream) VALUES ($1, 'UNH', $2, 1) ON CONFLICT DO NOTHING`, [date, n]);
+    const quiet = [n("Readers share UnitedHealth claim stories by the thousands", ["UNH"]), n("UnitedHealth anger spreads online", ["UNH"])];
+    const prompts: string[] = [];
+    const wiki = (async (url: string) => {
+      if (url.includes("list=search")) return new Response(JSON.stringify({ query: { search: [{ title: "UnitedHealth Group" }] } }));
+      return new Response(JSON.stringify({ items: [{ timestamp: "2026101500", views: 3000 }, { timestamp: "2026101600", views: 3000 }, { timestamp: "2026101700", views: 3000 }, { timestamp: "2026101800", views: 3000 }, { timestamp: "2026101900", views: 3000 }, { timestamp: "2026102000", views: 3000 }, { timestamp: "2026102100", views: 3000 }, { timestamp: "2026111600", views: 30000 }] }));
+    }) as unknown as typeof fetch;
+    const data: MarketData = { getNews: async (symbols) => (symbols.length ? [] : quiet), getDailyBars: async () => [], getCalendar: async () => [] };
+    const callModel: CallModel = async ({ purpose, user }) => {
+      prompts.push(`${purpose}: ${user}`);
+      if (purpose === "stories") return { text: JSON.stringify({ stories: [{ key: "UNH", summary: "Public anger at insurers keeps growing", company: "UnitedHealth Group", people: [], skip: false, skip_reason: "", trades: [{ ticker: "UNH", direction: "short", role: "reaction", horizon_days: 30, thesis: "anger forces a political response", why_not_priced: "no bill yet", invalidation: "coverage fades" }] }] }), stopReason: "end_turn", modelServed: "m", usage: { input_tokens: 10, output_tokens: 10 }, costUsd: 0.01 };
+      const t = sampleCard().tickers[0];
+      return { text: JSON.stringify(sampleCard({ kind: "event", direction: "short", tickers: [{ ...t, symbol: "UNH", sector: "health_care" }] })), stopReason: "end_turn", modelServed: "m", usage: { input_tokens: 10, output_tokens: 10 }, costUsd: 0.02 };
+    };
+    const r = await runStories({ data, sources: [], callModel, now: new Date("2026-11-17T15:00:00Z"), env: {} as NodeJS.ProcessEnv, fetchImpl: wiki });
+    expect(r.detected).toEqual([expect.objectContaining({ key: "UNH", stage: null, building: true })]);
+    expect(prompts[0]).toMatch(/UNH coverage 2 → 3 → 4 → 9 stories\/day over the last 4 weekdays \(up 4 days in a row: building\)\. What will this growing attention force/);
+    expect(prompts[0]).toMatch(/Building story, first seen 2026-11-13/);
+    expect(r.researched).toEqual([expect.objectContaining({ term: "story: UNH (building) → UNH" })]);
+    expect(r.triage[0].attention).toEqual([expect.stringMatching(/^Wikipedia "UnitedHealth Group": 30k views on 2026-11-16 vs 3,000\/day .*\(10\.0x\)/)]);
+    const ev = (await store.storyEventsSince("2026-11-17"))[0];
+    expect(ev).toMatchObject({ key: "UNH", stage: 2, company: "UnitedHealth Group" });
+  });
 });
 
 describe("private-company liquidity events", () => {

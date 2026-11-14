@@ -6,7 +6,7 @@
  *
  * Each day this pass looks again at stories the desk saw 1-10 days ago. A
  * ticker is a gap when its coverage is still loud (recent stories per day well
- * above its pre-story pace) while the stock has moved less than 5% against SPY
+ * above its pre-story pace) or still growing day after day, while the stock has moved less than 5% against SPY
  * since the close before the story. Gaps go back to the story desk with the
  * three questions, framed as a follow-up; its trades are researched and gated
  * like any other card, under the term "story: <key> (follow-up) → <ticker>",
@@ -18,6 +18,7 @@
 import type { DailyBar } from "../alpaca";
 import type { Signal } from "../sources";
 import { addDays, daysBetween, toEt } from "../time";
+import { type Attention, coverageTrend, publicAttention } from "./attention";
 import { preferencesText } from "./preferences";
 import { researchCandidate, type ResearchDeps } from "./research";
 import { parseStoryTriage, type StoryTriage } from "./stories";
@@ -60,7 +61,7 @@ export function storiesSeen(cands: Array<{ term: string; createdAt: string; tick
       continue;
     }
     const staged = / \(stage \d+\)$/.test(m[1]);
-    const key = m[1].replace(/ \(stage \d+\)$/, "");
+    const key = m[1].replace(/ \((?:stage \d+|building)\)$/, "");
     const s = by.get(key) ?? { key, date, tickers: [] };
     // The clock starts at the first read and moves only when a new stage arrives.
     if (staged ? date > s.date : date < s.date && !stagedKeys.has(key)) s.date = date;
@@ -79,6 +80,8 @@ export interface Gap {
   /** Stories per day over the latest two days with counts after the story day. */
   recentPerDay: number | null; baselinePerDay: number | null;
   movePct: number | null; spyMovePct: number | null; excessPct: number | null;
+  /** Coverage up three days running (or jumped): the story is still growing. */
+  building: boolean;
   loud: boolean; quiet: boolean; gap: boolean; why: string;
 }
 
@@ -104,23 +107,26 @@ export function assessGap(i: {
   const spy = move(i.spyBars);
   const excess = m !== null && spy !== null ? m - spy : null;
   const quiet = excess !== null && Math.abs(excess) < FOLLOWUP.maxExcessMovePct;
+  const trend = coverageTrend(i.counts, i.today);
   const why = [
-    recent === null ? "no coverage counted since the story" : `${r1(recent)} stories/day lately vs ${i.baselinePerDay === null ? "no pre-story base" : `${r1(i.baselinePerDay)}/day before`} (${loud ? "still loud" : "faded"})`,
+    recent === null ? "no coverage counted since the story" : `${r1(recent)} stories/day lately vs ${i.baselinePerDay === null ? "no pre-story base" : `${r1(i.baselinePerDay)}/day before`} (${loud ? "still loud" : trend.building ? "growing" : "faded"})`,
+    ...(trend.building ? [trend.line] : []),
     excess === null ? "no price since the story" : `${i.ticker} ${m! >= 0 ? "+" : ""}${r1(m!)}% vs SPY ${spy! >= 0 ? "+" : ""}${r1(spy!)}% since the close before the story (${quiet ? "quiet" : "already moved"})`,
   ].join("; ");
   return {
     key: i.key, ticker: i.ticker, storyDate: i.storyDate, ageDays: daysBetween(i.storyDate, i.today),
     recentPerDay: recent === null ? null : r1(recent), baselinePerDay: i.baselinePerDay === null ? null : r1(i.baselinePerDay),
     movePct: m === null ? null : r1(m), spyMovePct: spy === null ? null : r1(spy), excessPct: excess === null ? null : r1(excess),
-    loud, quiet, gap: loud && quiet, why,
+    building: trend.building, loud, quiet, gap: (loud || trend.building) && quiet, why,
   };
 }
 
-export function buildFollowupPrompt(gaps: Array<Gap & { headlines: Array<{ at: string; source: string; headline: string }> }>, date: string, preferences: string | null = null): string {
+export function buildFollowupPrompt(gaps: Array<Gap & { headlines: Array<{ at: string; source: string; headline: string }>; attention?: Attention[] }>, date: string, preferences: string | null = null): string {
   const L = [`Date: ${date}. Follow-up on ${gaps.length} stories the desk first saw days ago. Each stock has barely moved against SPY while the coverage stayed loud: the market's reaction may be smaller than the story's intensity. Ask the three questions; the reaction trade is the one to look for. Skip it if the story has simply run its course.`];
   if (preferences) L.push(`\n${preferences}`);
   for (const g of gaps) {
     L.push(`\n## ${followupKey(g.key)} — ${g.ticker}: first seen ${g.storyDate} (${g.ageDays} days ago). ${g.why}.`);
+    for (const x of g.attention ?? []) L.push(`Public attention: ${x.line}.`);
     for (const h of g.headlines) L.push(`- ${h.at.slice(0, 10)} [${h.source}] ${h.headline}`);
   }
   L.push("\nReply with the JSON object, one entry per story key exactly as given (including \"(follow-up)\").");
@@ -171,10 +177,13 @@ export async function runFollowups(deps: ResearchDeps): Promise<FollowupReport> 
   const spend = await store.spendOn(et.date);
   if (spend.cost >= settings.dailyCapUsd) return { ...report, error: `daily LLM cap reached ($${spend.cost.toFixed(2)} of $${settings.dailyCapUsd})` };
 
+  const events = await store.storyEventsSince(addDays(et.date, -40));
   const withNews = [];
   for (const g of gaps) {
     const news = await deps.data.getNews([g.ticker], new Date(`${g.storyDate}T00:00:00Z`), deps.now, 40).catch(() => []);
-    withNews.push({ ...g, headlines: news.sort((a, b) => b.ts.localeCompare(a.ts)).slice(0, 12).map((n) => ({ at: n.ts, source: n.source, headline: n.headline })) });
+    const ev = events.filter((e) => e.key === g.key && (e.people.length || e.company)).at(-1);
+    const attention = ev ? await publicAttention([...ev.people, ...(ev.company ? [ev.company] : [])], g.storyDate, et.date, deps.fetchImpl) : [];
+    withNews.push({ ...g, attention, headlines: news.sort((a, b) => b.ts.localeCompare(a.ts)).slice(0, 12).map((n) => ({ at: n.ts, source: n.source, headline: n.headline })) });
   }
   const prompt = buildFollowupPrompt(withNews, et.date, preferencesText(await store.recentFeedback()));
   let triage: StoryTriage | null = null;
@@ -203,7 +212,7 @@ export async function runFollowups(deps: ResearchDeps): Promise<FollowupReport> 
     }
     for (const trade of t.trades.slice(0, 2)) {
       const term = `story: ${fk} → ${trade.ticker}`;
-      const context = `Follow-up on a story first seen ${g.storyDate} (${g.ageDays} days ago): ${t.summary}\nReaction gap: ${g.why}.\nProposed trade (${trade.role}): ${trade.direction} ${trade.ticker}, horizon ${trade.horizon_days} days.\nThesis: ${trade.thesis}\nWhy the market may still misprice it: ${trade.why_not_priced}\nInvalidation: ${trade.invalidation}\nHeadlines since the story:\n${g.headlines.map((h) => `- ${h.at.slice(0, 10)} [${h.source}] ${h.headline}`).join("\n")}`;
+      const context = `Follow-up on a story first seen ${g.storyDate} (${g.ageDays} days ago): ${t.summary}\nReaction gap: ${g.why}.${g.attention.map((x) => `\nPublic attention: ${x.line}.`).join("")}\nProposed trade (${trade.role}): ${trade.direction} ${trade.ticker}, horizon ${trade.horizon_days} days.\nThesis: ${trade.thesis}\nWhy the market may still misprice it: ${trade.why_not_priced}\nInvalidation: ${trade.invalidation}\nHeadlines since the story:\n${g.headlines.map((h) => `- ${h.at.slice(0, 10)} [${h.source}] ${h.headline}`).join("\n")}`;
       const r = await researchCandidate({ origin: "scout", term, kindHint: "event", tickersHint: [trade.ticker], observation: null, trigger: gapTrigger(g, et.date), context }, deps);
       report.researched.push(r.outcome === "card" ? { term, outcome: `card: ${r.card.status}`, cardId: r.card.id } : { term, outcome: r.outcome, reason: r.reason });
       if (r.outcome === "capped") return { ...report, error: r.reason };

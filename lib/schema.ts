@@ -187,6 +187,9 @@ CREATE TABLE IF NOT EXISTS story_events (
   UNIQUE (key, et_date)
 );
 CREATE OR REPLACE TRIGGER story_events_ro BEFORE UPDATE OR DELETE ON story_events FOR EACH ROW EXECUTE FUNCTION forbid_change();
+-- The company and the people at the centre of the story, as the desk named them (for Wikipedia attention).
+ALTER TABLE story_events ADD COLUMN IF NOT EXISTS company text;
+ALTER TABLE story_events ADD COLUMN IF NOT EXISTS people text[] NOT NULL DEFAULT '{}';
 
 -- Phone pushes already sent, so each card, review or failure is pushed once.
 CREATE TABLE IF NOT EXISTS notifications (
