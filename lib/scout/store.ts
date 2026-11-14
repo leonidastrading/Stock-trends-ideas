@@ -536,3 +536,63 @@ export async function newsDays(from: string, to: string): Promise<{ bySymbol: Ma
   }
   return { bySymbol, recorded };
 }
+
+// ------------------------------------------------------------ SEC filings
+
+export async function secIndexLoaded(dates: string[]): Promise<Set<string>> {
+  if (!dates.length) return new Set();
+  return new Set((await q(`SELECT date FROM sec_index_days WHERE date = ANY($1::date[])`, [dates])).map((r) => dstr(r.date)!));
+}
+
+export async function addSecIndex(date: string, entries: Array<{ accession: string; form: string; cik: string; company: string; filed: string; path: string }>): Promise<void> {
+  for (let i = 0; i < entries.length; i += 500) {
+    const c = entries.slice(i, i + 500);
+    await q(
+      `INSERT INTO sec_queue (accession, form, cik, company, filed, path) SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::date[], $6::text[]) ON CONFLICT (accession) DO NOTHING`,
+      [c.map((e) => e.accession), c.map((e) => e.form), c.map((e) => e.cik), c.map((e) => e.company), c.map((e) => e.filed), c.map((e) => e.path)],
+    );
+  }
+  await q(`INSERT INTO sec_index_days (date, entries) VALUES ($1, $2) ON CONFLICT (date) DO NOTHING`, [date, entries.length]);
+}
+
+export interface QueuedFiling { accession: string; form: string; cik: string; company: string; filed: string; path: string }
+
+/** Filings still to look at: 13Ds first, then 8-Ks, then Form 4s; newest first. */
+export async function secQueue(limit: number): Promise<QueuedFiling[]> {
+  return (await q(`SELECT accession, form, cik, company, filed, path FROM sec_queue WHERE status = 'new' ORDER BY CASE WHEN form LIKE '%13D%' THEN 0 WHEN form = '8-K' THEN 1 ELSE 2 END, filed DESC LIMIT $1`, [limit]))
+    .map((r) => ({ accession: r.accession, form: r.form, cik: r.cik, company: r.company, filed: dstr(r.filed)!, path: r.path }));
+}
+
+export async function secDone(accession: string, status: "done" | "error", note: string | null = null): Promise<void> {
+  await q(`UPDATE sec_queue SET status = $2, note = $3, processed_at = now() WHERE accession = $1`, [accession, status, note]);
+}
+
+export async function secQueueStatus(): Promise<{ pending: number; done: number; errors: number; days: string[] }> {
+  const r = (await q(`SELECT count(*) FILTER (WHERE status = 'new') AS pending, count(*) FILTER (WHERE status = 'done') AS done, count(*) FILTER (WHERE status = 'error') AS errors FROM sec_queue`))[0] ?? {};
+  const days = (await q(`SELECT date FROM sec_index_days ORDER BY date DESC LIMIT 10`)).map((x) => dstr(x.date)!);
+  return { pending: Number(r.pending ?? 0), done: Number(r.done ?? 0), errors: Number(r.errors ?? 0), days };
+}
+
+export interface InsiderBuyRow { accession: string; filed: string; issuerCik: string | null; symbol: string | null; issuerName: string | null; owner: string | null; ownerCik: string | null; role: string | null; txDate: string | null; shares: number | null; price: number | null; value: number | null; ownedAfter: number | null; pctIncrease: number | null; plan10b5: boolean | null; routine: boolean | null }
+
+export async function addInsiderBuy(b: InsiderBuyRow): Promise<void> {
+  await q(`INSERT INTO insider_buys (accession, filed, issuer_cik, symbol, issuer_name, owner, owner_cik, role, tx_date, shares, price, value, owned_after, pct_increase, plan10b5, routine) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT (accession) DO NOTHING`,
+    [b.accession, b.filed, b.issuerCik, b.symbol, b.issuerName, b.owner, b.ownerCik, b.role, b.txDate, b.shares, b.price, b.value, b.ownedAfter, b.pctIncrease, b.plan10b5, b.routine]);
+}
+
+export async function insiderBuysSince(from: string): Promise<InsiderBuyRow[]> {
+  return (await q(`SELECT * FROM insider_buys WHERE filed >= $1 ORDER BY filed DESC, value DESC`, [from])).map((r) => ({
+    accession: r.accession, filed: dstr(r.filed)!, issuerCik: r.issuer_cik, symbol: r.symbol, issuerName: r.issuer_name, owner: r.owner, ownerCik: r.owner_cik, role: r.role, txDate: dstr(r.tx_date),
+    shares: num(r.shares), price: num(r.price), value: num(r.value), ownedAfter: num(r.owned_after), pctIncrease: num(r.pct_increase), plan10b5: r.plan10b5 ?? null, routine: r.routine ?? null,
+  }));
+}
+
+export interface FilingAlert { accession: string; kind: "8-K" | "13D"; filed: string; cik: string | null; symbol: string | null; company: string | null; items: string[]; filer: string | null }
+
+export async function addFilingAlert(a: FilingAlert): Promise<void> {
+  await q(`INSERT INTO filing_alerts (accession, kind, filed, cik, symbol, company, items, filer) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (accession) DO NOTHING`, [a.accession, a.kind, a.filed, a.cik, a.symbol, a.company, a.items, a.filer]);
+}
+
+export async function filingAlertsSince(from: string): Promise<FilingAlert[]> {
+  return (await q(`SELECT * FROM filing_alerts WHERE filed >= $1 ORDER BY filed DESC`, [from])).map((r) => ({ accession: r.accession, kind: r.kind, filed: dstr(r.filed)!, cik: r.cik, symbol: r.symbol, company: r.company, items: r.items ?? [], filer: r.filer }));
+}

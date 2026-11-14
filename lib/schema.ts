@@ -242,6 +242,61 @@ CREATE TABLE IF NOT EXISTS symbol_info (
   checked_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- SEC filings: which daily indexes were read, and the queue of filings still to look at (processing state).
+CREATE TABLE IF NOT EXISTS sec_index_days (
+  date date PRIMARY KEY,
+  entries int NOT NULL,
+  fetched_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS sec_queue (
+  accession text PRIMARY KEY,
+  form text NOT NULL,
+  cik text NOT NULL,
+  company text NOT NULL,
+  filed date NOT NULL,
+  path text NOT NULL,
+  status text NOT NULL DEFAULT 'new',
+  note text,
+  processed_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS sec_queue_status ON sec_queue (status, filed);
+
+-- Insider open-market purchases (Form 4 code P), written once.
+CREATE TABLE IF NOT EXISTS insider_buys (
+  accession text PRIMARY KEY,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  filed date NOT NULL,
+  issuer_cik text,
+  symbol text,
+  issuer_name text,
+  owner text,
+  owner_cik text,
+  role text,
+  tx_date date,
+  shares double precision,
+  price double precision,
+  value double precision,
+  owned_after double precision,
+  pct_increase double precision,
+  plan10b5 boolean,
+  routine boolean
+);
+CREATE OR REPLACE TRIGGER insider_buys_ro BEFORE UPDATE OR DELETE ON insider_buys FOR EACH ROW EXECUTE FUNCTION forbid_change();
+
+-- New activist stakes (Schedule 13D) and 8-Ks with bad-news items, written once.
+CREATE TABLE IF NOT EXISTS filing_alerts (
+  accession text PRIMARY KEY,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  kind text NOT NULL,
+  filed date NOT NULL,
+  cik text,
+  symbol text,
+  company text,
+  items text[] NOT NULL DEFAULT '{}',
+  filer text
+);
+CREATE OR REPLACE TRIGGER filing_alerts_ro BEFORE UPDATE OR DELETE ON filing_alerts FOR EACH ROW EXECUTE FUNCTION forbid_change();
+
 -- Phone pushes already sent, so each card, review or failure is pushed once.
 CREATE TABLE IF NOT EXISTS notifications (
   key text PRIMARY KEY,

@@ -58,11 +58,15 @@ export async function runStoriesJob(deps = defaultDeps()) {
   const started = Date.now();
   try {
     const r = await runStories(deps);
+    // The filings desk: at most one new filing signal researched per call (three a day), if the story scan left time.
+    const filings = Date.now() - started < 120_000
+      ? await import("./filings").then(({ runFilingResearch }) => runFilingResearch(deps, 1)).catch((err) => ({ error: err instanceof Error ? err.message : String(err) }))
+      : "later: story scan ran long";
     const pushed = await pushNewCards(deps.env).catch((err) => `push failed: ${err instanceof Error ? err.message : String(err)}`);
     // Housekeeping rides on the hourly call, in whatever time is left in the function.
     const upkeep = await maintenance(started + 240_000, deps.now, deps.fetchImpl);
-    await store.finishRun(run, r.error && !r.researched.length ? "skipped" : "ok", { ...r, pushed, upkeep });
-    return { status: "ok" as const, ...r, pushed, upkeep };
+    await store.finishRun(run, r.error && !r.researched.length ? "skipped" : "ok", { ...r, filings, pushed, upkeep });
+    return { status: "ok" as const, ...r, filings, pushed, upkeep };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await store.finishRun(run, "error", null, message);
@@ -146,6 +150,18 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
   if (data && left() > 40_000) {
     out.chatterBars = await import("./chatter").then(({ ensureChatterBars }) => ensureChatterBars(data, now, CHATTER_EXPLORE_FROM)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
   } else out.chatterBars = "later: not enough time";
+  // SEC filings: read any new daily index into the queue, then work through the queue.
+  const ua = process.env.SEC_USER_AGENT?.trim();
+  if (!ua) out.filings = "skipped: SEC_USER_AGENT not set";
+  else if (left() > 30_000) {
+    try {
+      const { loadIndexes, processQueue } = await import("./filings");
+      const idx = await loadIndexes(now, ua, fetchImpl);
+      out.filings = { ...idx, ...(await processQueue(deadline - 25_000, ua, fetchImpl)) };
+    } catch (err) {
+      out.filings = `failed: ${err instanceof Error ? err.message : String(err)}`;
+    }
+  } else out.filings = "later: not enough time";
   if (left() > 20_000) {
     const { CHATTER_UNIVERSE } = await import("@/config/chatter");
     out.chatterSymbols = await refreshSymbolInfo(data, process.env, CHATTER_UNIVERSE.map((u) => u.symbol), now, 7 * 24, fetchImpl, deadline - 5_000).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);

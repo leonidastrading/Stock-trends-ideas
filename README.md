@@ -189,6 +189,16 @@ anything else happens. Cards, versions and track events are append-only, enforce
   Google's rising queries for anything worth adding to the watch-list.
 - **Watch-list**: term, kind, tickers, date, who added it; approve the scout's proposals, retire terms.
 - **Scoring**: per version (see below), with a CSV export of every card and track.
+- **Filings** (the playbook's best-documented signals): EDGAR's daily index is read the day after filing (www.sec.gov,
+  declared User-Agent, under 8 requests a second) into a queue of Form 4, 8-K and Schedule 13D filings, worked through
+  in time-limited slices on each hourly story call and after the close. Form 4 → open-market purchases (code P, not
+  under a 10b5-1 plan) of at least $25k, flagged **opportunistic** when the insider did not trade in the same calendar
+  month in each of the three previous years (Cohen, Malloy & Pomorski). 8-K → items 4.02 (non-reliance), 1.05 (cyber),
+  4.01 (auditor), 2.06 (impairment), 2.05 (restructuring), 5.02 (departures). 13D → the subject company and the filer.
+  Stored append-only (`insider_buys`, `filing_alerts`). At most one signal is researched per hourly call and three a
+  day, strongest first: restatements and cyber incidents (bad news drifts), new 13Ds, then insider buying by two or
+  more insiders or a large purchase against the insider's holding. Each is researched once per 30 days. The Filings
+  page lists the queue, signals, purchases, 13Ds and 8-Ks.
 - **Chatter test** (an experiment beside the scout; nothing in it becomes card evidence): does a spike in Stocktwits
   chatter while the price is still quiet predict the move? 198 stocks fixed in advance (the first 18 of each sector in
   the baseline universe). Each weekday every one is measured once from Stocktwits' public stream (messages per hour
@@ -319,6 +329,8 @@ lib/scout/options.ts   implied vs realized volatility for the how-to-trade note
 lib/scout/attention.ts coverage trend (building) and Wikipedia attention for a story's people
 lib/scout/chatter.ts   the chatter test: measurement, spikes, controls, outcomes
 lib/scout/staleness.ts how much today's headlines repeat a ticker's earlier stories
+lib/sources/filings.ts EDGAR daily index, Form 4, 8-K and 13D header parsers
+lib/scout/filings.ts   the filings desk: queue, signals, research
 config/chatter.ts      the chatter test's fixed 198 stocks and rules
 lib/scout/swing.ts   the post to the Swing ideas log
 lib/schema.ts        idempotent SQL with append-only triggers
