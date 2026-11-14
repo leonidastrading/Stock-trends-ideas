@@ -2,7 +2,7 @@ import SetupNotice from "@/components/SetupNotice";
 import { KIND_LABEL, SCOUT, type Kind } from "@/config/scout";
 import { UNIVERSE } from "@/config/universe";
 import { hasDatabase } from "@/lib/db";
-import { buildReport, ideaResult, type GroupStats, type IdeaResult } from "@/lib/scout/scoring";
+import { buildReport, groupStats, ideaResult, type GroupStats, type IdeaResult } from "@/lib/scout/scoring";
 import * as store from "@/lib/scout/store";
 import { groupBars } from "@/lib/scout/tracking";
 import { addDays, toEt } from "@/lib/time";
@@ -39,7 +39,8 @@ function StatsTable({ title, rows, note }: { title: string; rows: Array<[string,
 export default async function ScoringPage({ searchParams }: { searchParams: Promise<{ v?: string }> }) {
   if (!hasDatabase()) return <SetupNotice />;
   const sp = await searchParams;
-  const [versions, cards, tracks] = await Promise.all([store.listVersions(), store.allCards(), store.allTracks()]);
+  const [versions, cards, tracks, candidates] = await Promise.all([store.listVersions(), store.allCards(), store.allTracks(), store.candidatesSince(3650)]);
+  const termByCard = new Map(candidates.filter((c) => c.cardId).map((c) => [c.cardId!, c.term]));
   const vid = Number(sp.v) || versions[versions.length - 1]?.id || 0;
   const vCards = cards.filter((c) => c.versionId === vid);
   const byCard = new Map(vCards.map((c) => [c.id, c]));
@@ -73,7 +74,7 @@ export default async function ScoringPage({ searchParams }: { searchParams: Prom
         </div>
       </section>
 
-      <StatsTable title="By origin" rows={[["Scout-originated", report.byOrigin.scout], ["Human-originated", report.byOrigin.human], ["Human ideas Vadim tapped", report.byOrigin.human_tapped]]} note="Does the scout beat the market, do Vadim's own ideas, and does the research add anything to an idea he noticed himself?" />
+      <StatsTable title="By origin" rows={[["Scout-originated", report.byOrigin.scout], ["Human-originated", report.byOrigin.human], ["Human ideas Vadim tapped", report.byOrigin.human_tapped], ["Stream file: host's calls", groupStats(ideas.filter((i) => termByCard.get(i.cardId)?.startsWith("stream host:")))], ["Stream file: agent's own calls", groupStats(ideas.filter((i) => termByCard.get(i.cardId)?.startsWith("stream agent:")))]]} note="Does the scout beat the market, do Vadim's own ideas, and does the research add anything to an idea he noticed himself?" />
       <StatsTable title="By kind" rows={Object.entries(report.byKind).map(([k, s]) => [KIND_LABEL[k as Kind] ?? k, s])} />
       <StatsTable title="Promoted versus late" rows={[["Promoted", report.byStatus.promoted], ["Late (already obvious)", report.byStatus.late]]} note="If late ideas do as well as promoted ones, the lateness gate is not helping." />
       <StatsTable title="By score band" rows={[["High (novelty × materiality ≥ 49)", report.byBand.high], ["Low (< 49)", report.byBand.low]]} note="Do high-novelty, high-materiality cards do better than low ones?" />

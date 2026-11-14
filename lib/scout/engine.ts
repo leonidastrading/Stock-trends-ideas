@@ -55,6 +55,21 @@ export async function runStoriesJob(deps = defaultDeps()) {
   }
 }
 
+/** Import ideas from the daily stream file; recorded in Recent runs. */
+export async function runImportJob(items: import("./importer").ImportItem[], label: string, deps = defaultDeps()) {
+  const { runImport } = await import("./importer");
+  const run = await store.startRun("import");
+  try {
+    const results = await runImport(items, deps, label);
+    await store.finishRun(run, "ok", { label, results });
+    return { status: "ok" as const, results };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await store.finishRun(run, "error", { label }, message);
+    throw err;
+  }
+}
+
 /** The after-close job: ingest daily bars and move every paper track forward. */
 export async function runTrack(now = new Date()) {
   const run = await store.startRun("track");

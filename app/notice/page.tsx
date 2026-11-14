@@ -2,6 +2,7 @@ import CardView from "@/components/CardView";
 import SetupNotice from "@/components/SetupNotice";
 import { hasDatabase } from "@/lib/db";
 import * as store from "@/lib/scout/store";
+import ImportForm from "./ImportForm";
 import NoticeForm from "./NoticeForm";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ export default async function NoticePage() {
         {spend[0] ? <div className="muted" style={{ marginTop: 6 }}>LLM spend today: ${spend[0].cost.toFixed(2)} over {spend[0].calls} calls.</div> : null}
       </section>
       <section className="card"><NoticeForm /></section>
+      <section className="card"><h2>Import the daily stream file</h2><ImportForm /></section>
       {human.length > 0 && <h2>Your recent cards</h2>}
       {human.map((c) => <CardView key={c.id} c={c} track={t.get(c.id) ?? null} feedback={fb.get(`card:${c.id}`) ?? null} />)}
     </>
