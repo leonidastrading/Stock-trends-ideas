@@ -364,6 +364,13 @@ export async function saveTickerCounts(date: string, items: Array<{ symbols: str
   }
 }
 
+/** Daily story counts for some tickers over [from, to]. */
+export async function tickerCounts(symbols: string[], from: string, to: string): Promise<Array<{ date: string; symbol: string; stories: number; mainstream: number }>> {
+  if (!symbols.length) return [];
+  const rows = await q(`SELECT date, symbol, stories, mainstream FROM ticker_news_daily WHERE symbol = ANY($1::text[]) AND date >= $2 AND date <= $3 ORDER BY date`, [symbols, from, to]);
+  return rows.map((r) => ({ date: dstr(r.date)!, symbol: r.symbol, stories: Number(r.stories), mainstream: Number(r.mainstream) }));
+}
+
 /** Average stories per day per ticker over [from, to), over the days with any coverage. */
 export async function tickerDailyAverages(from: string, to: string): Promise<Record<string, number>> {
   const rows = await q(`SELECT symbol, avg(stories) AS avg, count(*) AS n FROM ticker_news_daily WHERE date >= $1 AND date < $2 GROUP BY symbol HAVING count(*) >= 5`, [from, to]);

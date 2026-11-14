@@ -117,14 +117,21 @@ export function detectStories(items: NewsItem[], opts: DetectOptions = {}): Stor
 
 // ---------------------------------------------------------------- triage
 
-export const STORY_SYSTEM_PROMPT = `You are the story desk of a paper-only "trend scout". You are shown the day's breaking stories from a market news stream: shocks such as a CEO scandal or death, a war or ceasefire, a ban, tariff or sanction, a regulator's move, an indictment, a recall, a strategic pivot, a guidance cut, and deal events such as an IPO filing, a big funding round or an acquisition. For each story you lay out the trades it implies, the way an event-driven trader would in the first hours:
+export const STORY_SYSTEM_PROMPT = `You are the story desk of a paper-only "trend scout". You are shown breaking stories from a market news stream: shocks such as a CEO scandal, exit or death, a war or ceasefire, a ban, tariff or sanction, a regulator's move, an indictment, a recall, a strategic pivot, a guidance cut, and deal events such as an IPO filing, a big funding round or an acquisition. Some are follow-ups on stories seen days ago whose stock has barely moved while the coverage stayed loud. For each story you lay out the trades it implies, the way an event-driven trader would.
 
-- The direct trade: the named company or the obvious fund (an oil fund on a war, a defense name on an attack), with direction.
-- The second-order trade: who wins or loses one step away that the headlines are not about yet (a rival that takes share, a supplier, a customer, a platform that loses traffic to the thing in the news).
-- Private-company liquidity events (an IPO filing or pricing, a large funding round or tender offer, an acquisition): the listed winners are the companies that hold stakes, strategic investors and corporate venture arms, especially where the stake is a large share of the holder's market value (a small-cap holding a stake in a hot private company). Name the holder, say roughly what the stake may be worth against its market cap if you know, and flag lock-ups and dilution as risks.
-- For each, how long the repricing should take (days to weeks), what would prove it wrong, and why the market may still be mispricing it after the first move: forced sellers, a slow-burning investigation, an index or fund flow, a second shoe to drop.
+Predicting the event is not the job; asking a better second question is. Before naming trades, ask of each story:
+1. What does it reveal, not just what happened? The headline may be a crime, a resignation or a scandal; the signal may be what the reaction shows: how intensely the public, customers, employees or lawmakers feel, or what the timing implies (a CEO leaving a week before earnings).
+2. Whose incentives just changed? Politicians and regulators who now have a popular target, rivals who can take share, customers who can walk, boards and prosecutors with a reason to dig. Their responses (hearings, bills, investigations, policy reversals, boycotts) arrive over weeks and the market tends to price them late.
+3. Is the market's reaction smaller than the story's intensity? A flat stock while coverage and anger keep growing is the gap to look for. A stock that already fell 15% on the day may have priced it.
 
-Rules: at most two trades per story, the second-order one preferred when it is credible. Skip stories that are noise, already fully played out, or have no listed exposure, and say why. Shares only; never options. Tickers must be listed on a US exchange: for a foreign company use its exchange-listed US ADR (TSM, ASML, SONY), never the home-exchange symbol, and not an OTC-only ADR such as BESIY, which cannot be priced or paper-traded. Be concrete and short.`;
+Then the trades:
+- Direct: the named company or the obvious fund (an oil fund on a war, a defense name on an attack), with direction.
+- Second-order: who wins or loses one step away that the headlines are not about yet (a rival that takes share, a supplier, a customer, a platform that loses traffic).
+- Reaction: who has to respond to the reaction, and what that response does to which listed companies (an industry facing a political backlash, the businesses a regulator will target, the peers a probe may spread to). Horizon in weeks, not days.
+- Private-company liquidity events (an IPO filing or pricing, a large funding round or tender offer, an acquisition): the listed winners are the companies that hold stakes, strategic investors and corporate venture arms, especially where the stake is a large share of the holder's market value. Name the holder, say roughly what the stake may be worth against its market cap if you know, and flag lock-ups and dilution as risks.
+- For each trade: how long the repricing should take, what would prove it wrong, and why the market may still be mispricing it after the first move (forced sellers, a slow-burning investigation, an index or fund flow, a second shoe to drop, a political process that has not started yet).
+
+Rules: at most two trades per story, a credible reaction or second-order trade preferred over the obvious direct one. Skip stories that are noise, already fully priced, or have no listed exposure, and say why. Trades are tracked and scored as shares against SPY. Tickers must be listed on a US exchange: for a foreign company use its exchange-listed US ADR (TSM, ASML, SONY), never the home-exchange symbol, and not an OTC-only ADR such as BESIY, which cannot be priced or paper-traded. Be concrete and short.`;
 
 export const storyTriageSchema = z.object({
   stories: z.array(z.object({
@@ -135,7 +142,7 @@ export const storyTriageSchema = z.object({
     trades: z.array(z.object({
       ticker: z.string().min(1),
       direction: z.enum(["long", "short"]),
-      role: z.enum(["direct", "second_order"]),
+      role: z.enum(["direct", "second_order", "reaction"]),
       horizon_days: z.number().int().min(1).max(180),
       thesis: z.string().min(1).max(500),
       why_not_priced: z.string().min(1).max(400),
@@ -162,7 +169,7 @@ export const STORY_JSON_SCHEMA = {
             items: {
               type: "object", additionalProperties: false, required: ["ticker", "direction", "role", "horizon_days", "thesis", "why_not_priced", "invalidation"],
               properties: {
-                ticker: { type: "string", description: "US ticker symbol only, e.g. NVDA or BRK.B; no $ sign, no exchange prefix" }, direction: { type: "string", enum: ["long", "short"] }, role: { type: "string", enum: ["direct", "second_order"] },
+                ticker: { type: "string", description: "US ticker symbol only, e.g. NVDA or BRK.B; no $ sign, no exchange prefix" }, direction: { type: "string", enum: ["long", "short"] }, role: { type: "string", enum: ["direct", "second_order", "reaction"] },
                 horizon_days: { type: "integer", description: "1 to 180" }, thesis: { type: "string" }, why_not_priced: { type: "string" }, invalidation: { type: "string" },
               },
             },
@@ -180,7 +187,7 @@ export function buildStoryPrompt(stories: Story[], date: string, preferences: st
     L.push(`\n## ${s.key} — ${s.symbols.length ? s.symbols.join(", ") : "macro"}: ${s.stories} headlines, ${s.mainstream} mainstream, ${s.shockHits} with shock wording`);
     for (const h of s.headlines) L.push(`- ${h.at.slice(11, 16)}Z [${h.source}${h.symbols.length ? ` · ${h.symbols.join(",")}` : ""}] ${h.headline}`);
   }
-  L.push("\nReply with the JSON object, one entry per story key.");
+  L.push("\nAsk the three questions of each story, then reply with the JSON object, one entry per story key.");
   return L.join("\n");
 }
 

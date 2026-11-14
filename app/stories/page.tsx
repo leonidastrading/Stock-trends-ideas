@@ -14,6 +14,9 @@ export const runtime = "nodejs";
 
 interface StoriesDetail { headlinesRead: number; detected: Array<{ key: string; symbols: string[]; stories: number; mainstream: number; shockHits: number; latest?: string; sample: string[]; samples?: Array<{ at: string; headline: string }> }>; triage: Array<{ key: string; summary: string; skipped: string | null; trades: Array<{ ticker: string; direction: string; role: string; horizon_days: number }> }>; researched: Array<{ term: string; outcome: string; reason?: string; cardId?: number }>; error: string | null }
 
+interface GapRow { key: string; ticker: string; storyDate: string; ageDays: number; gap: boolean; loud: boolean; quiet: boolean; why: string }
+interface FollowupDetail { checked: GapRow[]; researched: Array<{ term: string; outcome: string; reason?: string; cardId?: number }>; skipped: Array<{ key: string; reason: string }>; error: string | null }
+
 export default async function StoriesPage() {
   if (!hasDatabase()) return <SetupNotice />;
   const [runs, cards, tracks, candidates, fb, recent] = await Promise.all([store.recentRuns(30), store.cardsSince(14), store.allTracks(), store.candidatesSince(14), store.latestFeedback(), store.cardsSince(120)]);
@@ -21,6 +24,8 @@ export default async function StoriesPage() {
   const reviews = await store.allReviews();
   const last = runs.find((r) => r.action === "stories" || (r.action === "daily" && (r.detail as { stories?: unknown } | null)?.stories));
   const d = last ? ((last.action === "stories" ? last.detail : (last.detail as { stories?: StoriesDetail }).stories) as StoriesDetail | null) : null;
+  const daily = runs.find((r) => r.action === "daily" && (r.detail as { followups?: unknown } | null)?.followups);
+  const fu = daily ? ((daily.detail as { followups?: FollowupDetail }).followups ?? null) : null;
   const storyCards = cards.filter((c) => candidates.some((k) => k.cardId === c.id && k.term.startsWith("story: ")));
   const termOf = (id: number) => candidates.find((k) => k.cardId === id)?.term ?? "";
   const t = new Map(tracks.map((x) => [x.cardId, x]));
@@ -37,7 +42,33 @@ export default async function StoriesPage() {
         Breaking stories from the news stream (a CEO scandal, a war, a ban, a pivot, a regulator's move) and the trades they imply, direct and one step away. Every trade is a card that went through the same gates:
         most are logged as <span className="tag late">late</span> because the story is already everywhere, and they are tracked on paper anyway. The Scoring page's "promoted versus late" table is where this style gets its verdict.
         Runs with the midday scan and whenever "Scan stories now" is pressed; for breaking news during the day, point an hourly cron-job.org job at <code>/api/cron/stories</code>.
+        The desk asks three questions of every story: what does it reveal, whose incentives just changed, and is the market's reaction smaller than the story's intensity?
       </section>
+      {fu && (
+        <section className="card">
+          <h2>Reaction gaps · checked {daily ? fmtEt(daily.startedAt) : ""}</h2>
+          <p className="small secondary" style={{ marginTop: -4 }}>Stories seen 1–10 days ago, looked at again once a day: still loud in the news (recent stories a day at least twice the pre-story pace) while the stock has moved less than 5% against SPY. A gap goes back to the desk as a follow-up, once per story.</p>
+          {fu.error && <p className="small warn">{fu.error}</p>}
+          {fu.checked.length === 0 && !fu.error && <p className="small muted">No recent stories to check yet.</p>}
+          {fu.checked.length > 0 && (
+            <div className="table-wrap"><table>
+              <thead><tr><th>Story</th><th>Ticker</th><th>Seen</th><th>Now</th><th>Outcome</th></tr></thead>
+              <tbody>{fu.checked.slice().sort((a, b) => Number(b.gap) - Number(a.gap) || a.ageDays - b.ageDays).map((g) => {
+                const fk = `${g.key} (follow-up)`;
+                const res = fu.researched.filter((r) => r.term.startsWith(`story: ${fk} → `));
+                const sk = fu.skipped.find((x) => x.key === fk);
+                return (
+                  <tr key={g.key + g.ticker}>
+                    <td>{g.key}</td><td><b>{g.ticker}</b></td><td className="small">{g.storyDate} · {g.ageDays}d ago</td>
+                    <td className="small">{g.gap ? <span className="tag ok">gap</span> : <span className="tag">{!g.loud ? "faded" : "already moved"}</span>} <span className="secondary">{g.why}</span></td>
+                    <td className="small">{res.length ? res.map((r) => <div key={r.term}>{r.term.split(" → ")[1]}: {r.cardId ? <a href={`#card-${r.cardId}`}>{r.outcome}</a> : `${r.outcome}${r.reason ? ` (${r.reason})` : ""}`}</div>) : sk ? <span className="muted">skipped: {sk.reason}</span> : <span className="muted">—</span>}</td>
+                  </tr>
+                );
+              })}</tbody>
+            </table></div>
+          )}
+        </section>
+      )}
       {d && (
         <section className="card">
           <h2>Last story scan · {last ? fmtEt(last.startedAt) : ""} · {d.headlinesRead} headlines read</h2>

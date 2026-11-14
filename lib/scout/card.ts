@@ -46,6 +46,8 @@ export const cardSchema = z.object({
   time_limit_days: z.number().int().min(1).max(SCOUT.maxTimeLimitDays),
   scores: z.object({ novelty: score, materiality: score, breadth_of_evidence: score, lateness: score }),
   confidence: z.number().min(0).max(100),
+  /** How a trader might express it given the expected path and timing. Advice only; tracking is in shares. Absent on cards before it existed. */
+  expression: z.string().max(600).optional(),
   unknowns: z.array(z.string()),
 });
 export type Card = z.infer<typeof cardSchema>;
@@ -61,7 +63,7 @@ export type CardTicker = z.infer<typeof tickerSchema>;
 export const CARD_JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["title", "kind", "origin", "observation", "evidence", "tickers", "why_not_priced", "lateness", "catalyst", "direction", "invalidation", "time_limit_days", "scores", "confidence", "unknowns"],
+  required: ["title", "kind", "origin", "observation", "evidence", "tickers", "why_not_priced", "lateness", "catalyst", "direction", "invalidation", "time_limit_days", "scores", "confidence", "expression", "unknowns"],
   properties: {
     title: { type: "string", description: "12 words or fewer" },
     kind: { type: "string", enum: [...KINDS] },
@@ -100,6 +102,7 @@ export const CARD_JSON_SCHEMA = {
       properties: { novelty: { type: "number", description: "0-10" }, materiality: { type: "number", description: "0-10" }, breadth_of_evidence: { type: "number", description: "0-10" }, lateness: { type: "number", description: "0-10" } },
     },
     confidence: { type: "number", description: "0-100: probability the primary ticker, in the stated direction, beats SPY from the next open to the exit" },
+    expression: { type: "string", description: "How to trade it given the expected path and timing, one or two sentences: shares, or an options structure with the time to expiry the move needs; not a recommendation" },
     unknowns: { type: "array", items: { type: "string" } },
   },
 } as const;

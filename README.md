@@ -54,9 +54,19 @@ regulator's move, an indictment, a recall, a pivot, a guidance cut. `lib/scout/s
   needs only 2 mainstream headlines; the desk is told to look for the listed companies that hold stakes, especially
   where the stake is large against the holder's market value (the Zoom / Anthropic kind of trade). Discovery sees
   the same deal headlines in their own section.
-- **The story desk** is one model call that, for each story, lays out at most two trades: the direct one and the
-  second-order one (a rival, a supplier, a platform losing traffic), with direction, horizon, thesis, why the market
-  may still misprice it, and invalidation. It may skip a story and say why.
+- **The story desk** is one model call. Predicting the event is not the job; asking a better second question is, so
+  for each story it first asks: what does this reveal (not just what happened), whose incentives just changed, and is
+  the market's reaction smaller than the story's intensity? Then it lays out at most two trades: direct,
+  second-order (a rival, a supplier, a platform losing traffic) or **reaction** (who has to respond to the public's or
+  lawmakers' reaction, and which listed companies that hits, over weeks), with direction, horizon, thesis, why the
+  market may still misprice it, and invalidation. It may skip a story and say why.
+- **Reaction gaps.** The first-hours read often misses the trade: the UnitedHealth shooting did not change the business
+  and the stock barely moved on day one; the move came over the following weeks from what the reaction revealed. Each
+  midday scan looks again at stories seen 1–10 days ago (researched or skipped). A ticker is a gap when its news
+  coverage is still loud (the latest two days average at least 4 stories a day and twice its pre-story pace) while it
+  has moved less than 5% against SPY since the close before the story. Gaps go back to the desk as follow-ups and their
+  trades are researched under `story: <key> (follow-up) → <ticker>`, once per story. The Stories page shows every
+  check. Loudness is media coverage from the news stream; social-media anger needs Reddit (pending approval).
 - **Each trade is researched as an event card** through the normal research step and gates, with the story and the
   proposed trade as context. Most story cards are logged **late**, since the story is everywhere by definition, and
   they are tracked on paper like any other. The Scoring page's "promoted versus late" table is where this style gets
@@ -173,7 +183,9 @@ the day and the candidates page says so. Each source has a per-host rate limit a
 - Place, modify or cancel any order at any broker. (There is no such code; the Swing ideas app, which this app only posts
   to, trades on an Alpaca **paper** account.)
 - Store or display API keys or tokens in the repo, logs or UI. Settings shows only whether each key is set.
-- Present options trades as recommendations. A card may note a dated catalyst, nothing more; all tracking is in shares.
+- Present options trades as recommendations. Each card carries a "how to trade it" note on timing and structure (for
+  a slow grind over weeks, options with at least twice that time to expiry, since short-dated ones can expire before the
+  move), labelled as a note, never a recommendation or a size; all tracking is in shares.
 - Replay past dates through the model and call it evidence. Forward results only.
 - Edit or delete logged cards, or tune the prompt on the version being scored.
 

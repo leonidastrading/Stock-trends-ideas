@@ -27,6 +27,13 @@ export async function runDaily(deps = defaultDeps()) {
     } catch (err) {
       stories = { error: err instanceof Error ? err.message : String(err) };
     }
+    let followups;
+    try {
+      const { runFollowups } = await import("./followup");
+      followups = await runFollowups(deps);
+    } catch (err) {
+      followups = { error: err instanceof Error ? err.message : String(err) };
+    }
     let digest = "skipped";
     try {
       digest = await maybeSendDigest(deps.now, deps.env);
@@ -34,7 +41,7 @@ export async function runDaily(deps = defaultDeps()) {
       digest = `failed: ${err instanceof Error ? err.message : String(err)}`;
     }
     const pushed = await pushNewCards(deps.env).catch((err) => `push failed: ${err instanceof Error ? err.message : String(err)}`);
-    const detail = { ...scan, stories, digest, pushed };
+    const detail = { ...scan, stories, followups, digest, pushed };
     await store.finishRun(run, scan.stoppedEarly ? "skipped" : "ok", detail);
     return { status: "ok" as const, ...detail };
   } catch (err) {

@@ -38,6 +38,7 @@ export default function CardView({ c, track, actions, feedback, opposing, review
         <dt>Catalyst</dt><dd>{k.catalyst.what} <span className="muted">({k.catalyst.date})</span></dd>
         <dt>Invalidation</dt><dd>{k.invalidation}</dd>
         <dt>Time limit</dt><dd>{k.time_limit_days} days</dd>
+        {k.expression && <><dt>How to trade it</dt><dd>{k.expression} <span className="small muted">(timing note, not a recommendation; tracked in shares)</span></dd></>}
         {k.unknowns.length > 0 && <><dt>Unknowns</dt><dd>{k.unknowns.join("; ")}</dd></>}
         {c.gateNotes.length > 0 && <><dt>Gate notes</dt><dd className="small secondary">{c.gateNotes.join(" · ")}</dd></>}
         {track && <><dt>Paper track</dt><dd className="small">{trackLine(track)}</dd></>}
