@@ -12,7 +12,7 @@ import { fmtEt } from "@/lib/time";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-interface StoriesDetail { headlinesRead: number; detected: Array<{ key: string; symbols: string[]; stories: number; mainstream: number; shockHits: number; latest?: string; sample: string[]; samples?: Array<{ at: string; headline: string }> }>; triage: Array<{ key: string; summary: string; skipped: string | null; trades: Array<{ ticker: string; direction: string; role: string; horizon_days: number }> }>; researched: Array<{ term: string; outcome: string; reason?: string; cardId?: number }>; error: string | null }
+interface StoriesDetail { headlinesRead: number; detected: Array<{ key: string; symbols: string[]; stories: number; mainstream: number; shockHits: number; stage?: number | null; escalation?: string[]; latest?: string; sample: string[]; samples?: Array<{ at: string; headline: string }> }>; triage: Array<{ key: string; summary: string; skipped: string | null; trades: Array<{ ticker: string; direction: string; role: string; horizon_days: number }> }>; researched: Array<{ term: string; outcome: string; reason?: string; cardId?: number }>; error: string | null }
 
 interface GapRow { key: string; ticker: string; storyDate: string; ageDays: number; gap: boolean; loud: boolean; quiet: boolean; why: string }
 interface FollowupDetail { checked: GapRow[]; researched: Array<{ term: string; outcome: string; reason?: string; cardId?: number }>; skipped: Array<{ key: string; reason: string }>; error: string | null }
@@ -42,7 +42,8 @@ export default async function StoriesPage() {
         Breaking stories from the news stream (a CEO scandal, a war, a ban, a pivot, a regulator's move) and the trades they imply, direct and one step away. Every trade is a card that went through the same gates:
         most are logged as <span className="tag late">late</span> because the story is already everywhere, and they are tracked on paper anyway. The Scoring page's "promoted versus late" table is where this style gets its verdict.
         Runs with the midday scan and whenever "Scan stories now" is pressed; for breaking news during the day, point an hourly cron-job.org job at <code>/api/cron/stories</code>.
-        The desk asks three questions of every story: what does it reveal, whose incentives just changed, and is the market's reaction smaller than the story's intensity?
+        The desk asks of every story: what does it reveal, whose incentives just changed, is the market's reaction smaller than the story's intensity, is the company priced as one person's company, and what else is moving the stock?
+        Stories come in stages: when an institution acts on a story seen in the last 30 days (a board investigation, a congressional letter, a regulator, a resignation), it is read again at once as <span className="tag late">stage 2</span>, 3…, with the earlier stages in front of the desk.
       </section>
       {fu && (
         <section className="card">
@@ -79,7 +80,7 @@ export default async function StoriesPage() {
             const tr = d.triage.find((x) => x.key === s.key);
             return (
               <div key={s.key} style={{ borderTop: "1px solid var(--grid)", padding: "8px 0" }}>
-                <b>{s.key}</b> {s.latest ? <span className="small">latest {fmtEt(s.latest)}</span> : null} <span className="small muted">{s.stories} headlines · {s.mainstream} mainstream · {s.shockHits} event words{s.symbols.length > 1 ? ` · ${s.symbols.join(", ")}` : ""}</span>
+                <b>{s.key}</b> {s.stage ? <span className="tag late" title={`institutions acting: ${(s.escalation ?? []).join(", ")}`}>stage {s.stage}</span> : null} {s.latest ? <span className="small">latest {fmtEt(s.latest)}</span> : null} <span className="small muted">{s.stories} headlines · {s.mainstream} mainstream · {s.shockHits} event words{s.symbols.length > 1 ? ` · ${s.symbols.join(", ")}` : ""}</span>
                 {s.samples ? (
                   <ul className="small secondary" style={{ margin: "4px 0", paddingLeft: 18 }}>{s.samples.map((h) => <li key={h.at + h.headline}><span className="muted">{fmtEt(h.at)}</span> {h.headline}</li>)}</ul>
                 ) : <div className="small secondary">{s.sample.join(" · ")}</div>}

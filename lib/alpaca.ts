@@ -11,7 +11,7 @@ export const TRADING_HOST = "https://api.alpaca.markets";
 export const PAPER_TRADING_HOST = "https://paper-api.alpaca.markets";
 
 const ALLOWED: Record<string, RegExp[]> = {
-  [DATA_HOST]: [/^\/v2\/stocks\/bars$/, /^\/v1beta1\/news$/],
+  [DATA_HOST]: [/^\/v2\/stocks\/bars$/, /^\/v1beta1\/news$/, /^\/v1beta1\/options\/snapshots\/[A-Z][A-Z.]{0,9}$/],
   [TRADING_HOST]: [/^\/v2\/calendar$/],
   [PAPER_TRADING_HOST]: [/^\/v2\/calendar$/],
 };
@@ -136,6 +136,22 @@ export class AlpacaClient {
     return out;
   }
 
+  /** Option contract snapshots (market data only) for one underlying: contract symbol → implied volatility. Free accounts get the 15-minute-delayed indicative feed. */
+  async getOptionSnapshots(underlying: string, q: { type?: "call" | "put"; strikeGte?: number; strikeLte?: number; expiryGte?: string; expiryLte?: string }): Promise<Record<string, { impliedVolatility?: number | null }>> {
+    const out: Record<string, { impliedVolatility?: number | null }> = {};
+    let pageToken: string | undefined;
+    let pages = 0;
+    do {
+      const resp = await this.get<{ snapshots?: Record<string, { impliedVolatility?: number | null }> | null; next_page_token?: string | null }>(
+        DATA_HOST, `/v1beta1/options/snapshots/${encodeURIComponent(underlying)}`,
+        { type: q.type, strike_price_gte: q.strikeGte, strike_price_lte: q.strikeLte, expiration_date_gte: q.expiryGte, expiration_date_lte: q.expiryLte, limit: 1000, page_token: pageToken },
+      );
+      Object.assign(out, resp.snapshots ?? {});
+      pageToken = resp.next_page_token ?? undefined;
+    } while (pageToken && ++pages < 5);
+    return out;
+  }
+
   async getCalendar(start: string, end: string): Promise<Session[]> {
     return parseCalendar(await this.get(this.referenceHost, "/v2/calendar", { start, end }));
   }
@@ -146,6 +162,8 @@ export interface MarketData {
   getDailyBars(symbols: readonly string[], start: string, end: string): Promise<DailyBar[]>;
   getNews(symbols: string[], start: Date, end: Date, max?: number): Promise<NewsItem[]>;
   getCalendar(start: string, end: string): Promise<Session[]>;
+  /** Optional: option-chain implied volatility (market data only). */
+  getOptionSnapshots?(underlying: string, q: { type?: "call" | "put"; strikeGte?: number; strikeLte?: number; expiryGte?: string; expiryLte?: string }): Promise<Record<string, { impliedVolatility?: number | null }>>;
 }
 
 export function marketDataFromEnv(env: NodeJS.ProcessEnv = process.env): MarketData | null {

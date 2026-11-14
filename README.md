@@ -67,6 +67,21 @@ regulator's move, an indictment, a recall, a pivot, a guidance cut. `lib/scout/s
   has moved less than 5% against SPY since the close before the story. Gaps go back to the desk as follow-ups and their
   trades are researched under `story: <key> (follow-up) → <ticker>`, once per story. The Stories page shows every
   check. Loudness is media coverage from the news stream; social-media anger needs Reddit (pending approval).
+- **Stages.** The first headline is rarely the whole story (NVDA, Oct–Nov 2026: a spying report Nvidia denied, then
+  the board's outside investigation, then the chip-diversion report and House committees, then the CEO's
+  resignation). Every day the desk reads a story is recorded append-only in `story_events`. When a ticker with a
+  story in the last 30 days gets headlines with an institution acting (a board investigation, outside counsel, a
+  congressional committee or briefing, a regulator, prosecutors, a resignation), it is detected with only 2
+  mainstream headlines, read at once despite the 3-day cooldown (once a day), labelled stage 2, 3…, and the desk sees
+  the earlier stages and is asked who has to act next. Trades are logged as `story: <key> (stage N) → <ticker>`. A new
+  stage restarts the reaction-gap clock, so the quiet test is measured from it, not from the first headline.
+- The desk and the research step also ask whether the company is priced as one person's company, and name what else
+  is moving the stock (an inflation print, an election, a sector sell-off, downgrades) so the result is not credited
+  to the story alone.
+- **Options pricing**, for the "how to trade it" note only: the median implied volatility of near-the-money calls
+  20–60 days out (Alpaca option snapshots; free accounts get the indicative, 15-minute-delayed feed) against the
+  stock's 20-day realized volatility. 1.5× or more reads as expensive (the story is already in the options' price),
+  under 1.1× as cheap. Market data only, shown on Settings as "Options pricing"; never evidence, never tracked.
 - **Each trade is researched as an event card** through the normal research step and gates, with the story and the
   proposed trade as context. Most story cards are logged **late**, since the story is everywhere by definition, and
   they are tracked on paper like any other. The Scoring page's "promoted versus late" table is where this style gets
@@ -142,7 +157,8 @@ anything else happens. Cards, versions and track events are append-only, enforce
 - **Scoring**: per version (see below), with a CSV export of every card and track.
 - **Scoreboard**: the same results as a game, across all versions. Points are paper dollars beaten versus SPY on a
   $1,000 stake per call; players are the scout's trend desk, its story desk, you, and the stream file's host and agent.
-  It shows banked and in-play points, hit rate with a coin-flip luck check, calibration (does a "70%" call win about
+  It shows banked and in-play points, the same points against each call's sector fund (was it the company or its
+  industry?), hit rate with a coin-flip luck check, calibration (does a "70%" call win about
   70% of the time; Brier score), wins by kind of call, and recent rounds with their post-catalyst verdicts. Commentary
   only; the verdict stays on Scoring. A card's `confidence` is defined to the model as its probability of beating SPY
   over the holding period; calibration counts only versions that carry that definition.
@@ -248,6 +264,8 @@ lib/scout/scan.ts    the daily scan and the candidate rule
 lib/scout/tracking.ts  paper entries, exits and drawdowns
 lib/scout/scoring.ts   the report and the random-sector baseline — pure
 lib/scout/scoreboard.ts players, points, luck check, calibration — pure
+lib/scout/followup.ts  reaction gaps: stories still loud while the stock is quiet
+lib/scout/options.ts   implied vs realized volatility for the how-to-trade note
 lib/scout/swing.ts   the post to the Swing ideas log
 lib/schema.ts        idempotent SQL with append-only triggers
 relay/               the EDGAR relay (deploy on Railway)

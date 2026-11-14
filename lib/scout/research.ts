@@ -70,7 +70,9 @@ export async function researchCandidate(input: ResearchInput, deps: ResearchDeps
     await recordHealth(results);
   }
 
-  const prompt = buildUserPrompt({ origin: input.origin, term: input.term, kindHint: input.kindHint, tickersHint: input.tickersHint, observation: input.observation, context: input.context, today: et.date, results, trigger: input.trigger });
+  const optionsLine = await readOptions(deps, input.tickersHint[0]);
+  const prompt = buildUserPrompt({ origin: input.origin, term: input.term, kindHint: input.kindHint, tickersHint: input.tickersHint, observation: input.observation, context: input.context, today: et.date, results, trigger: input.trigger })
+    + (optionsLine ? `\n\nOptions pricing (for the "expression" note only; not evidence): ${optionsLine}` : "");
 
   // Call the model; one retry on a parse/validation failure with the error fed back.
   let card: Card | null = null;
@@ -137,4 +139,18 @@ export async function researchCandidate(input: ResearchInput, deps: ResearchDeps
     await store.addWatch({ term: gated.card.title, kind: gated.card.kind, tickers: gated.card.tickers.map((t) => t.symbol), addedBy: "scout", status: "proposed", note: `from human-originated card #${stored.id}` });
   }
   return { outcome: "card", card: stored, candidate };
+}
+
+/** The options read for the primary ticker, recorded in source health; never fails the research. */
+async function readOptions(deps: ResearchDeps, ticker: string | undefined): Promise<string | null> {
+  if (!ticker || !deps.data?.getOptionSnapshots) return null;
+  try {
+    const { optionsRead } = await import("./options");
+    const o = await optionsRead(deps.data, ticker, deps.now);
+    await store.saveHealth("options", "ok", o ? o.line.slice(0, 300) : `${ticker}: no near-the-money contracts 20-60 days out`);
+    return o?.line ?? null;
+  } catch (err) {
+    await store.saveHealth("options", "down", `${ticker}: ${err instanceof Error ? err.message.slice(0, 200) : String(err)}`).catch(() => undefined);
+    return null;
+  }
 }

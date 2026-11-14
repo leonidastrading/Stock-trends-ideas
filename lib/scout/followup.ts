@@ -10,7 +10,7 @@
  * since the close before the story. Gaps go back to the story desk with the
  * three questions, framed as a follow-up; its trades are researched and gated
  * like any other card, under the term "story: <key> (follow-up) → <ticker>",
- * once per story.
+ * once per stage: a new stage (an institution acted) restarts the clock.
  *
  * "Loud" is measured from the news stream's per-ticker counts, so it sees media
  * intensity, not yet public anger on social media (Reddit once approved).
@@ -40,22 +40,37 @@ export const followupKey = (key: string) => `${key} (follow-up)`;
 
 export interface StorySeen { key: string; date: string; tickers: string[] }
 
-/** Pure: stories the desk saw (researched or skipped), one entry per key, from candidate terms "story: KEY" and "story: KEY → TICKER". */
+/**
+ * Pure: stories the desk saw (researched or skipped), one entry per key, from candidate terms "story: KEY",
+ * "story: KEY → TICKER" and "story: KEY (stage N) → TICKER". `date` is the latest stage: a new stage restarts
+ * the clock, so the quiet test is measured from it, not from the first headline. Stories already followed up
+ * since their latest stage are left out.
+ */
 export function storiesSeen(cands: Array<{ term: string; createdAt: string; tickersHint: string[] }>, today: string): StorySeen[] {
   const by = new Map<string, StorySeen>();
-  for (const c of cands) {
+  const followedUp = new Map<string, string>();
+  const stagedKeys = new Set<string>();
+  for (const c of cands.slice().sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
     const m = /^story: (.+?)(?: → (\S+))?$/.exec(c.term);
-    if (!m || m[1].endsWith("(follow-up)")) continue;
-    const key = m[1];
+    if (!m) continue;
     const date = toEt(new Date(c.createdAt)).date;
+    if (m[1].endsWith("(follow-up)")) {
+      const k = m[1].replace(/ \(follow-up\)$/, "");
+      if (date > (followedUp.get(k) ?? "")) followedUp.set(k, date);
+      continue;
+    }
+    const staged = / \(stage \d+\)$/.test(m[1]);
+    const key = m[1].replace(/ \(stage \d+\)$/, "");
     const s = by.get(key) ?? { key, date, tickers: [] };
-    if (date < s.date) s.date = date;
+    // The clock starts at the first read and moves only when a new stage arrives.
+    if (staged ? date > s.date : date < s.date && !stagedKeys.has(key)) s.date = date;
+    if (staged) stagedKeys.add(key);
     for (const t of [...(m[2] ? [m[2]] : []), ...c.tickersHint]) if (t && !s.tickers.includes(t.toUpperCase())) s.tickers.push(t.toUpperCase());
     by.set(key, s);
   }
   return [...by.values()].filter((s) => {
     const age = daysBetween(s.date, today);
-    return age >= FOLLOWUP.minAgeDays && age <= FOLLOWUP.maxAgeDays && s.tickers.length > 0;
+    return age >= FOLLOWUP.minAgeDays && age <= FOLLOWUP.maxAgeDays && s.tickers.length > 0 && !((followedUp.get(s.key) ?? "") >= s.date);
   });
 }
 
@@ -129,9 +144,7 @@ export async function runFollowups(deps: ResearchDeps): Promise<FollowupReport> 
   const settings = await store.loadSettings();
   if (!settings.enabled) return { ...report, error: "scout is switched off in Settings" };
 
-  const recent = await store.recentTerms(FOLLOWUP.maxAgeDays + 7);
-  const done = (key: string) => [...recent].some((t) => t.startsWith(`story: ${followupKey(key).toLowerCase()}`));
-  const seen = storiesSeen(await store.candidatesSince(FOLLOWUP.maxAgeDays + 2), et.date).filter((s) => !done(s.key));
+  const seen = storiesSeen(await store.candidatesSince(40), et.date);
   const pairs = seen.flatMap((s) => s.tickers.slice(0, 3).map((ticker) => ({ s, ticker }))).slice(0, FOLLOWUP.maxTickersChecked);
   if (!pairs.length) return report;
 

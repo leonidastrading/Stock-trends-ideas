@@ -21,7 +21,19 @@ import * as store from "./store";
 // ------------------------------------------------------------- detection
 
 /** Wording that marks a shock rather than ordinary coverage. */
-export const SHOCK = /\b(shot|killed|dies|death|assassinat\w*|resign\w*|steps? down|ousted?|fired|scandal|affair|indict\w*|arrest\w*|charged|fraud|probe|investigat\w*|subpoena|lawsuit|sued|verdict|ruling|antitrust|ban(?:s|ned)?|block(?:s|ed)|tariffs?|sanction\w*|executive order|regulat\w*|legislation|bill passes|war|strikes?|missile|ceasefire|invasion|blockade|outage|hack(?:ed)?|breach|recall|halt(?:s|ed)?|bankrupt\w*|chapter 11|default|downgrade|pivot\w*|guidance cut|cuts? (?:guidance|outlook|forecast)|FDA (?:approv|reject|warn)\w*|short report|short seller)\b/i;
+export const SHOCK = /\b(shot|killed|dies|death|assassinat\w*|resign\w*|steps? down|ousted?|fired|scandal|affair|indict\w*|arrest\w*|charged|fraud|probe|investigat\w*|subpoena|lawsuit|sued|verdict|ruling|antitrust|ban(?:s|ned)?|block(?:s|ed)|tariffs?|sanction\w*|executive order|regulat\w*|legislation|bill passes|war|strikes?|missile|ceasefire|invasion|blockade|outage|hack(?:ed)?|breach|recall|halt(?:s|ed)?|bankrupt\w*|chapter 11|default|downgrade|pivot\w*|guidance cut|cuts? (?:guidance|outlook|forecast)|FDA (?:approv|reject|warn)\w*|short report|short seller|espionage|spying|spies|spy (?:ring|agency|probe|case|links?)|national security|export controls?|smuggl\w*)\b/i;
+
+/**
+ * Institutions acting on a story: each one is a new stage and a fresh catalyst
+ * (a board hiring outside investigators, a congressional committee, a
+ * regulator, prosecutors, a resignation). Lower-cased matches.
+ */
+export const ESCALATION = /\b(board (?:of directors )?(?:launch\w*|open\w*|hire\w*|retain\w*|order\w*|review\w*|investigat\w*)|special committee|independent (?:review|investigation|counsel)|outside (?:counsel|lawyers|investigat\w*|law firm)|law firm|former (?:U\.?S\.? )?(?:attorney|prosecutor)|(?:house|senate|congressional) (?:committee|panel|probe|investigat\w*|letter|hearing)|committees?|lawmakers|congress(?:ional)?|senators?|briefing|hearing|testify|subpoena\w*|justice department|doj|\bsec\b|ftc|commerce department|bureau of industry and security|regulators?|attorneys? general|indict\w*|charged|resign\w*|steps? down|ousted|interim ceo|placed on leave|recus\w*)\b/gi;
+
+/** Distinct institution-acting phrases in a text, lower-cased. */
+export function escalationWords(text: string): string[] {
+  return [...new Set([...text.matchAll(ESCALATION)].map((m) => m[1].toLowerCase().replace(/\s+/g, " ")))];
+}
 
 /** Deal and liquidity events: often about a private company, so the listed winners are its holders, not the headline's ticker. */
 export const CATALYST = /\b(IPO|initial public offering|S-1|files? (?:confidentially )?(?:to go public|for (?:an )?IPO)|direct listing|goes public|going public|funding round|raises \$[\d.]+ ?(?:billion|bn|B)|tender offer|valuation of \$|valued at \$|acquires?|acquisition|takeover|buyout|merger|spin-?off|stake)\b/i;
@@ -45,6 +57,12 @@ export interface Story {
   stories: number;
   mainstream: number;
   shockHits: number;
+  /** Headlines with an institution acting (board, Congress, regulator, prosecutor, resignation) and the phrases seen. */
+  escalationHits: number;
+  escalation: string[];
+  /** Set by runStories when the desk has read this story before: earlier days, and the stage number when an institution acted. */
+  history?: Array<{ date: string; stage: number; summary: string }>;
+  stage?: number;
   /** Time of the newest headline in the story (ISO). */
   latest: string;
   /** Newest first; `at` is the headline's full ISO timestamp. */
@@ -58,30 +76,37 @@ export interface DetectOptions {
   minStories?: number;
   spikeMultiple?: number;
   maxStories?: number;
+  /** Tickers with a story in the last 30 days: a new headline there with an institution acting needs only 2 mainstream headlines. */
+  openTickers?: Set<string>;
 }
 
 /** Pure: find the day's stories. Ticker stories need mainstream coverage and shock wording or a spike; macro stories are shock wording across many headlines with few tickers. */
 export function detectStories(items: NewsItem[], opts: DetectOptions = {}): Story[] {
-  const { dailyAvg = {}, minMainstream = 3, minStories = 6, spikeMultiple = 4, maxStories = 8 } = opts;
+  const { dailyAvg = {}, minMainstream = 3, minStories = 6, spikeMultiple = 4, maxStories = 8, openTickers = new Set<string>() } = opts;
   const byTicker = new Map<string, Story>();
   const macro = new Map<string, Story>();
   for (const n of items) {
     const text = `${n.headline} ${n.summary}`;
     const shock = eventWord(text);
+    const esc = escalationWords(text);
     const main = isMainstream(n);
     const h = { at: n.ts, headline: n.headline, source: n.source, symbols: n.symbols };
     if (n.symbols.length > 0 && n.symbols.length <= 6) {
       for (const s of n.symbols) {
-        const t = byTicker.get(s) ?? { key: s, label: s, symbols: [s], stories: 0, mainstream: 0, shockHits: 0, latest: "", headlines: [] };
+        const t = byTicker.get(s) ?? { key: s, label: s, symbols: [s], stories: 0, mainstream: 0, shockHits: 0, escalationHits: 0, escalation: [], latest: "", headlines: [] };
         t.stories++;
         if (n.ts > t.latest) t.latest = n.ts;
         if (main) t.mainstream++;
         if (shock) t.shockHits++;
-        if (t.headlines.length < 8 && (shock || main)) t.headlines.push(h);
+        if (esc.length) {
+          t.escalationHits++;
+          for (const w of esc) if (!t.escalation.includes(w)) t.escalation.push(w);
+        }
+        if (t.headlines.length < 8 && (shock || main || esc.length)) t.headlines.push(h);
         byTicker.set(s, t);
       }
     } else if (shock && n.symbols.length === 0) {
-      const m = macro.get(shock) ?? { key: `macro:${shock}`, label: shock, symbols: [], stories: 0, mainstream: 0, shockHits: 0, latest: "", headlines: [] };
+      const m = macro.get(shock) ?? { key: `macro:${shock}`, label: shock, symbols: [], stories: 0, mainstream: 0, shockHits: 0, escalationHits: 0, escalation: [], latest: "", headlines: [] };
       m.stories++;
       m.shockHits++;
       if (n.ts > m.latest) m.latest = n.ts;
@@ -100,7 +125,8 @@ export function detectStories(items: NewsItem[], opts: DetectOptions = {}): Stor
   for (const t of byTicker.values()) {
     const avg = dailyAvg[t.key];
     const spike = avg ? t.stories >= spikeMultiple * avg : false;
-    if (t.mainstream >= minMainstream && (t.shockHits >= 2 || spike || t.stories >= minStories * 2)) out.push(t);
+    const newStage = openTickers.has(t.key) && t.escalationHits >= 1 && t.mainstream >= 2;
+    if (newStage || (t.mainstream >= minMainstream && (t.shockHits >= 2 || spike || t.stories >= minStories * 2))) out.push(t);
   }
   for (const m of macro.values()) {
     // A single big private-company liquidity event is a story; it needs mainstream pick-up, not volume.
@@ -109,7 +135,7 @@ export function detectStories(items: NewsItem[], opts: DetectOptions = {}): Stor
   }
   // The strongest stories make the cut; they are then listed freshest first, headlines newest first.
   return out
-    .sort((a, b) => b.shockHits * 3 + b.mainstream - (a.shockHits * 3 + a.mainstream))
+    .sort((a, b) => b.shockHits * 3 + b.escalationHits * 3 + b.mainstream - (a.shockHits * 3 + a.escalationHits * 3 + a.mainstream))
     .slice(0, maxStories)
     .map((s) => ({ ...s, headlines: s.headlines.slice().sort((a, b) => b.at.localeCompare(a.at)) }))
     .sort((a, b) => b.latest.localeCompare(a.latest));
@@ -123,6 +149,10 @@ Predicting the event is not the job; asking a better second question is. Before 
 1. What does it reveal, not just what happened? The headline may be a crime, a resignation or a scandal; the signal may be what the reaction shows: how intensely the public, customers, employees or lawmakers feel, or what the timing implies (a CEO leaving a week before earnings).
 2. Whose incentives just changed? Politicians and regulators who now have a popular target, rivals who can take share, customers who can walk, boards and prosecutors with a reason to dig. Their responses (hearings, bills, investigations, policy reversals, boycotts) arrive over weeks and the market tends to price them late.
 3. Is the market's reaction smaller than the story's intensity? A flat stock while coverage and anger keep growing is the gap to look for. A stock that already fell 15% on the day may have priced it.
+4. Is the company priced as one person's company? When the valuation rests on a founder-CEO, any threat to that person is a threat to the valuation, and the market tends to treat it as unlikely until it suddenly is not.
+5. What else is moving the stock right now (an inflation print, an election, a sector sell-off, downgrades)? Name it, so a result is not credited to the story alone, and compare against the stock's peers: a stock falling while its rivals rise is the story; everything falling together is the market.
+
+Stories come in stages. The first headline is rarely the whole story: once an institution acts (a board hires outside investigators, a congressional committee asks for a briefing, a regulator or prosecutor opens a case, an executive resigns), the matter has to go somewhere, and every reporter starts digging. A board that hires a former prosecutor does not clear anyone in a week. When you are shown earlier stages of a story, treat the new one as a fresh catalyst on an old story: ask who has to act next (the board, Congress, export-control or other regulators, prosecutors, reporters), what that next step would do to the price, and whether the move so far has priced it. The cleanest entry is usually right after the first institution acts, before most of the move; by the late stages options are expensive.
 
 Then the trades:
 - Direct: the named company or the obvious fund (an oil fund on a war, a defense name on an attack), with direction.
@@ -184,7 +214,11 @@ export function buildStoryPrompt(stories: Story[], date: string, preferences: st
   const L = [`Date: ${date}. ${stories.length} stories from the last 24 hours of the news stream.`];
   if (preferences) L.push(`\n${preferences}`);
   for (const s of stories) {
-    L.push(`\n## ${s.key} — ${s.symbols.length ? s.symbols.join(", ") : "macro"}: ${s.stories} headlines, ${s.mainstream} mainstream, ${s.shockHits} with shock wording`);
+    L.push(`\n## ${s.key} — ${s.symbols.length ? s.symbols.join(", ") : "macro"}: ${s.stories} headlines, ${s.mainstream} mainstream, ${s.shockHits} with shock wording${s.escalation.length ? `, institutions acting: ${s.escalation.slice(0, 6).join(", ")}` : ""}`);
+    if (s.history?.length) {
+      L.push(s.stage ? `Stage ${s.stage} of a story first seen ${s.history[0].date}: an institution has acted. Who has to act next?` : `Seen before (first ${s.history[0].date}); no institution acting in today's headlines.`);
+      for (const e of s.history) L.push(`  earlier, ${e.date} (stage ${e.stage}): ${e.summary}`);
+    }
     for (const h of s.headlines) L.push(`- ${h.at.slice(11, 16)}Z [${h.source}${h.symbols.length ? ` · ${h.symbols.join(",")}` : ""}] ${h.headline}`);
   }
   L.push("\nAsk the three questions of each story, then reply with the JSON object, one entry per story key.");
@@ -224,7 +258,7 @@ export const storyTerm = (key: string, ticker: string) => `story: ${key} → ${t
 export interface StoriesReport {
   date: string;
   headlinesRead: number;
-  detected: Array<{ key: string; symbols: string[]; stories: number; mainstream: number; shockHits: number; latest: string; sample: string[]; samples: Array<{ at: string; headline: string }> }>;
+  detected: Array<{ key: string; symbols: string[]; stories: number; mainstream: number; shockHits: number; stage: number | null; escalation: string[]; latest: string; sample: string[]; samples: Array<{ at: string; headline: string }> }>;
   triage: Array<{ key: string; summary: string; skipped: string | null; trades: Array<{ ticker: string; direction: string; role: string; horizon_days: number }> }>;
   researched: Array<{ term: string; outcome: string; reason?: string; cardId?: number }>;
   error: string | null;
@@ -252,13 +286,18 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
   }
   report.headlinesRead = items.length;
   const dailyAvg = await store.tickerDailyAverages(addDays(et.date, -30), et.date);
-  const stories = detectStories(items, { dailyAvg });
-  report.detected = stories.map((s) => ({ key: s.key, symbols: s.symbols, stories: s.stories, mainstream: s.mainstream, shockHits: s.shockHits, latest: s.latest, sample: s.headlines.slice(0, 3).map((h) => h.headline), samples: s.headlines.slice(0, 3).map((h) => ({ at: h.at, headline: h.headline })) }));
+  const events = await store.storyEventsSince(addDays(et.date, -30));
+  const openTickers = new Set(events.filter((e) => !e.key.startsWith("macro:")).map((e) => e.key));
+  const stories = detectStories(items, { dailyAvg, openTickers });
+  const readToday = new Set(events.filter((e) => e.etDate === et.date).map((e) => e.key));
+  for (const s of stories) attachHistory(s, events, et.date);
+  report.detected = stories.map((s) => ({ key: s.key, symbols: s.symbols, stories: s.stories, mainstream: s.mainstream, shockHits: s.shockHits, stage: s.stage ?? null, escalation: s.escalation.slice(0, 6), latest: s.latest, sample: s.headlines.slice(0, 3).map((h) => h.headline), samples: s.headlines.slice(0, 3).map((h) => ({ at: h.at, headline: h.headline })) }));
   await store.saveTickerCounts(et.date, items);
   if (!stories.length) return report;
 
   const recent = await store.recentTerms(STORY_COOLDOWN_DAYS);
-  const fresh = stories.filter((s) => ![...recent].some((t) => t.startsWith(`story: ${s.key.toLowerCase()} `)));
+  // A new stage (an institution acted) skips the 3-day cooldown, once a day per story.
+  const fresh = stories.filter((s) => (s.stage ? !readToday.has(s.key) : ![...recent].some((t) => t.startsWith(`story: ${s.key.toLowerCase()} `))));
   if (!fresh.length) {
     report.error = `all ${stories.length} stories were researched in the last ${STORY_COOLDOWN_DAYS} days`;
     return report;
@@ -271,6 +310,7 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
 
   let triage: StoryTriage | null = null;
   const preferences = preferencesText(await store.recentFeedback());
+  fresh.sort((a, b) => Number(!!b.stage) - Number(!!a.stage)); // new stages of known stories first
   const prompt = buildStoryPrompt(fresh.slice(0, max), et.date, preferences);
   let lastError = "";
   for (let attempt = 0; attempt < 2 && !triage; attempt++) {
@@ -293,15 +333,19 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
   for (const t of triage.stories) {
     const story = fresh.find((s) => s.key === t.key);
     if (!story) continue;
+    const stageNo = story.stage ?? (story.history?.length ? new Set(story.history.map((e) => e.date)).size + 1 : 1);
+    await store.addStoryEvent({ etDate: et.date, key: story.key, symbols: story.symbols, stage: stageNo, summary: t.summary, escalation: story.escalation.slice(0, 10) }).catch(() => undefined);
+    const termKey = story.stage ? `${story.key} (stage ${story.stage})` : story.key;
     report.triage.push({ key: t.key, summary: t.summary, skipped: t.skip ? t.skip_reason || "skipped" : null, trades: t.trades.map((x) => ({ ticker: x.ticker, direction: x.direction, role: x.role, horizon_days: x.horizon_days })) });
     if (t.skip) {
-      await store.addCandidate({ versionId: (await store.listVersions()).at(-1)?.id ?? 1, origin: "scout", term: `story: ${story.key}`, kindHint: "event", tickersHint: story.symbols, observation: null, trigger: storyTrigger(story, et.date), outcome: "rejected", reason: `story desk skipped: ${t.skip_reason}`, cardId: null }).catch(() => undefined);
+      await store.addCandidate({ versionId: (await store.listVersions()).at(-1)?.id ?? 1, origin: "scout", term: `story: ${termKey}`, kindHint: "event", tickersHint: story.symbols, observation: null, trigger: storyTrigger(story, et.date), outcome: "rejected", reason: `story desk skipped: ${t.skip_reason}`, cardId: null }).catch(() => undefined);
       continue;
     }
     for (const trade of t.trades.slice(0, 2)) {
-      const context = `Story: ${t.summary}\nProposed trade (${trade.role}): ${trade.direction} ${trade.ticker}, horizon ${trade.horizon_days} days.\nThesis: ${trade.thesis}\nWhy the market may still misprice it: ${trade.why_not_priced}\nInvalidation: ${trade.invalidation}\nHeadlines:\n${story.headlines.map((h) => `- [${h.source}] ${h.headline}`).join("\n")}`;
-      const r = await researchCandidate({ origin: "scout", term: storyTerm(story.key, trade.ticker), kindHint: "event", tickersHint: [trade.ticker], observation: null, trigger: storyTrigger(story, et.date, trade.role), context }, deps);
-      report.researched.push(r.outcome === "card" ? { term: storyTerm(story.key, trade.ticker), outcome: `card: ${r.card.status}`, cardId: r.card.id } : { term: storyTerm(story.key, trade.ticker), outcome: r.outcome, reason: r.reason });
+      const stages = story.history?.length ? `\nEarlier stages:\n${story.history.map((e) => `- ${e.date} (stage ${e.stage}): ${e.summary}`).join("\n")}${story.stage ? `\nToday is stage ${story.stage}: ${story.escalation.slice(0, 6).join(", ")}.` : ""}` : "";
+      const context = `Story: ${t.summary}${stages}\nProposed trade (${trade.role}): ${trade.direction} ${trade.ticker}, horizon ${trade.horizon_days} days.\nThesis: ${trade.thesis}\nWhy the market may still misprice it: ${trade.why_not_priced}\nInvalidation: ${trade.invalidation}\nHeadlines:\n${story.headlines.map((h) => `- [${h.source}] ${h.headline}`).join("\n")}`;
+      const r = await researchCandidate({ origin: "scout", term: storyTerm(termKey, trade.ticker), kindHint: "event", tickersHint: [trade.ticker], observation: null, trigger: storyTrigger(story, et.date, trade.role), context }, deps);
+      report.researched.push(r.outcome === "card" ? { term: storyTerm(termKey, trade.ticker), outcome: `card: ${r.card.status}`, cardId: r.card.id } : { term: storyTerm(termKey, trade.ticker), outcome: r.outcome, reason: r.reason });
       if (r.outcome === "capped") {
         report.error = r.reason;
         return report;
@@ -309,6 +353,14 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
     }
   }
   return report;
+}
+
+/** Attach the desk's earlier reads of this story (last 30 days, before today); a stage number when an institution is acting today. */
+export function attachHistory(s: Story, events: Array<{ etDate: string; key: string; stage: number; summary: string }>, today: string): void {
+  const prior = events.filter((e) => e.key === s.key && e.etDate < today).sort((a, b) => a.etDate.localeCompare(b.etDate));
+  if (!prior.length) return;
+  s.history = prior.map((e) => ({ date: e.etDate, stage: e.stage, summary: e.summary }));
+  if (s.escalationHits > 0) s.stage = Math.max(...prior.map((e) => e.stage)) + 1;
 }
 
 function storyTrigger(s: Story, date: string, role?: string): Signal[] {

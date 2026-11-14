@@ -28,11 +28,15 @@ export function playerOf(origin: "scout" | "human", term: string | undefined): P
   return "you";
 }
 
-export interface Round extends IdeaResult { player: Player; points: number | null; win: boolean | null; confidence: number | null; calibrated: boolean }
+export interface Round extends IdeaResult {
+  player: Player; points: number | null; win: boolean | null; confidence: number | null; calibrated: boolean;
+  /** The same stake measured against the card's sector fund: was it the company, or just its industry? */
+  sectorPoints: number | null;
+}
 
 export function toRound(i: IdeaResult, player: Player, confidence: number | null, calibrated: boolean): Round {
   const points = i.excess === null ? null : Math.round(i.excess * STAKE);
-  return { ...i, player, points, win: i.excess === null ? null : i.excess > 0, confidence, calibrated };
+  return { ...i, player, points, win: i.excess === null ? null : i.excess > 0, confidence, calibrated, sectorPoints: i.excessSector === null ? null : Math.round(i.excessSector * STAKE) };
 }
 
 /** P(at least `wins` heads in `n` fair coin flips): how often pure luck does this well. */
@@ -49,7 +53,7 @@ export function coinTail(wins: number, n: number): number {
 
 export interface Standing {
   player: Player; calls: number; closed: number; open: number; wins: number; hitRate: number | null;
-  banked: number; inPlay: number; best: Round | null; worst: Round | null;
+  banked: number; inPlay: number; bankedVsSector: number; best: Round | null; worst: Round | null;
   brier: number | null; brierN: number; luck: number | null;
 }
 
@@ -72,6 +76,7 @@ export function standings(rounds: Round[]): Standing[] {
       player, calls: mine.length, closed: closed.length, open: open.length, wins,
       hitRate: closed.length ? wins / closed.length : null,
       banked: closed.reduce((a, r) => a + r.points!, 0), inPlay: open.reduce((a, r) => a + r.points!, 0),
+      bankedVsSector: closed.reduce((a, r) => a + (r.sectorPoints ?? 0), 0),
       best: byPts[0] ?? null, worst: byPts.length > 1 ? byPts[byPts.length - 1] : null,
       brier: b.score, brierN: b.n, luck: closed.length ? coinTail(wins, closed.length) : null,
     };

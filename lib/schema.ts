@@ -174,6 +174,20 @@ CREATE TABLE IF NOT EXISTS catalyst_reviews (
 );
 CREATE OR REPLACE TRIGGER catalyst_reviews_ro BEFORE UPDATE OR DELETE ON catalyst_reviews FOR EACH ROW EXECUTE FUNCTION forbid_change();
 
+-- Story timeline: one row per story key per day the desk read it (stage 1, 2, ...). Append-only.
+CREATE TABLE IF NOT EXISTS story_events (
+  id bigserial PRIMARY KEY,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  et_date date NOT NULL,
+  key text NOT NULL,
+  symbols text[] NOT NULL DEFAULT '{}',
+  stage int NOT NULL,
+  summary text NOT NULL,
+  escalation text[] NOT NULL DEFAULT '{}',
+  UNIQUE (key, et_date)
+);
+CREATE OR REPLACE TRIGGER story_events_ro BEFORE UPDATE OR DELETE ON story_events FOR EACH ROW EXECUTE FUNCTION forbid_change();
+
 -- Phone pushes already sent, so each card, review or failure is pushed once.
 CREATE TABLE IF NOT EXISTS notifications (
   key text PRIMARY KEY,

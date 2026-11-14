@@ -38,6 +38,11 @@ export default async function SettingsPage() {
                 const st = x?.status ?? (s.configured(process.env) ? "not checked yet" : "missing");
                 return <tr key={s.id}><td>{s.label}</td><td><span className={`tag ${st.split(" ")[0]}`}>{st}</span></td><td className="small secondary">{s.about}</td><td className="small">{x ? toEt(new Date(x.checkedAt)).date : "—"}</td><td className="small muted">{x?.detail ?? ""}</td></tr>;
               })}
+              {(() => {
+                const x = h.get("options");
+                const st = x?.status ?? "not checked yet";
+                return <tr key="options"><td>Options pricing (Alpaca)</td><td><span className={`tag ${st.split(" ")[0]}`}>{st}</span></td><td className="small secondary">For the "how to trade it" note only: at-the-money implied volatility 20–60 days out vs the stock&apos;s 20-day realized volatility. Indicative, 15-minute-delayed feed; not evidence, never tracked.</td><td className="small">{x ? toEt(new Date(x.checkedAt)).date : "—"}</td><td className="small muted">{x?.detail ?? ""}</td></tr>;
+              })()}
             </tbody>
           </table>
         </div>

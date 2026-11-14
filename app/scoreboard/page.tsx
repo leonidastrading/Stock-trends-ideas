@@ -54,12 +54,13 @@ export default async function ScoreboardPage() {
         <h2>Leaderboard</h2>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Player</th><th className="num">Banked</th><th className="num">In play</th><th className="num">Rounds won</th><th className="num">Hit rate</th><th>Luck check</th><th>Best · worst</th><th className="num">Calibration (Brier)</th></tr></thead>
+            <thead><tr><th>Player</th><th className="num">Banked</th><th className="num">vs sector</th><th className="num">In play</th><th className="num">Rounds won</th><th className="num">Hit rate</th><th>Luck check</th><th>Best · worst</th><th className="num">Calibration (Brier)</th></tr></thead>
             <tbody>
               {table.filter((s) => s.calls > 0).map((s, i) => (
                 <tr key={s.player}>
                   <td>{i === 0 && s.banked > 0 ? "🏆 " : ""}<b>{PLAYER_LABEL[s.player]}</b><div className="small muted">{s.calls} calls · {s.closed} closed · {s.open} open</div></td>
                   <td className={`num ${cls(s.banked)}`}><b>{pts(s.banked)}</b></td>
+                  <td className={`num ${cls(s.bankedVsSector)}`}>{s.closed ? pts(s.bankedVsSector) : "—"}</td>
                   <td className={`num ${cls(s.inPlay)}`}>{pts(s.inPlay)}</td>
                   <td className="num">{s.closed ? `${s.wins} / ${s.closed}` : "—"}</td>
                   <td className="num">{pc(s.hitRate)}</td>
@@ -68,11 +69,11 @@ export default async function ScoreboardPage() {
                   <td className="num">{s.brier === null ? "—" : s.brier.toFixed(3)}<div className="small muted">{s.brierN ? `${s.brierN} rated` : ""}</div></td>
                 </tr>
               ))}
-              {!table.some((s) => s.calls > 0) && <tr><td colSpan={8} className="muted">No tracked calls yet. A call enters at the next open after its card, once the after-close job has run.</td></tr>}
+              {!table.some((s) => s.calls > 0) && <tr><td colSpan={9} className="muted">No tracked calls yet. A call enters at the next open after its card, once the after-close job has run.</td></tr>}
             </tbody>
           </table>
         </div>
-        <p className="small secondary">Hit rate = closed calls that beat SPY. The luck check asks how often flipping a coin for each call would win at least as many rounds; under 5% starts to look like skill, and it needs at least 10 rounds to say anything. Brier: 0 is perfect, 0.25 is what you get by always saying 50%, higher is worse than that.</p>
+        <p className="small secondary">"vs sector" is the same stake measured against each call&apos;s sector fund: points there mean the company moved, not just its industry (NVDA down while AMD rose). Hit rate = closed calls that beat SPY. The luck check asks how often flipping a coin for each call would win at least as many rounds; under 5% starts to look like skill, and it needs at least 10 rounds to say anything. Brier: 0 is perfect, 0.25 is what you get by always saying 50%, higher is worse than that.</p>
       </section>
 
       <section className="card">
@@ -120,7 +121,7 @@ export default async function ScoreboardPage() {
         <h2>Recent rounds</h2>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Closed</th><th>Player</th><th>Call</th><th className="num">Points</th><th>What happened</th></tr></thead>
+            <thead><tr><th>Closed</th><th>Player</th><th>Call</th><th className="num">Points</th><th className="num">vs sector</th><th>What happened</th></tr></thead>
             <tbody>
               {recent.map((r) => {
                 const rv = reviews.get(r.cardId);
@@ -130,11 +131,12 @@ export default async function ScoreboardPage() {
                     <td className="small">{PLAYER_LABEL[r.player]}</td>
                     <td><Call r={r} /> <span className="small secondary">{cardById.get(r.cardId)?.title}</span>{r.confidence !== null && r.calibrated && <span className="small muted"> · said {r.confidence}%</span>}</td>
                     <td className={`num ${cls(r.points)}`}><b>{pts(r.points)}</b></td>
+                    <td className={`num ${cls(r.sectorPoints)}`}>{pts(r.sectorPoints)}</td>
                     <td className="small">{rv ? <><span className="tag">{VERDICT[rv.verdict] ?? rv.verdict}</span> {rv.summary}</> : <span className="muted">no post-catalyst check</span>}</td>
                   </tr>
                 );
               })}
-              {recent.length === 0 && <tr><td colSpan={5} className="muted">No closed rounds yet.</td></tr>}
+              {recent.length === 0 && <tr><td colSpan={6} className="muted">No closed rounds yet.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -144,12 +146,12 @@ export default async function ScoreboardPage() {
         <h2>In play</h2>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Since</th><th>Player</th><th>Call</th><th className="num">Points now</th></tr></thead>
+            <thead><tr><th>Since</th><th>Player</th><th>Call</th><th className="num">Points now</th><th className="num">vs sector</th></tr></thead>
             <tbody>
               {inPlay.map((r) => (
-                <tr key={r.cardId}><td className="small">{r.entryDate}</td><td className="small">{PLAYER_LABEL[r.player]}</td><td><Call r={r} /> <span className="small secondary">{cardById.get(r.cardId)?.title}</span></td><td className={`num ${cls(r.points)}`}>{pts(r.points)}</td></tr>
+                <tr key={r.cardId}><td className="small">{r.entryDate}</td><td className="small">{PLAYER_LABEL[r.player]}</td><td><Call r={r} /> <span className="small secondary">{cardById.get(r.cardId)?.title}</span></td><td className={`num ${cls(r.points)}`}>{pts(r.points)}</td><td className={`num ${cls(r.sectorPoints)}`}>{pts(r.sectorPoints)}</td></tr>
               ))}
-              {inPlay.length === 0 && <tr><td colSpan={4} className="muted">Nothing open.</td></tr>}
+              {inPlay.length === 0 && <tr><td colSpan={5} className="muted">Nothing open.</td></tr>}
             </tbody>
           </table>
         </div>

@@ -1,7 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { MarketData, NewsItem } from "@/lib/alpaca";
-import { setQuerierForTests } from "@/lib/db";
+import { query, setQuerierForTests } from "@/lib/db";
 import type { CallModel } from "@/lib/scout/llm";
 import { buildStoryPrompt, detectStories, parseStoryTriage, runStories, STORY_JSON_SCHEMA, storyTerm } from "@/lib/scout/stories";
 import * as store from "@/lib/scout/store";
@@ -91,6 +91,41 @@ describe("story desk end to end", () => {
     const again = await runStories(deps);
     expect(again.error).toMatch(/researched in the last 3 days/);
     expect(purposes).toHaveLength(3);
+  });
+
+  it("an institution acting the next day is stage 2: read at once despite the cooldown, with the earlier stage and an options read", async () => {
+    const events = await store.storyEventsSince("2026-11-01");
+    expect(events.map((e) => [e.key, e.etDate, e.stage])).toEqual([["UNH", "2026-11-13", 1]]);
+    await expect(query(`UPDATE story_events SET summary = 'x'`)).rejects.toThrow(); // append-only
+
+    const next = [n("Three House committees ask UnitedHealth for a briefing on claim denials", ["UNH"]), n("Senators press UnitedHealth after CEO killing", ["UNH"])];
+    const prompts: string[] = [];
+    const data: MarketData = {
+      getNews: async (symbols) => (symbols.length ? [] : next),
+      getDailyBars: async (symbols) => symbols.flatMap((symbol) => Array.from({ length: 25 }, (_, i) => ({ symbol, date: `2026-10-${String(i + 1).padStart(2, "0")}`, o: 100, h: 101, l: 99, c: 100 + (i % 2), v: 1 }))),
+      getCalendar: async () => [],
+      getOptionSnapshots: async () => ({ UNH261218C00100000: { impliedVolatility: 0.45 }, UNH261218C00101000: { impliedVolatility: 0.47 } }),
+    };
+    const callModel: CallModel = async ({ purpose, user }) => {
+      prompts.push(`${purpose}: ${user}`);
+      if (purpose === "stories") return { text: JSON.stringify({ stories: [{ key: "UNH", summary: "Congress now involved: briefing requested", skip: false, skip_reason: "", trades: [{ ticker: "UNH", direction: "short", role: "reaction", horizon_days: 30, thesis: "hearings ahead", why_not_priced: "process just started", invalidation: "briefing goes nowhere" }] }] }), stopReason: "end_turn", modelServed: "m", usage: { input_tokens: 10, output_tokens: 10 }, costUsd: 0.01 };
+      const t = sampleCard().tickers[0];
+      return { text: JSON.stringify(sampleCard({ kind: "event", direction: "short", tickers: [{ ...t, symbol: "UNH", sector: "health_care" }] })), stopReason: "end_turn", modelServed: "m", usage: { input_tokens: 10, output_tokens: 10 }, costUsd: 0.02 };
+    };
+    const deps = { data, sources: [], callModel, now: new Date("2026-11-14T15:00:00Z"), env: {} as NodeJS.ProcessEnv };
+    const r = await runStories(deps);
+    expect(r.detected).toEqual([expect.objectContaining({ key: "UNH", stage: 2 })]);
+    expect(prompts[0]).toMatch(/Stage 2 of a story first seen 2026-11-13/);
+    expect(prompts[0]).toMatch(/earlier, 2026-11-13 \(stage 1\): CEO killed; policy scrutiny likely/);
+    expect(r.researched).toEqual([expect.objectContaining({ term: "story: UNH (stage 2) → UNH", outcome: expect.stringMatching(/^card: /) })]);
+    expect(prompts[1]).toMatch(/Earlier stages:\n- 2026-11-13 \(stage 1\)/);
+    expect(prompts[1]).toMatch(/Options pricing .*implied volatility 46%/);
+    expect((await store.allHealth()).find((h) => h.source === "options")?.status).toBe("ok");
+    expect((await store.storyEventsSince("2026-11-01")).map((e) => e.stage)).toEqual([1, 2]);
+
+    const same = await runStories(deps);
+    expect(same.researched).toEqual([]); // stage read once a day
+    expect(prompts.filter((p) => p.startsWith("stories:"))).toHaveLength(1);
   });
 });
 

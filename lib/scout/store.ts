@@ -421,3 +421,19 @@ export async function claimEmail(key: string, subject: string): Promise<boolean>
 export async function releaseEmail(key: string): Promise<void> {
   await q(`DELETE FROM emails_sent WHERE key = $1`, [key]);
 }
+
+// ------------------------------------------------------------ story timeline
+
+export interface StoryEvent { id: number; createdAt: string; etDate: string; key: string; symbols: string[]; stage: number; summary: string; escalation: string[] }
+
+const toStoryEvent = (r: Row): StoryEvent => ({ id: Number(r.id), createdAt: iso(r.created_at)!, etDate: dstr(r.et_date)!, key: r.key, symbols: r.symbols ?? [], stage: Number(r.stage), summary: r.summary, escalation: r.escalation ?? [] });
+
+/** Story stages read since `from` (ET date), oldest first. */
+export async function storyEventsSince(from: string): Promise<StoryEvent[]> {
+  return (await q(`SELECT * FROM story_events WHERE et_date >= $1 ORDER BY et_date, id`, [from])).map(toStoryEvent);
+}
+
+/** Record that the desk read a story today; once per key per day (later reads the same day are ignored). */
+export async function addStoryEvent(e: { etDate: string; key: string; symbols: string[]; stage: number; summary: string; escalation: string[] }): Promise<void> {
+  await q(`INSERT INTO story_events (et_date, key, symbols, stage, summary, escalation) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (key, et_date) DO NOTHING`, [e.etDate, e.key, e.symbols, e.stage, e.summary, e.escalation]);
+}

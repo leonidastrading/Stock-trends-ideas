@@ -18,7 +18,8 @@ describe("scoreboard", () => {
   });
 
   it("points are dollars beaten vs SPY on a $1,000 stake", () => {
-    expect(toRound(idea(1, 0.032), "you", 70, true).points).toBe(32);
+    expect(toRound(idea(1, 0.032), "you", 70, true)).toMatchObject({ points: 32, sectorPoints: 32 });
+    expect(toRound({ ...idea(9, -0.18), excessSector: -0.21 }, "scout_story", 60, true).sectorPoints).toBe(-210); // NVDA down while AMD rose
     expect(toRound(idea(2, -0.05), "you", 70, true)).toMatchObject({ points: -50, win: false });
     expect(toRound(idea(3, null), "you", 70, true)).toMatchObject({ points: null, win: null });
   });
@@ -36,7 +37,7 @@ describe("scoreboard", () => {
       toRound(idea(4, 0.01), "scout_trend", 55, true),
     ];
     const s = standings(rounds);
-    expect(s[0]).toMatchObject({ player: "you", banked: 30, inPlay: 100, wins: 1, closed: 2, open: 1, hitRate: 0.5 });
+    expect(s[0]).toMatchObject({ player: "you", banked: 30, bankedVsSector: 30, inPlay: 100, wins: 1, closed: 2, open: 1, hitRate: 0.5 });
     expect(s[0].best?.cardId).toBe(1);
     expect(s[0].worst?.cardId).toBe(2);
     expect(s[1]).toMatchObject({ player: "scout_trend", banked: 10, worst: null });
