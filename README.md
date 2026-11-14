@@ -17,7 +17,7 @@ Swing ideas app. Two Vercel cron jobs drive it:
 
 | When (ET, weekdays) | Job | What happens |
 |---|---|---|
-| 06:30 | `GET /api/cron/daily` | **Scan.** Measure every active watch-list term on every source, store the measurements as the scout's own 12-month history, flag terms that accelerate, research the strongest few (one model call each) and log a card for each. On Mondays, email the weekly digest. |
+| 12:30 | `GET /api/cron/daily` | **Scan.** Measure every active watch-list term on every source, store the measurements as the scout's own 12-month history, flag terms that accelerate, research the strongest few (one model call each) and log a card for each. On Mondays, email the weekly digest. |
 | 17:30 | `GET /api/cron/track` | **Track.** Ingest daily bars (tracked stocks, SPY, the sector funds and the baseline universe), enter pending tracks at the next open, exit tracks whose rule is due, update drawdowns. |
 
 Both check `Authorization: Bearer $CRON_SECRET`. Calling them more often is harmless (the scan is idempotent for a day's
@@ -61,7 +61,7 @@ regulator's move, an indictment, a recall, a pivot, a guidance cut. `lib/scout/s
   proposed trade as context. Most story cards are logged **late**, since the story is everywhere by definition, and
   they are tracked on paper like any other. The Scoring page's "promoted versus late" table is where this style gets
   its verdict against SPY.
-- A story's trades are researched once per 3 days. The desk runs inside the morning scan, from "Scan stories now" on
+- A story's trades are researched once per 3 days. The desk runs inside the midday scan, from "Scan stories now" on
   Settings, and from `GET /api/cron/stories` (bearer `CRON_SECRET`), which is safe to call hourly: on the Hobby plan
   Vercel cron is daily only, so for intraday stories add a cron-job.org job every hour, 09:00–17:00 ET, with the
   header `Authorization: Bearer <CRON_SECRET>` (and `x-vercel-protection-bypass` if the deployment is protected).
@@ -183,7 +183,7 @@ the day and the candidates page says so. Each source has a per-host rate limit a
    (that app's dashboard login), `SWING_API_BYPASS` if its deployment is protected, `SWING_NOTIONAL` (default $5,000).
    Without these the Send button is disabled and says why. **Settings → Test the Swing login** reads that app's home
    page with these values and says which gate (its login, or Vercel's protection) refused.
-4. `vercel.json` schedules the two cron jobs (11:30 and 22:30 UTC, Mon–Fri; the daily cadence works on the Hobby plan).
+4. `vercel.json` schedules the two cron jobs (17:30 and 22:30 UTC, Mon–Fri; midday so the EDGAR relay on a home computer is awake; the daily cadence works on the Hobby plan).
    The routes convert to America/New_York themselves, so DST only shifts them by an hour.
 5. **Phone alerts** (optional, [ntfy](https://ntfy.sh)): set `NTFY_TOPIC` to a long random name, install the ntfy app and
    subscribe to that topic. You get a push for each new promoted scout card and story trade, for each post-catalyst

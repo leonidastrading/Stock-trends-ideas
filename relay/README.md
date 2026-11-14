@@ -19,7 +19,7 @@ bash relay/mac-setup.sh
 It installs the relay as a login service on port 8787 (token in `~/.edgar-relay/token`, readable only by you), checks
 that the SEC answers through it, then prints the three remaining steps: expose it with Tailscale Funnel (free, and the
 address does not change when the Mac restarts, unlike a Cloudflare quick tunnel), paste the address and token into
-Vercel, and keep the Mac awake around 6:30 am ET. If the Mac is asleep the scan carries on with the per-ticker
+Vercel, and have the Mac on and awake around 12:30 pm ET (the daily scan). If the Mac is asleep the scan carries on with the per-ticker
 data.sec.gov signals and the Settings page shows the full-text search as failing for that day.
 
 ## Deploy on Railway

@@ -73,7 +73,7 @@ export default async function SettingsPage() {
       <section className="card">
         <h2>Recent runs</h2>
         <div className="table-wrap"><table><thead><tr><th>Started</th><th>Job</th><th>Status</th><th>Detail</th></tr></thead>
-          <tbody>{runs.map((r) => <tr key={r.id}><td className="small">{r.startedAt.replace("T", " ").slice(0, 16)}Z</td><td>{r.action}</td><td><span className={`tag ${r.status === "ok" ? "ok" : r.status === "error" ? "error" : "capped"}`}>{r.status}</span></td><td className="small muted">{r.error ?? summarize(r.detail)}</td></tr>)}{runs.length === 0 && <tr><td colSpan={4} className="muted">No runs yet. Vercel cron calls /api/cron/daily on weekday mornings and /api/cron/track after the close.</td></tr>}</tbody></table></div>
+          <tbody>{runs.map((r) => <tr key={r.id}><td className="small">{r.startedAt.replace("T", " ").slice(0, 16)}Z</td><td>{r.action}</td><td><span className={`tag ${r.status === "ok" ? "ok" : r.status === "error" ? "error" : "capped"}`}>{r.status}</span></td><td className="small muted">{r.error ?? summarize(r.detail)}</td></tr>)}{runs.length === 0 && <tr><td colSpan={4} className="muted">No runs yet. Vercel cron calls /api/cron/daily at midday on weekdays and /api/cron/track after the close.</td></tr>}</tbody></table></div>
       </section>
     </>
   );

@@ -79,7 +79,7 @@ Next:
        EDGAR_PROXY_URL   = the https address from step 1
        EDGAR_PROXY_TOKEN = the token printed by:  cat $DIR/token
      then redeploy.
-  3. Keep the Mac awake around 6:30 am ET on weekdays (System Settings -> Battery/Energy ->
-     "Prevent automatic sleeping when the display is off" while on power).
+  3. Have the Mac on and awake around 12:30 pm ET on weekdays, when the daily scan runs
+     (System Settings -> Battery/Energy -> "Prevent automatic sleeping when the display is off" while on power).
 To stop:  launchctl bootout gui/\$(id -u)/$LABEL
 NEXT

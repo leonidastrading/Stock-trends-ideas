@@ -25,7 +25,7 @@ export default function RunButtons() {
       <button disabled={!!busy} onClick={() => run("track")}>{busy === "track" ? "Tracking…" : "Run the tracker now"}</button>
       <button disabled={!!busy} onClick={() => run("push-test")}>{busy === "push-test" ? "Sending…" : "Send a test to my phone"}</button>
       <button disabled={!!busy} onClick={() => run("swing-test")}>{busy === "swing-test" ? "Checking…" : "Test the Swing login"}</button>
-      <span className="small secondary">The same jobs the cron runs on weekday mornings and after the close.</span>
+      <span className="small secondary">The same jobs the cron runs at midday on weekdays and after the close.</span>
       {msg && <div className="small" style={{ width: "100%" }}>{msg}</div>}
     </div>
   );
