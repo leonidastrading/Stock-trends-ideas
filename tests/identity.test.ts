@@ -105,3 +105,23 @@ describe("excluding a track that followed the wrong security (PGlite)", () => {
     expect((await store.trackEvents()).filter((e) => e.kind === "excluded")).toHaveLength(1); // once
   });
 });
+
+describe("Alpaca reference host: paper keys on the live host", () => {
+  it("a 401 from the live trading host falls back to the paper host, and stays there", async () => {
+    const { AlpacaClient } = await import("@/lib/alpaca");
+    const hosts: string[] = [];
+    const fake = (async (url: string) => {
+      hosts.push(new URL(url).host);
+      if (url.startsWith("https://api.alpaca.markets")) return new Response(JSON.stringify({ code: 40110000, message: "request is not authorized" }), { status: 401 });
+      if (url.includes("/v2/assets/TSLA")) return new Response(JSON.stringify({ symbol: "TSLA", name: "Tesla, Inc. Common Stock", exchange: "NASDAQ", status: "active", tradable: true }));
+      if (url.includes("/v2/assets/ZZZZ")) return new Response(JSON.stringify({ code: 40410000, message: "asset not found" }), { status: 404 });
+      return new Response("?", { status: 500 });
+    }) as unknown as typeof fetch;
+    const c = new AlpacaClient({ creds: { keyId: "k", secretKey: "s" }, fetchImpl: fake, maxRetries: 0 });
+    expect(await c.getAsset("TSLA")).toEqual({ symbol: "TSLA", name: "Tesla, Inc. Common Stock", exchange: "NASDAQ", active: true, tradable: true });
+    expect(hosts).toEqual(["api.alpaca.markets", "paper-api.alpaca.markets"]);
+    expect(await c.getAsset("ZZZZ")).toBeNull();
+    expect(hosts.at(-1)).toBe("paper-api.alpaca.markets"); // remembered: no second try on the live host
+    expect(hosts.filter((h) => h === "api.alpaca.markets")).toHaveLength(1);
+  });
+});

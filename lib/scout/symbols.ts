@@ -39,7 +39,14 @@ export async function refreshSymbolInfo(data: MarketData | null, env: NodeJS.Pro
       break;
     }
     try {
-      const asset = data?.getAsset ? await data.getAsset(symbol) : undefined;
+      // A failed name lookup must not lose the earnings dates: keep going without the name.
+      const failure: { msg: string | null } = { msg: null };
+      const asset = data?.getAsset ? await data.getAsset(symbol).catch((err) => { failure.msg = err instanceof Error ? err.message : String(err); return undefined; }) : undefined;
+      const assetErr = failure.msg;
+      if (assetErr) {
+        out.errors.push(`${symbol}: ${assetErr.slice(0, 100)}`);
+        console.warn(`symbol info ${symbol}: ${assetErr}`);
+      }
       const dates = ua ? await fetchEarningsDates(symbol, addDays(today, -460), ua, fetchImpl).catch(() => null) : null;
       const e = dates ? estimateNextEarnings(dates, today) : { last: null, next: null, basis: null };
       if (dates?.length) await store.addEarningsDates(symbol, dates);

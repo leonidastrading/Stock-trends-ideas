@@ -69,7 +69,7 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export class AlpacaClient {
   private readonly fetchImpl: typeof fetch;
-  private readonly referenceHost: string;
+  private referenceHost: string;
   private lastRequestAt = 0;
 
   constructor(private readonly opts: { creds: AlpacaCreds; referenceHost?: string; fetchImpl?: typeof fetch; maxRetries?: number }) {
@@ -103,6 +103,23 @@ export class AlpacaClient {
         continue;
       }
       throw new AlpacaError(`Alpaca ${res.status} on ${path}: ${body.slice(0, 200)}`, res.status);
+    }
+  }
+
+  /**
+   * Reference data (calendar, asset metadata) lives on the trading host, and paper keys only work on the
+   * paper host (live keys only on the live one). If the configured host refuses the keys, try the other
+   * once and keep using whichever answered.
+   */
+  private async refGet<T>(path: string, params: Record<string, string | number | boolean | undefined>): Promise<T> {
+    try {
+      return await this.get<T>(this.referenceHost, path, params);
+    } catch (err) {
+      if (!(err instanceof AlpacaError && (err.status === 401 || err.status === 403))) throw err;
+      const other = this.referenceHost === PAPER_TRADING_HOST ? TRADING_HOST : PAPER_TRADING_HOST;
+      const r = await this.get<T>(other, path, params);
+      this.referenceHost = other;
+      return r;
     }
   }
 
@@ -158,7 +175,7 @@ export class AlpacaClient {
   /** What a symbol currently is: issuer name, exchange, whether it trades. Null when the symbol is unknown. */
   async getAsset(symbol: string): Promise<Asset | null> {
     try {
-      const a = await this.get<{ symbol: string; name?: string; exchange?: string; status?: string; tradable?: boolean; class?: string }>(this.referenceHost, `/v2/assets/${encodeURIComponent(symbol)}`, {});
+      const a = await this.refGet<{ symbol: string; name?: string; exchange?: string; status?: string; tradable?: boolean; class?: string }>(`/v2/assets/${encodeURIComponent(symbol)}`, {});
       return { symbol: a.symbol, name: a.name ?? "", exchange: a.exchange ?? "", active: a.status === "active", tradable: !!a.tradable };
     } catch (err) {
       if (err instanceof AlpacaError && (err.status === 404 || err.status === 422)) return null;
@@ -167,7 +184,7 @@ export class AlpacaClient {
   }
 
   async getCalendar(start: string, end: string): Promise<Session[]> {
-    return parseCalendar(await this.get(this.referenceHost, "/v2/calendar", { start, end }));
+    return parseCalendar(await this.refGet("/v2/calendar", { start, end }));
   }
 }
 
