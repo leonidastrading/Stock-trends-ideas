@@ -1,6 +1,8 @@
 import { KIND_LABEL, type Kind } from "@/config/scout";
 import Direction from "@/components/Direction";
 import Feedback from "@/components/Feedback";
+import { after } from "next/server";
+import { marketDataFromEnv } from "@/lib/alpaca";
 import { hasDatabase } from "@/lib/db";
 import { namesMatch, notCommon } from "@/lib/scout/identity";
 import * as store from "@/lib/scout/store";
@@ -17,6 +19,10 @@ const VERDICT: Record<string, [string, string]> = { played_out: ["✓ played out
 export default async function CardView({ c, track, actions, feedback, opposing, review }: { c: StoredCard; track?: Track | null; actions?: React.ReactNode; feedback?: FeedbackRow | null; opposing?: number[]; review?: StoredReview | null }) {
   const k = c.card;
   const info = hasDatabase() ? (await store.symbolInfo([c.primaryTicker]).catch(() => new Map())).get(c.primaryTicker) ?? null : null;
+  // Not looked up yet (an older card): fetch name and earnings after this response, so the next view has them.
+  if (hasDatabase() && !info) {
+    after(() => import("@/lib/scout/symbols").then(({ refreshSymbolInfo }) => refreshSymbolInfo(marketDataFromEnv(), process.env, [c.primaryTicker], new Date())).catch(() => undefined));
+  }
   const company = k.tickers.find((t) => t.symbol === c.primaryTicker)?.company ?? null;
   // Warn when the symbol trades as something other than the company's stock (a reused ticker).
   const wrong = !!info?.name && (info.tradable === false || !!notCommon(info.name) || (!!company && !namesMatch(company, info.name)));
@@ -33,14 +39,15 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
           <span className="small muted" title={`card #${c.id} · ${c.model} · version ${c.versionId}`}>{fmtEt(c.createdAt)}</span>
         </div>
         {track?.excluded && <div className="small neg" style={{ marginTop: 6 }}><b>Excluded from scoring: wrong security.</b> {track.excluded}</div>}
-        <div style={{ margin: "8px 0 4px" }}><Direction direction={c.direction} ticker={c.primaryTicker} name={info?.name ?? company} warn={wrong} />
+        <div style={{ margin: "8px 0 4px" }}><Direction direction={c.direction} ticker={c.primaryTicker} name={info?.name ?? company ?? "company name loading — reload in a moment"} warn={wrong} />
           {opposing?.length ? <span className="tag warn" style={{ marginLeft: 8 }}>⚠ opposite call on {c.primaryTicker}: {opposing.map((id) => <a key={id} href={`/candidates?days=90#card-${id}`}>#{id} </a>)}</span> : null}</div>
-        {(nextE || info?.lastEarnings) && (
-          <div className="small secondary">
-            {nextE ? <>Next earnings <b>~{fmtDay(nextE)}</b> <span className="muted">({info!.nextBasis})</span></> : <>Last earnings {fmtDay(info!.lastEarnings!)}</>}
-            {beforeExit ? <span className="tag warn" style={{ marginLeft: 6 }}>before this card&apos;s exit ({fmtDay(track!.deadlineDate)})</span> : null}
-          </div>
-        )}
+        <div className="small secondary">
+          {nextE ? <>Next earnings <b>~{fmtDay(nextE)}</b> <span className="muted">({info!.nextBasis})</span></>
+            : info?.lastEarnings ? <>Next earnings: not enough history to estimate <span className="muted">(last release {fmtDay(info.lastEarnings)})</span></>
+            : info ? <>Next earnings: unknown <span className="muted">(no earnings releases on file at the SEC — a fund, an ADR or a new listing)</span></>
+            : <>Next earnings: loading — reload in a moment</>}
+          {beforeExit ? <span className="tag warn" style={{ marginLeft: 6 }}>before this card&apos;s exit ({fmtDay(track!.deadlineDate)})</span> : null}
+        </div>
         <h2 style={{ margin: "6px 0 2px" }}>{k.title}</h2>
         <div className="scores">
           <span>novelty <b>{k.scores.novelty}</b></span><span>materiality <b>{k.scores.materiality}</b></span><span>breadth <b>{k.scores.breadth_of_evidence}</b></span>
