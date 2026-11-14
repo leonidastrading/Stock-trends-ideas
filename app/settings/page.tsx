@@ -15,7 +15,7 @@ export const runtime = "nodejs";
 export default async function SettingsPage() {
   const env = envStatus();
   if (!hasDatabase()) return <SetupNotice />;
-  const [settings, health, spend, runs, versions, feedback] = await Promise.all([store.loadSettings(), store.allHealth(), store.spendByDay(30), store.recentRuns(15), store.listVersions(), store.recentFeedback(30)]);
+  const [settings, health, spend, runs, versions, feedback] = await Promise.all([store.loadSettings(), store.allHealth(), store.spendByDay(30), store.recentRuns(60), store.listVersions(), store.recentFeedback(30)]);
   const h = new Map(health.map((x) => [x.source, x]));
   const sources = allSources(marketDataFromEnv());
   const today = toEt(new Date()).date;
@@ -78,10 +78,23 @@ export default async function SettingsPage() {
       <section className="card">
         <h2>Recent runs</h2>
         <div className="table-wrap"><table><thead><tr><th>Started</th><th>Job</th><th>Status</th><th>Detail</th></tr></thead>
-          <tbody>{runs.map((r) => <tr key={r.id}><td className="small">{r.startedAt.replace("T", " ").slice(0, 16)}Z</td><td>{r.action}</td><td><span className={`tag ${r.status === "ok" ? "ok" : r.status === "error" ? "error" : "capped"}`}>{r.status}</span></td><td className="small muted">{r.error ?? summarize(r.detail)}</td></tr>)}{runs.length === 0 && <tr><td colSpan={4} className="muted">No runs yet. Vercel cron calls /api/cron/daily at midday on weekdays and /api/cron/track after the close.</td></tr>}</tbody></table></div>
+          <tbody>{collapseRuns(runs).map(({ r, n, from }) => <tr key={r.id}><td className="small">{r.startedAt.replace("T", " ").slice(0, 16)}Z{n > 1 ? <div className="muted">back to {from.slice(11, 16)}Z</div> : null}</td><td>{r.action}{n > 1 ? <span className="small muted"> ×{n}</span> : null}</td><td><span className={`tag ${r.status === "ok" ? "ok" : r.status === "error" ? "error" : "capped"}`}>{r.status}</span></td><td className="small muted">{r.error ?? summarize(r.detail)}</td></tr>)}{runs.length === 0 && <tr><td colSpan={4} className="muted">No runs yet. Vercel cron calls /api/cron/daily at midday on weekdays and /api/cron/track after the close.</td></tr>}</tbody></table></div>
       </section>
     </>
   );
+}
+
+/** Consecutive runs of the same job with the same outcome read as one row ("stories ×12, skipped"). */
+function collapseRuns<T extends { id: number; action: string; status: string; startedAt: string; error: string | null; detail: unknown }>(runs: T[]): Array<{ r: T; n: number; from: string }> {
+  const out: Array<{ r: T; n: number; from: string }> = [];
+  for (const r of runs) {
+    const prev = out.at(-1);
+    if (prev && prev.r.action === r.action && prev.r.status === r.status && (prev.r.error ?? summarize(prev.r.detail)) === (r.error ?? summarize(r.detail))) {
+      prev.n++;
+      prev.from = r.startedAt;
+    } else out.push({ r, n: 1, from: r.startedAt });
+  }
+  return out;
 }
 
 function summarize(d: unknown): string {

@@ -102,7 +102,8 @@ regulator's move, an indictment, a recall, a pivot, a guidance cut. `lib/scout/s
   they are tracked on paper like any other. The Scoring page's "promoted versus late" table is where this style gets
   its verdict against SPY.
 - A story's trades are researched once per 3 days. The desk runs inside the midday scan, from "Scan stories now" on
-  Settings, and from `GET /api/cron/stories` (bearer `CRON_SECRET`), which is safe to call hourly: on the Hobby plan
+  Settings, and from `GET /api/cron/stories` (bearer `CRON_SECRET`), which is safe to call hourly (calls within 45 minutes
+  of the last scan are answered "throttled" and do nothing; `?force=1` overrides): on the Hobby plan
   Vercel cron is daily only, so for intraday stories add a cron-job.org job every hour, 09:00–17:00 ET, with the
   header `Authorization: Bearer <CRON_SECRET>` (and `x-vercel-protection-bypass` if the deployment is protected).
 - The **Stories** page shows the last detection, the desk's read and trades, and the story cards grouped by story,

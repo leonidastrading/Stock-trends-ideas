@@ -412,6 +412,12 @@ export async function recentRuns(limit = 20): Promise<Array<{ id: number; action
   return (await q(`SELECT * FROM runs ORDER BY id DESC LIMIT $1`, [limit])).map((r) => ({ id: Number(r.id), action: r.action, startedAt: iso(r.started_at)!, finishedAt: iso(r.finished_at), status: r.status, detail: r.detail, error: r.error }));
 }
 
+/** When a job last started, finished or not. */
+export async function lastStarted(action: string): Promise<string | null> {
+  const r = (await q(`SELECT started_at FROM runs WHERE action = $1 ORDER BY id DESC LIMIT 1`, [action]))[0];
+  return r ? iso(r.started_at) : null;
+}
+
 export async function lastRun(action: string): Promise<{ startedAt: string; status: string } | null> {
   const r = (await q(`SELECT started_at, status FROM runs WHERE action = $1 AND status <> 'running' ORDER BY id DESC LIMIT 1`, [action]))[0];
   return r ? { startedAt: iso(r.started_at)!, status: r.status } : null;
