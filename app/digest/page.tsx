@@ -50,7 +50,7 @@ export default async function DigestPage() {
       {top.length === 0 && <section className="card"><p className="muted">No promoted cards this week. The daily scan runs at midday on weekdays; see <a href="/candidates">Candidates</a> for what it considered.</p></section>}
       {top.map((c) => {
         const tr = t.get(c.id) ?? null;
-        return <CardView key={c.id} c={c} track={tr} feedback={fb.get(`card:${c.id}`) ?? null} opposing={opp.get(c.id)} review={reviews.get(c.id) ?? null} actions={<CardActions cardId={c.id} canSend sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} />} />;
+        return <CardView key={c.id} c={c} track={tr} feedback={fb.get(`card:${c.id}`) ?? null} opposing={opp.get(c.id)} review={reviews.get(c.id) ?? null} actions={<CardActions cardId={c.id} canSend sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} excluded={!!tr?.excluded} />} />;
       })}
       {late.length > 0 && (
         <>
@@ -58,7 +58,7 @@ export default async function DigestPage() {
           <p className="small secondary">Already up more than {SCOUT.lateStockMove30dPct}% in 30 days or past {SCOUT.lateNewsStories30d} mainstream stories. Tracked on paper so the lateness gate can be checked: if these do as well as the promoted cards, the gate is not helping.</p>
           {late.map((c) => {
             const tr = t.get(c.id) ?? null;
-            return <CardView key={c.id} c={c} track={tr} feedback={fb.get(`card:${c.id}`) ?? null} opposing={opp.get(c.id)} review={reviews.get(c.id) ?? null} actions={<CardActions cardId={c.id} canSend sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} />} />;
+            return <CardView key={c.id} c={c} track={tr} feedback={fb.get(`card:${c.id}`) ?? null} opposing={opp.get(c.id)} review={reviews.get(c.id) ?? null} actions={<CardActions cardId={c.id} canSend sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} excluded={!!tr?.excluded} />} />;
           })}
         </>
       )}

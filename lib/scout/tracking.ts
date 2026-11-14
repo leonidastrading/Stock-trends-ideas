@@ -87,6 +87,21 @@ export async function updateTracks(data: MarketData, now: Date): Promise<TrackRe
     report.barsWritten = await store.upsertBars(bars.filter((b) => b.date < et.date || toEt(now).minutes >= 16 * 60 + 15));
   }
 
+  // A reused ticker: an open track whose symbol now trades as a preferred, warrant or note (or not at all) is excluded.
+  if (data.getAsset) {
+    const { notCommon } = await import("./identity");
+    for (const t of tracks.filter((x) => !x.exitDate && !x.excluded)) {
+      const asset = await data.getAsset(t.symbol).catch(() => undefined);
+      if (asset === undefined) continue;
+      const nc = asset ? notCommon(asset.name) : null;
+      if (asset && asset.tradable && !nc) continue;
+      const why = asset ? `${t.symbol} now trades as "${asset.name}"${nc ? `, a ${nc} security` : ", not tradable"}, not the company the card is about` : `${t.symbol} is no longer a listed symbol`;
+      await store.addTrackEvent(t.cardId, "excluded", `automatic: ${why}`);
+      t.excluded = why;
+      report.notes.push(`card #${t.cardId} excluded: ${why}`);
+    }
+  }
+
   const open = tracks.filter((t) => !t.exitDate);
   if (!open.length) return report;
   const need = [...new Set(open.flatMap((t) => [t.symbol, "SPY", t.sectorEtf]))];

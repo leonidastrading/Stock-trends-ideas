@@ -17,6 +17,7 @@ export async function POST(_request: Request, ctx: { params: Promise<{ id: strin
   if (!card) return NextResponse.json({ ok: false, errors: ["no such card"] }, { status: 404 });
   if (card.status === "not_promoted") return NextResponse.json({ ok: false, errors: ["this card failed the materiality gate and is not tracked; it can't be sent"] }, { status: 422 });
   const track = await store.getTrack(id);
+  if (track?.excluded) return NextResponse.json({ ok: false, errors: [`this card's ticker is the wrong security: ${track.excluded}`] }, { status: 422 });
   if (track?.tappedAt) return NextResponse.json({ ok: false, errors: [`already sent on ${track.tappedAt.slice(0, 10)}`] }, { status: 409 });
   try {
     const r = await sendToSwing(card);

@@ -108,6 +108,10 @@ export async function researchCandidate(input: ResearchInput, deps: ResearchDeps
   }
   card = { ...card, origin: input.origin };
 
+  // Each ticker must still mean the company named (symbols get reused: SATS was EchoStar, now a Strive preferred).
+  const identity = await verifyTickers(card, deps);
+  card = identity.card;
+
   // Gates, with lateness measured by code for the ticker that will be tracked.
   const measured = await measureLateness(deps.data, card.tickers[0].symbol, deps.now);
   let gated;
@@ -117,6 +121,8 @@ export async function researchCandidate(input: ResearchInput, deps: ResearchDeps
     if (!(err instanceof NoEvidenceError)) throw err;
     return { outcome: "rejected", reason: err.message, candidate: await store.addCandidate({ ...base, outcome: "rejected", reason: err.message }) };
   }
+  if (identity.notes.length) gated = { ...gated, notes: [...identity.notes, ...gated.notes] };
+  if (identity.noValidTicker) gated = { ...gated, status: "not_promoted" as const, notes: [...gated.notes, "not promoted: no ticker that is still the named company's stock"] };
 
   // Log the card before anything else happens.
   const cDate = catalystDate(gated.card);
@@ -153,4 +159,43 @@ async function readOptions(deps: ResearchDeps, ticker: string | undefined): Prom
     await store.saveHealth("options", "down", `${ticker}: ${err instanceof Error ? err.message.slice(0, 200) : String(err)}`).catch(() => undefined);
     return null;
   }
+}
+
+/** Check every ticker against what it trades as now; correct, drop or flag. Skipped when asset lookups are unavailable. */
+export async function verifyTickers(card: Card, deps: ResearchDeps): Promise<{ card: Card; notes: string[]; noValidTicker: boolean }> {
+  const data = deps.data;
+  if (!data?.getAsset) return { card, notes: [], noValidTicker: false };
+  const { checkTicker, notCommon } = await import("./identity");
+  const ua = deps.env.SEC_USER_AGENT?.trim();
+  const sec = ua ? await import("../sources/edgar").then(({ secTickerList }) => secTickerList(ua, deps.fetchImpl)).catch(() => null) : null;
+  const notes: string[] = [];
+  const kept: Card["tickers"] = [];
+  for (const t of card.tickers) {
+    let asset;
+    try {
+      asset = await data.getAsset(t.symbol);
+    } catch {
+      kept.push(t); // lookup failed: keep, the price checks still apply
+      continue;
+    }
+    const c = checkTicker(t.symbol, t.company ?? null, asset, sec);
+    if (c.action === "corrected" && c.to) {
+      const a = await data.getAsset(c.to).catch(() => null);
+      if (a && a.tradable && !notCommon(a.name)) {
+        if (!kept.some((k) => k.symbol === c.to)) kept.push({ ...t, symbol: c.to });
+        notes.push(c.note!);
+        continue;
+      }
+      notes.push(`${t.symbol}: ${asset?.name ? `now trades as "${asset.name}"` : "not listed"}; the company's symbol ${c.to} could not be confirmed either; dropped`);
+      continue;
+    }
+    if (c.action === "dropped") {
+      notes.push(c.note!);
+      continue;
+    }
+    if (c.action === "unconfirmed") notes.push(c.note!);
+    kept.push(t);
+  }
+  if (!kept.length) return { card, notes, noValidTicker: true };
+  return { card: { ...card, tickers: kept }, notes, noValidTicker: false };
 }

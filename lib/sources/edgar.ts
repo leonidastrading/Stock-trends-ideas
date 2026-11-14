@@ -196,6 +196,12 @@ export const edgar: Source = {
 /** Kept for the relay test and older callers. */
 export const route = relayRoute;
 
+/** The SEC's current ticker list (ticker → issuer), cached for a day. Needs the declared User-Agent. */
+export async function secTickerList(userAgent: string, fetchImpl?: typeof fetch): Promise<Array<{ cik: string; ticker: string; title: string }>> {
+  const list = await getJson<Record<string, { cik_str: number; ticker: string; title: string }>>("https://www.sec.gov/files/company_tickers.json", { headers: { "user-agent": userAgent, "accept-encoding": "gzip, deflate" }, minIntervalMs: MIN_INTERVAL_MS, cacheMs: 24 * 60 * 60000, fetchImpl });
+  return Object.values(list).map((x) => ({ cik: String(x.cik_str), ticker: x.ticker.toUpperCase().replace(/-/g, "."), title: x.title }));
+}
+
 /** Pure: dates of earnings releases (8-K item 2.02, results of operations) on or after `from`. */
 export function earningsDates(s: Submissions, from: string): string[] {
   const r = s.filings.recent;

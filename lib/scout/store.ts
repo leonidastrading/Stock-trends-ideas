@@ -209,23 +209,28 @@ export async function cardPrompt(id: number): Promise<{ prompt: string; replyTex
 export interface Track {
   cardId: number; symbol: string; sectorEtf: string; direction: "long" | "short"; cardDate: string; entryDate: string | null; entryPrice: number | null; spyEntry: number | null; sectorEntry: number | null;
   deadlineDate: string; exitDate: string | null; exitPrice: number | null; spyExit: number | null; sectorExit: number | null; exitReason: string | null; maxDrawdownPct: number | null; tappedAt: string | null; swingResponse: unknown;
+  /** Set when the track was excluded from scoring (it followed the wrong security): the reason. */
+  excluded?: string | null;
 }
 
 const toTrack = (r: Row): Track => ({
   cardId: Number(r.card_id), symbol: r.symbol, sectorEtf: r.sector_etf, direction: r.direction, cardDate: dstr(r.card_date)!, entryDate: dstr(r.entry_date), entryPrice: num(r.entry_price), spyEntry: num(r.spy_entry), sectorEntry: num(r.sector_entry),
   deadlineDate: dstr(r.deadline_date)!, exitDate: dstr(r.exit_date), exitPrice: num(r.exit_price), spyExit: num(r.spy_exit), sectorExit: num(r.sector_exit), exitReason: r.exit_reason, maxDrawdownPct: num(r.max_drawdown_pct), tappedAt: iso(r.tapped_at), swingResponse: r.swing_response,
+  excluded: r.excluded ?? null,
 });
+
+const TRACK_SELECT = `SELECT t.*, (SELECT e.detail FROM track_events e WHERE e.card_id = t.card_id AND e.kind = 'excluded' ORDER BY e.id LIMIT 1) AS excluded FROM tracks t`;
 
 export async function insertTrack(t: { cardId: number; symbol: string; sectorEtf: string; direction: "long" | "short"; cardDate: string; deadlineDate: string }): Promise<void> {
   await q(`INSERT INTO tracks (card_id, symbol, sector_etf, direction, card_date, deadline_date) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (card_id) DO NOTHING`, [t.cardId, t.symbol, t.sectorEtf, t.direction, t.cardDate, t.deadlineDate]);
 }
 
 export async function allTracks(): Promise<Track[]> {
-  return (await q(`SELECT * FROM tracks ORDER BY card_id`)).map(toTrack);
+  return (await q(`${TRACK_SELECT} ORDER BY t.card_id`)).map(toTrack);
 }
 
 export async function getTrack(cardId: number): Promise<Track | null> {
-  const rows = await q(`SELECT * FROM tracks WHERE card_id = $1`, [cardId]);
+  const rows = await q(`${TRACK_SELECT} WHERE t.card_id = $1`, [cardId]);
   return rows[0] ? toTrack(rows[0]) : null;
 }
 
@@ -245,7 +250,7 @@ export async function setTapped(cardId: number, response: unknown): Promise<void
   await q(`UPDATE tracks SET tapped_at = coalesce(tapped_at, now()), swing_response = $2 WHERE card_id = $1`, [cardId, JSON.stringify(response)]);
 }
 
-export async function addTrackEvent(cardId: number, kind: "invalidated" | "sent_to_swing" | "send_failed", detail: string | null): Promise<void> {
+export async function addTrackEvent(cardId: number, kind: "invalidated" | "sent_to_swing" | "send_failed" | "excluded", detail: string | null): Promise<void> {
   await q(`INSERT INTO track_events (card_id, kind, detail) VALUES ($1, $2, $3)`, [cardId, kind, detail]);
 }
 

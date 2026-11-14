@@ -20,6 +20,7 @@ export default function CardView({ c, track, actions, feedback, opposing, review
           <span className="tag">{c.origin === "human" ? "human-originated" : "scout"}</span>
           <span className="small muted">#{c.id} · {fmtEt(c.createdAt)} · {c.model} · v{c.versionId}</span>
         </div>
+        {track?.excluded && <div className="small neg" style={{ marginTop: 6 }}><b>Excluded from scoring: wrong security.</b> {track.excluded}</div>}
         <div style={{ margin: "8px 0 4px" }}><Direction direction={c.direction} ticker={c.primaryTicker} />
           {opposing?.length ? <span className="tag warn" style={{ marginLeft: 8 }}>⚠ opposite call on {c.primaryTicker}: {opposing.map((id) => <a key={id} href={`/candidates?days=90#card-${id}`}>#{id} </a>)}</span> : null}</div>
         <h2 style={{ margin: "6px 0 2px" }}>{k.title}</h2>

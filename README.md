@@ -148,6 +148,15 @@ company exposure, revenue shares, the sector and the thesis.
 
 Rules enforced by code (`lib/scout/card.ts`), in order:
 
+0. **Ticker identity.** Symbols change hands (EchoStar moved from SATS to ECHO in June 2026 and SATS was reused for a
+   Strive preferred stock, so card #16 tracked the wrong security). The model names each ticker's company; before the
+   card is logged the code checks each symbol against what it trades as now (Alpaca asset metadata, read-only) and
+   the SEC's ticker list. A symbol the SEC no longer lists for that company is corrected to the company's current one;
+   a preferred, warrant, unit, right or note is dropped; a name that merely differs (Google / Alphabet) is kept with a
+   note. If nothing valid is left the card is logged not promoted. Every change is a gate note. Already-open tracks
+   whose symbol now trades as a preferred or note (or not at all) are excluded automatically by the after-close job,
+   and a card's **Wrong security** button does the same by hand. Exclusion is an append-only `track_events` row with
+   the reason; the card is never edited, it shows the reason, and it is left out of every score.
 1. **Evidence.** Every item needs a source and a date; items without are dropped. No evidence, no card — the candidate
    is logged as rejected.
 2. **Materiality.** If the primary ticker's product or line is under **10%** of revenue, or the model could not estimate

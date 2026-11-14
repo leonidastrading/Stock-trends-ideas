@@ -95,7 +95,8 @@ export async function runReviews(deps: ReviewDeps, max = 8): Promise<Array<{ car
   if (!deps.data) return out;
   const today = toEt(deps.now).date;
   const settings = await store.loadSettings();
-  const [cards, tracks, reviewed] = await Promise.all([store.cardsSince(120), store.allTracks(), store.reviewedCardIds()]);
+  const [cards, all, reviewed] = await Promise.all([store.cardsSince(120), store.allTracks(), store.reviewedCardIds()]);
+  const tracks = all.filter((t) => !t.excluded);
   const trackBy = new Map(tracks.map((t) => [t.cardId, t]));
   for (const c of dueForReview(cards, tracks, reviewed, today).slice(0, max)) {
     const spend = await store.spendOn(today);

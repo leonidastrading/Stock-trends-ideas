@@ -12,8 +12,9 @@ export const PAPER_TRADING_HOST = "https://paper-api.alpaca.markets";
 
 const ALLOWED: Record<string, RegExp[]> = {
   [DATA_HOST]: [/^\/v2\/stocks\/bars$/, /^\/v1beta1\/news$/, /^\/v1beta1\/options\/snapshots\/[A-Z][A-Z.]{0,9}$/],
-  [TRADING_HOST]: [/^\/v2\/calendar$/],
-  [PAPER_TRADING_HOST]: [/^\/v2\/calendar$/],
+  // Calendar and asset metadata (what a symbol currently is) only: never orders, positions or the account.
+  [TRADING_HOST]: [/^\/v2\/calendar$/, /^\/v2\/assets\/[A-Z][A-Z.]{0,9}$/],
+  [PAPER_TRADING_HOST]: [/^\/v2\/calendar$/, /^\/v2\/assets\/[A-Z][A-Z.]{0,9}$/],
 };
 
 export interface AlpacaCreds {
@@ -41,6 +42,8 @@ export function assertReadOnlyEndpoint(host: string, path: string): void {
   const rules = ALLOWED[host];
   if (!rules || !rules.some((re) => re.test(path))) throw new Error(`Refusing non-allowlisted Alpaca endpoint ${host}${path} (read-only)`);
 }
+
+export interface Asset { symbol: string; name: string; exchange: string; active: boolean; tradable: boolean }
 
 export interface DailyBar {
   symbol: string;
@@ -152,6 +155,17 @@ export class AlpacaClient {
     return out;
   }
 
+  /** What a symbol currently is: issuer name, exchange, whether it trades. Null when the symbol is unknown. */
+  async getAsset(symbol: string): Promise<Asset | null> {
+    try {
+      const a = await this.get<{ symbol: string; name?: string; exchange?: string; status?: string; tradable?: boolean; class?: string }>(this.referenceHost, `/v2/assets/${encodeURIComponent(symbol)}`, {});
+      return { symbol: a.symbol, name: a.name ?? "", exchange: a.exchange ?? "", active: a.status === "active", tradable: !!a.tradable };
+    } catch (err) {
+      if (err instanceof AlpacaError && (err.status === 404 || err.status === 422)) return null;
+      throw err;
+    }
+  }
+
   async getCalendar(start: string, end: string): Promise<Session[]> {
     return parseCalendar(await this.get(this.referenceHost, "/v2/calendar", { start, end }));
   }
@@ -162,6 +176,8 @@ export interface MarketData {
   getDailyBars(symbols: readonly string[], start: string, end: string): Promise<DailyBar[]>;
   getNews(symbols: string[], start: Date, end: Date, max?: number): Promise<NewsItem[]>;
   getCalendar(start: string, end: string): Promise<Session[]>;
+  /** Optional: what a symbol currently is (asset metadata). */
+  getAsset?(symbol: string): Promise<Asset | null>;
   /** Optional: option-chain implied volatility (market data only). */
   getOptionSnapshots?(underlying: string, q: { type?: "call" | "put"; strikeGte?: number; strikeLte?: number; expiryGte?: string; expiryLte?: string }): Promise<Record<string, { impliedVolatility?: number | null }>>;
 }

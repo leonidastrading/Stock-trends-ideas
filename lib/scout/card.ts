@@ -18,6 +18,8 @@ export const evidenceSchema = z.object({
 
 export const tickerSchema = z.object({
   symbol: z.string().trim().toUpperCase().regex(/^[A-Z]{1,5}(\.[A-Z])?$/, "1–5 letters"),
+  /** The issuer's name, so the code can check the symbol still means this company (absent on older cards). */
+  company: z.string().max(120).optional(),
   why: z.string().min(1),
   revenue_share_pct: z.number().min(0).max(100).nullable(),
   share_is_estimate: z.boolean(),
@@ -79,9 +81,9 @@ export const CARD_JSON_SCHEMA = {
     tickers: {
       type: "array", description: "1 to 5 tickers, most direct exposure first",
       items: {
-        type: "object", additionalProperties: false, required: ["symbol", "why", "revenue_share_pct", "share_is_estimate", "sector"],
+        type: "object", additionalProperties: false, required: ["symbol", "company", "why", "revenue_share_pct", "share_is_estimate", "sector"],
         properties: {
-          symbol: { type: "string" }, why: { type: "string" },
+          symbol: { type: "string" }, company: { type: "string", description: "the issuer's name, e.g. EchoStar Corporation" }, why: { type: "string" },
           revenue_share_pct: { type: ["number", "null"], description: "Share of the company's revenue from the product or line; null if you cannot estimate" },
           share_is_estimate: { type: "boolean" },
           sector: { type: "string", enum: [...SECTOR_KEYS] },
