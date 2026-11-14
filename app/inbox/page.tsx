@@ -6,7 +6,6 @@ import * as store from "@/lib/scout/store";
 import { fmtEt } from "@/lib/time";
 import ImportForm from "../notice/ImportForm";
 import CopyBox from "./CopyBox";
-import CopyLine from "./CopyLine";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -30,14 +29,6 @@ export default async function InboxPage() {
             : <span className="warn">Not connected yet: set GITHUB_INBOX_REPO (owner/name) and GITHUB_INBOX_TOKEN (fine-grained, read-only Contents on that repo) in Vercel and redeploy.</span>}
         </div>
       </section>
-
-      {repo && (
-        <section className="card">
-          <h2>Upload address</h2>
-          <CopyLine label="Repository (give this to your bot)" text={`https://github.com/${repo}`} />
-          <CopyLine label="Folder for the files" text={`${path}/`} />
-        </section>
-      )}
 
       <section className="card">
         <h2>Track record</h2>
