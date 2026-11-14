@@ -17,6 +17,7 @@ import { fetchSec, headerUrl, indexUrl, isRoutine, parseForm4, parseFormIndex, p
 import { getJson } from "../http";
 import { addDays, daysBetween, toEt } from "../time";
 import { researchCandidate, type ResearchDeps } from "./research";
+import { describeFlag } from "./options-flow";
 import * as store from "./store";
 
 export const FILINGS = { minBuyValue: 25_000, lookbackDays: 5, maxResearchPerDay: 3, clusterDays: 30 };
@@ -102,13 +103,27 @@ export async function processQueue(deadline: number, ua: string, fetchImpl?: typ
 
 // --------------------------------------------------------------- signals
 
-export interface FilingSignal { kind: "8-K" | "13D" | "insider"; symbol: string; term: string; strength: number; direction: "long" | "short"; context: string; trigger: Signal[] }
+export interface FilingSignal { kind: "8-K" | "13D" | "insider" | "options"; symbol: string; term: string; strength: number; direction: "long" | "short"; context: string; trigger: Signal[] }
 
 const usd = (v: number) => (v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${Math.round(v / 1e3)}k`);
 
 /** Pure: the day's candidate signals from stored buys and alerts, strongest first. */
-export function pickSignals(buys: store.InsiderBuyRow[], alerts: store.FilingAlert[], today: string): FilingSignal[] {
+export function pickSignals(buys: store.InsiderBuyRow[], alerts: store.FilingAlert[], today: string, flags: store.OptionsFlag[] = []): FilingSignal[] {
   const out: FilingSignal[] = [];
+  // Unusual new options positions (last two days): the largest per stock and side.
+  const best = new Map<string, store.OptionsFlag>();
+  for (const f of flags.filter((x) => daysBetween(x.date, today) <= 2)) {
+    const k = `${f.symbol}:${f.type}`;
+    if ((f.premiumUsd ?? 0) > (best.get(k)?.premiumUsd ?? -1)) best.set(k, f);
+  }
+  for (const f of best.values()) {
+    const same = flags.filter((x) => x.symbol === f.symbol && x.type === f.type && daysBetween(x.date, today) <= 2);
+    out.push({
+      kind: "options", symbol: f.symbol, term: `options: ${f.symbol} ${f.type}s ${f.expiry}`, strength: (f.premiumUsd ?? 0) >= 25_000_000 || (f.multiple ?? 0) >= 20 ? 2.5 : 1.5, direction: f.type === "put" ? "short" : "long",
+      context: `Unusual new options positions in ${f.symbol} (Cboe open interest, ${f.date}, vs the previous trading day):\n${same.map((x) => `- ${describeFlag(x)}`).join("\n")}\nWhat open interest shows and does not: a contract's open interest rises by the same amount whether the new position was bought or sold to open, so the side is unknown; most large out-of-the-money put positions are hedges, collars or fund rolls, and large call positions are often overwriting. The evidence that option positioning carries information: newly opened, buyer-initiated put and call volume predicts the stock's next-week returns (Pan & Poteshman 2006), and abnormal out-of-the-money volume builds before takeover announcements (Augustin, Brenner & Subrahmanyam 2019). Find a reason: a dated catalyst before ${f.expiry}, news, a known holder who would hedge, or the company's own situation. A ratio spread (more contracts sold further out) is a bet on a measured move to the far strike, not a collapse. If there is no plausible information story, say so and do not promote. Proposed direction follows the side most consistent with the structure (${f.type === "put" ? "puts: short" : "calls: long"}), stated with low confidence.`,
+      trigger: [{ source: "cboe", metric: `oi_build:${f.symbol}:${f.type}`, value: f.oi - f.prevOi, baseline: f.baseline, changeVs12m: null, asOf: f.date, note: describeFlag(f) }],
+    });
+  }
   for (const a of alerts.filter((x) => x.symbol && daysBetween(x.filed, today) <= 5)) {
     if (a.kind === "8-K") {
       const research = SERIOUS_ITEMS.filter((s) => s.research && a.items.some((i) => i.startsWith(s.item)));
@@ -151,10 +166,10 @@ export async function runFilingResearch(deps: ResearchDeps, maxNow: number = FIL
   const today = toEt(deps.now).date;
   const settings = await store.loadSettings();
   if (!settings.enabled) return { signals: 0, researched: [], error: "scout is switched off in Settings" };
-  const [buys, alerts, recent, lastDay] = await Promise.all([store.insiderBuysSince(addDays(today, -40)), store.filingAlertsSince(addDays(today, -10)), store.recentTerms(30), store.recentTerms(1)]);
-  const doneToday = [...lastDay].filter((t) => t.startsWith("filing: ") || t.startsWith("insider: ")).length;
+  const [buys, alerts, flags, recent, lastDay] = await Promise.all([store.insiderBuysSince(addDays(today, -40)), store.filingAlertsSince(addDays(today, -10)), store.optionsFlagsSince(addDays(today, -3)), store.recentTerms(30), store.recentTerms(1)]);
+  const doneToday = [...lastDay].filter((t) => t.startsWith("filing: ") || t.startsWith("insider: ") || t.startsWith("options: ")).length;
   const room = Math.max(0, Math.min(maxNow, FILINGS.maxResearchPerDay - doneToday));
-  const signals = pickSignals(buys, alerts, today).filter((s) => ![...recent].some((t) => t.startsWith(s.term.toLowerCase().split(" ").slice(0, 2).join(" "))));
+  const signals = pickSignals(buys, alerts, today, flags).filter((s) => ![...recent].some((t) => t.startsWith(s.term.toLowerCase().split(" ").slice(0, 2).join(" "))));
   const out = { signals: signals.length, researched: [] as Array<{ term: string; outcome: string; reason?: string; cardId?: number }>, error: null as string | null };
   for (const s of signals.slice(0, room)) {
     const r = await researchCandidate({ origin: "scout", term: s.term, kindHint: "event", tickersHint: [s.symbol], observation: null, trigger: s.trigger, context: `${s.context}\nProposed direction: ${s.direction} ${s.symbol}.` }, deps);

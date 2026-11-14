@@ -343,6 +343,10 @@ export async function claimNotification(key: string, title: string): Promise<boo
   return (await q(`INSERT INTO notifications (key, title) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING RETURNING 1`, [key, title])).length > 0;
 }
 
+export async function countNotifications(prefix: string): Promise<number> {
+  return Number((await q(`SELECT count(*) AS n FROM notifications WHERE key LIKE $1`, [`${prefix}%`]))[0]?.n ?? 0);
+}
+
 // ------------------------------------------------------- ticker news counts
 
 export async function saveTickerCounts(date: string, items: Array<{ symbols: string[]; source: string; url: string }>): Promise<void> {
@@ -692,4 +696,51 @@ export async function tryLock(key: string, ttlMin: number): Promise<boolean> {
 
 export async function unlock(key: string): Promise<void> {
   await q(`DELETE FROM dashboard_cache WHERE key = $1`, [key]);
+}
+
+// ------------------------------------------------------------ options positioning
+
+export async function optionsSnapshot(symbol: string): Promise<{ date: string; spot: number; oi: Record<string, number> } | null> {
+  const r = (await q(`SELECT date, spot, oi FROM options_oi WHERE symbol = $1`, [symbol]))[0];
+  return r ? { date: dstr(r.date)!, spot: Number(r.spot), oi: r.oi as Record<string, number> } : null;
+}
+
+export async function optionsCapturedOn(date: string): Promise<Set<string>> {
+  return new Set((await q(`SELECT symbol FROM options_oi WHERE date = $1`, [date])).map((r) => String(r.symbol)));
+}
+
+export interface OptionsDay { symbol: string; date: string; prevDate: string | null; contracts: number; callOi: number; putOi: number; p95Up: number | null; maxUp: number | null }
+
+/** One stock's day: its summary and flags (append-only), then the snapshot the next day is compared with. */
+export async function saveOptionsDay(day: OptionsDay, spot: number, oi: Record<string, number>, flags: OptionsFlag[]): Promise<void> {
+  if (day.prevDate) {
+    await q(`INSERT INTO options_oi_days (symbol, date, prev_date, contracts, call_oi, put_oi, p95_up, max_up) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (symbol, date) DO NOTHING`,
+      [day.symbol, day.date, day.prevDate, day.contracts, day.callOi, day.putOi, day.p95Up, day.maxUp]);
+  }
+  for (const f of flags) {
+    await q(`INSERT INTO options_flags (date, contract, symbol, type, strike, expiry, prev_oi, oi, spot, mid, volume, premium_usd, notional_usd, baseline, multiple, structure) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT (date, contract) DO NOTHING`,
+      [f.date, f.contract, f.symbol, f.type, f.strike, f.expiry, f.prevOi, f.oi, f.spot, f.mid, f.volume, f.premiumUsd, f.notionalUsd, f.baseline, f.multiple, f.structure]);
+  }
+  await q(`INSERT INTO options_oi (symbol, date, spot, oi, updated_at) VALUES ($1,$2,$3,$4, now()) ON CONFLICT (symbol) DO UPDATE SET date = excluded.date, spot = excluded.spot, oi = excluded.oi, updated_at = now()`, [day.symbol, day.date, spot, JSON.stringify(oi)]);
+}
+
+/** The stock's own normal: the median of its daily 95th-percentile OI increase over the last `days` captured days. */
+export async function optionsBaseline(symbol: string, before: string, days = 20): Promise<{ median: number | null; n: number }> {
+  const rows = (await q(`SELECT p95_up FROM options_oi_days WHERE symbol = $1 AND date < $2 AND p95_up IS NOT NULL ORDER BY date DESC LIMIT $3`, [symbol, before, days])).map((r) => Number(r.p95_up)).sort((a, b) => a - b);
+  return { median: rows.length ? rows[Math.floor(rows.length / 2)] : null, n: rows.length };
+}
+
+export interface OptionsFlag { date: string; contract: string; symbol: string; type: "call" | "put"; strike: number; expiry: string; prevOi: number; oi: number; spot: number; mid: number | null; volume: number | null; premiumUsd: number | null; notionalUsd: number; baseline: number | null; multiple: number | null; structure: string | null }
+
+export async function optionsFlagsSince(from: string): Promise<OptionsFlag[]> {
+  return (await q(`SELECT * FROM options_flags WHERE date >= $1 ORDER BY date DESC, premium_usd DESC NULLS LAST`, [from])).map((r) => ({
+    date: dstr(r.date)!, contract: r.contract, symbol: r.symbol, type: r.type, strike: Number(r.strike), expiry: dstr(r.expiry)!, prevOi: Number(r.prev_oi), oi: Number(r.oi), spot: Number(r.spot),
+    mid: num(r.mid), volume: num(r.volume), premiumUsd: num(r.premium_usd), notionalUsd: Number(r.notional_usd), baseline: num(r.baseline), multiple: num(r.multiple), structure: r.structure ?? null,
+  }));
+}
+
+export async function optionsLogStatus(): Promise<{ stocks: number; latest: string | null; days: number }> {
+  const r = (await q(`SELECT count(*) AS stocks, max(date) AS latest FROM options_oi`))[0] ?? {};
+  const d = (await q(`SELECT count(DISTINCT date) AS days FROM options_oi_days`))[0] ?? {};
+  return { stocks: Number(r.stocks ?? 0), latest: dstr(r.latest), days: Number(d.days ?? 0) };
 }

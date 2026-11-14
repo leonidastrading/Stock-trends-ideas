@@ -9,11 +9,12 @@
 import type { IdeaResult } from "./scoring";
 
 export const STAKE = 1000;
-export const PLAYERS = ["scout_trend", "scout_story", "you", "stream_host", "stream_agent", "inbox_bot"] as const;
+export const PLAYERS = ["scout_trend", "scout_story", "scout_options", "you", "stream_host", "stream_agent", "inbox_bot"] as const;
 export type Player = (typeof PLAYERS)[number];
 export const PLAYER_LABEL: Record<Player, string> = {
   scout_trend: "Scout · trend desk",
   scout_story: "Scout · story desk",
+  scout_options: "Scout · options positioning",
   you: "You",
   stream_host: "Stream file · host",
   stream_agent: "Stream file · agent",
@@ -23,7 +24,7 @@ export const PLAYER_LABEL: Record<Player, string> = {
 /** Who made the call: by origin, and by the candidate term the card came from. */
 export function playerOf(origin: "scout" | "human", term: string | undefined): Player {
   const t = (term ?? "").toLowerCase();
-  if (origin === "scout") return t.startsWith("story:") ? "scout_story" : "scout_trend";
+  if (origin === "scout") return t.startsWith("story:") ? "scout_story" : t.startsWith("options:") ? "scout_options" : "scout_trend";
   if (t.startsWith("stream host:")) return "stream_host";
   if (t.startsWith("stream agent:")) return "stream_agent";
   if (t.startsWith("inbox:")) return "inbox_bot";

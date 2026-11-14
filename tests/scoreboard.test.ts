@@ -10,6 +10,7 @@ const idea = (id: number, excess: number | null, closed = true, kind = "consumer
 describe("scoreboard", () => {
   it("tells the players apart by origin and term", () => {
     expect(playerOf("scout", "AI agents paying merchants")).toBe("scout_trend");
+    expect(playerOf("scout", "options: NVDA puts 2027-01-15")).toBe("scout_options");
     expect(playerOf("scout", "story: CEO resigns → XYZ")).toBe("scout_story");
     expect(playerOf("human", "ATC upgrade")).toBe("you");
     expect(playerOf("human", "stream host: CRWV")).toBe("stream_host");

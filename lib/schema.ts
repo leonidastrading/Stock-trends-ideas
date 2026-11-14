@@ -341,6 +341,49 @@ CREATE INDEX IF NOT EXISTS congress_trades_filed_idx ON congress_trades (filed);
 CREATE INDEX IF NOT EXISTS congress_trades_symbol_idx ON congress_trades (symbol);
 CREATE OR REPLACE TRIGGER congress_trades_ro BEFORE UPDATE OR DELETE ON congress_trades FOR EACH ROW EXECUTE FUNCTION forbid_change();
 
+-- Options positioning log: the latest open interest per contract for each stock (overwritten daily), each day's
+-- summary (for every stock's own normal), and flags for unusual new positions (never edited).
+CREATE TABLE IF NOT EXISTS options_oi (
+  symbol text PRIMARY KEY,
+  date date NOT NULL,
+  spot double precision NOT NULL,
+  oi jsonb NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS options_oi_days (
+  symbol text NOT NULL,
+  date date NOT NULL,
+  prev_date date,
+  contracts int NOT NULL,
+  call_oi bigint NOT NULL,
+  put_oi bigint NOT NULL,
+  p95_up double precision,
+  max_up double precision,
+  PRIMARY KEY (symbol, date)
+);
+CREATE OR REPLACE TRIGGER options_oi_days_ro BEFORE UPDATE OR DELETE ON options_oi_days FOR EACH ROW EXECUTE FUNCTION forbid_change();
+CREATE TABLE IF NOT EXISTS options_flags (
+  date date NOT NULL,
+  contract text NOT NULL,
+  symbol text NOT NULL,
+  type text NOT NULL,
+  strike double precision NOT NULL,
+  expiry date NOT NULL,
+  prev_oi int NOT NULL,
+  oi int NOT NULL,
+  spot double precision NOT NULL,
+  mid double precision,
+  volume int,
+  premium_usd double precision,
+  notional_usd double precision,
+  baseline double precision,
+  multiple double precision,
+  structure text,
+  PRIMARY KEY (date, contract)
+);
+CREATE INDEX IF NOT EXISTS options_flags_symbol_idx ON options_flags (symbol, date);
+CREATE OR REPLACE TRIGGER options_flags_ro BEFORE UPDATE OR DELETE ON options_flags FOR EACH ROW EXECUTE FUNCTION forbid_change();
+
 -- Dashboard panels (market quotes, earnings calendar, contracts, breadth): cached fetches, refreshed hourly.
 CREATE TABLE IF NOT EXISTS dashboard_cache (
   key text PRIMARY KEY,

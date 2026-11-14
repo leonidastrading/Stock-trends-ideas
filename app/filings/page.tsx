@@ -1,20 +1,22 @@
 import SetupNotice from "@/components/SetupNotice";
 import { hasDatabase } from "@/lib/db";
+import { OPTIONS_UNIVERSE } from "@/config/options";
 import { pickSignals } from "@/lib/scout/filings";
+import { OPTIONS_RULES } from "@/lib/scout/options-flow";
 import * as store from "@/lib/scout/store";
 import { addDays, toEt } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const usd = (v: number | null) => (v === null ? "—" : v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${Math.round(v / 1e3)}k`);
+const usd = (v: number | null) => (v === null ? "—" : v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${Math.round(v / 1e3)}k`);
 
 export default async function FilingsPage() {
   if (!hasDatabase()) return <SetupNotice />;
   const today = toEt(new Date()).date;
-  const [q, buys, alerts, candidates] = await Promise.all([store.secQueueStatus(), store.insiderBuysSince(addDays(today, -30)), store.filingAlertsSince(addDays(today, -30)), store.candidatesSince(30)]);
-  const signals = pickSignals(buys, alerts, today);
-  const researched = candidates.filter((c) => c.term.startsWith("filing: ") || c.term.startsWith("insider: "));
+  const [q, buys, alerts, candidates, flags, optStatus] = await Promise.all([store.secQueueStatus(), store.insiderBuysSince(addDays(today, -30)), store.filingAlertsSince(addDays(today, -30)), store.candidatesSince(30), store.optionsFlagsSince(addDays(today, -30)), store.optionsLogStatus()]);
+  const signals = pickSignals(buys, alerts, today, flags);
+  const researched = candidates.filter((c) => c.term.startsWith("filing: ") || c.term.startsWith("insider: ") || c.term.startsWith("options: "));
   const eightKs = alerts.filter((a) => a.kind === "8-K");
   const d13 = alerts.filter((a) => a.kind === "13D");
   return (
@@ -62,6 +64,34 @@ export default async function FilingsPage() {
               </tr>
             ))}
             {buys.length === 0 && <tr><td colSpan={6} className="muted">None read yet. The queue is worked through on each hourly story call and after the close.</td></tr>}
+          </tbody>
+        </table></div>
+      </section>
+
+      <section className="card" id="options">
+        <h2>Unusual options positioning, last 30 days</h2>
+        <p className="small secondary">
+          Once each trading day the scout reads the option chains of {OPTIONS_UNIVERSE.length} heavily traded stocks from Cboe and compares every contract&apos;s open interest with the day before.
+          A flag is a new out-of-the-money position of at least {OPTIONS_RULES.minContracts.toLocaleString("en-US")} contracts, worth at least {usd(OPTIONS_RULES.minPremiumUsd)} in premium or {usd(OPTIONS_RULES.minNotionalUsd)} of stock, and at least {OPTIONS_RULES.minMultiple}× that stock&apos;s normal large day ({OPTIONS_RULES.baselineDays} days of history needed; before that only positions over {OPTIONS_RULES.noBaselineContracts.toLocaleString("en-US")} contracts and {usd(OPTIONS_RULES.noBaselinePremiumUsd)}).
+          Open interest does not show who opened the position or which side they took, and most big put positions are hedges: a flag means look, not follow.
+        </p>
+        <p className="small muted">Log: {optStatus.stocks} stocks captured, latest {optStatus.latest ?? "none yet"}, {optStatus.days} day(s) compared so far.</p>
+        <div className="table-wrap"><table>
+          <thead><tr><th>Day</th><th>Contract</th><th className="num">New contracts</th><th className="num">Open now</th><th className="num">Premium</th><th className="num">Stock exposure</th><th className="num">× normal</th><th>Structure</th></tr></thead>
+          <tbody>
+            {flags.slice(0, 60).map((f) => (
+              <tr key={f.date + f.contract}>
+                <td className="small">{f.date}</td>
+                <td><b className={f.type === "put" ? "neg" : "pos"}>{f.symbol}</b> <span className="small">{f.expiry} ${f.strike} {f.type}</span> <span className="small muted">(stock ${f.spot.toFixed(2)}, {Math.round(Math.abs(f.strike / f.spot - 1) * 100)}% out)</span></td>
+                <td className="num">+{(f.oi - f.prevOi).toLocaleString("en-US")}</td>
+                <td className="num small">{f.oi.toLocaleString("en-US")}</td>
+                <td className="num">{f.premiumUsd ? usd(f.premiumUsd) : "—"}</td>
+                <td className="num small">{usd(f.notionalUsd)}</td>
+                <td className="num small">{f.multiple === null ? <span className="muted">no normal yet</span> : `${f.multiple}×`}</td>
+                <td className="small">{f.structure ?? <span className="muted">single strike</span>}</td>
+              </tr>
+            ))}
+            {flags.length === 0 && <tr><td colSpan={8} className="muted">None yet. The first capture is the baseline; flags start from the second trading day.</td></tr>}
           </tbody>
         </table></div>
       </section>

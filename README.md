@@ -207,6 +207,17 @@ anything else happens. Cards, versions and track events are append-only, enforce
   the official PDFs, and per member: trades, typical reporting delay and how their buys did after the report was public.
   `?member=` and `?symbol=` filter it; the Digest shows the most-bought stocks. Senate reports and the President's OGE
   278-T are not read yet.
+- **Options positioning** (Filings page `#options`, `lib/sources/cboe-options.ts`, `lib/scout/options-flow.ts`,
+  `config/options.ts`): once each trading day between 10:00 and 16:00 ET (when the chains carry the previous close's
+  open interest) housekeeping reads the free Cboe delayed option chain of ~110 heavily traded stocks and compares each
+  contract's open interest with the last capture. A flag is a new out-of-the-money position (5%+ out, 5–450 days to
+  expiry) of 2,000+ contracts, worth $2M+ of premium or $200M+ of stock, and 5× that stock's normal large day (the
+  median of its daily 95th-percentile increase; until 5 days of history only 20,000+ contracts and $5M+ qualify).
+  Two strikes on the same expiry that moved together are named as a vertical or ratio spread. Open interest never shows
+  who opened a position or which side they took. Snapshots are overwritten (`options_oi`); day summaries and flags are
+  append-only (`options_oi_days`, `options_flags`). The largest flags are pushed to the phone (three a day at most),
+  shown on the Digest, and join the filings research desk (shared limit of three a day) with puts proposed short and
+  calls long at low confidence; their cards score as their own Scoreboard player.
 - **I noticed something**: the text box from section 2B.
 - **Candidates**: everything logged in the window, including rejections and why; the last scan's measurements per term;
   Google's rising queries for anything worth adding to the watch-list.

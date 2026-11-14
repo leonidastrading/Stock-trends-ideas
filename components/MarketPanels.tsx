@@ -28,7 +28,11 @@ function Bar({ left, right, share, color = "split" }: { left: React.ReactNode; r
 /** Market panels for the top of the Digest: breadth and mood, market and rates, earnings, federal contracts, buzz. */
 export default async function MarketPanels() {
   const since = addDays(toEt(new Date()).date, -30);
-  const [{ market, earnings, contracts, buzz, breadth }, congress] = await Promise.all([loadPanels(), store.congressTradesSince(since).then((t) => bySymbol(t, since).filter((a) => a.buyers.length > 0).slice(0, 10)).catch(() => [])]);
+  const [{ market, earnings, contracts, buzz, breadth }, congress, optionFlags] = await Promise.all([
+    loadPanels(),
+    store.congressTradesSince(since).then((t) => bySymbol(t, since).filter((a) => a.buyers.length > 0).slice(0, 10)).catch(() => []),
+    store.optionsFlagsSince(addDays(toEt(new Date()).date, -5)).catch(() => []),
+  ]);
   const b = breadth.data;
   return (
     <>
@@ -91,6 +95,15 @@ export default async function MarketPanels() {
             {!congress.length && <span className="small muted">Loads as House transaction reports are read (hourly).</span>}
           </div>
           <p className="small muted">House members&apos; reported purchases by filing date, most buyers first. Reports can be up to 45 days after the trade.</p>
+        </section>
+
+        <section className="card panel">
+          <div className="panel-head"><span>Unusual options positions · 5 days</span><a className="small" href="/filings#options">Details →</a></div>
+          <div className="chips">
+            {optionFlags.slice(0, 10).map((f) => <a key={f.date + f.contract} href="/filings#options" className="chip" title={`${f.date}: +${(f.oi - f.prevOi).toLocaleString("en-US")} contracts${f.structure ? `; ${f.structure}` : ""}`}><b className={f.type === "put" ? "neg" : "pos"}>{f.symbol}</b> <span className="muted">${f.strike} {f.type}s {f.expiry.slice(2, 7)}{f.premiumUsd ? ` · ${money(f.premiumUsd)}` : ""}</span></a>)}
+            {!optionFlags.length && <span className="small muted">None flagged. Option chains are read once each trading day; flags start from the second day.</span>}
+          </div>
+          <p className="small muted">New out-of-the-money positions many times the stock&apos;s normal, from Cboe open interest. The side (bought or sold) is not visible.</p>
         </section>
       </div>
     </>

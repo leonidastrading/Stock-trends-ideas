@@ -161,6 +161,10 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
   if (left() > 30_000) {
     out.panels = await import("./dashboard-warm").then(({ warmPanels }) => warmPanels(now)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
   }
+  // Options positioning: each stock's option chain once per trading day (10:00-16:00 ET), up to a minute and a half per call.
+  if (left() > 60_000) {
+    out.options = await import("./options-flow").then(({ runOptionsLog }) => runOptionsLog(Math.min(deadline - 45_000, Date.now() + 90_000), now, fetchImpl)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+  } else out.options = "later: not enough time";
   // Congress trades: new House transaction reports (at most a minute per call), then their buys priced against SPY.
   if (left() > 60_000) {
     try {
