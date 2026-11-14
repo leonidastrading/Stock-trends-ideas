@@ -183,7 +183,7 @@ anything else happens. Cards, versions and track events are append-only, enforce
   bearish chatter, and every row is read against the controls. Needs about a month of warm-up and two to three months
   of events. The page also runs a **look-back** on Stocktwits' own 3-month message-volume history for the same stocks
   (`data/chatter-explore/`, fetched once through the Stocktwits connector; histories that stop early or were dark and
-  then remapped are left out): exploratory only, since that score is scaled over the whole window (partly hindsight),
+  then remapped are left out: AVB, EA, HES, IPG, PARA, WBD): exploratory only, since that score is scaled over the whole window (partly hindsight),
   smoothed, and has no sentiment.
 - **Scoreboard**: the same results as a game, across all versions. Points are paper dollars beaten versus SPY on a
   $1,000 stake per call; players are the scout's trend desk, its story desk, you, and the stream file's host and agent.
