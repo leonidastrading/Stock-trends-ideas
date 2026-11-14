@@ -108,7 +108,7 @@ describe("Inbox format and track record", () => {
     expect(obs).toMatch(/From the inbox document "2026-11-16-my-research-bot"/);
     expect(obs).toMatch(/company named: Coinbase Global, Inc\..*expected horizon 30 days.*would be proven wrong by: US retail crypto.*sources: https/);
     const p = botPrompt("vadim/scout-inbox", "inbox");
-    expect(p).toMatch(/commit it to the GitHub repository vadim\/scout-inbox, folder inbox\//);
+    expect(p).toMatch(/commit it to the GitHub repository https:\/\/github\.com\/vadim\/scout-inbox, folder inbox\//);
     expect(p).toMatch(/inbox\/YYYY-MM-DD-<your-name>\.json/);
     expect(p).toMatch(/"term" \(required\)/);
     expect(botPrompt(null, "inbox")).toMatch(/the GitHub repository and folder Vadim gives you/);

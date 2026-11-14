@@ -39,7 +39,7 @@ export const INBOX_FIELDS: Array<{ name: string; required: boolean; about: strin
 ];
 
 export function botPrompt(repo: string | null, path: string): string {
-  const where = repo ? `the GitHub repository ${repo}, folder ${path}/` : `the GitHub repository and folder Vadim gives you (folder "${path}/")`;
+  const where = repo ? `the GitHub repository https://github.com/${repo}, folder ${path}/ on the default branch` : `the GitHub repository and folder Vadim gives you (folder "${path}/")`;
   return `Once a day (and whenever you find something worth acting on), write your trade ideas to a JSON file and commit it to ${where}.
 
 File name: ${path}/YYYY-MM-DD-<your-name>.json (for example ${path}/2026-11-16-my-research-bot.json). Use a new file name for each upload; never edit or delete a file you already uploaded.
