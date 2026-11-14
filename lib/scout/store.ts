@@ -51,6 +51,11 @@ export async function listVersions(): Promise<Version[]> {
   return (await q(`SELECT id, hash, model, effort, created_at FROM scout_versions ORDER BY id`)).map((r) => ({ id: Number(r.id), hash: r.hash, model: r.model, effort: r.effort, createdAt: iso(r.created_at)! }));
 }
 
+/** Versions whose reply schema defines confidence as a probability of beating SPY (calibration only counts these). */
+export async function calibratedVersionIds(): Promise<Set<number>> {
+  return new Set((await q(`SELECT id FROM scout_versions WHERE spec::text LIKE '%probability the primary ticker%'`)).map((r) => Number(r.id)));
+}
+
 // --------------------------------------------------------------- watchlist
 
 export interface WatchItem { id: number; term: string; kind: Kind; tickers: string[]; addedBy: string; status: "active" | "proposed" | "retired"; note: string | null; addedAt: string }

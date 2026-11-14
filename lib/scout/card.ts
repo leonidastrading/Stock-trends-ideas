@@ -99,7 +99,7 @@ export const CARD_JSON_SCHEMA = {
       type: "object", additionalProperties: false, required: ["novelty", "materiality", "breadth_of_evidence", "lateness"],
       properties: { novelty: { type: "number", description: "0-10" }, materiality: { type: "number", description: "0-10" }, breadth_of_evidence: { type: "number", description: "0-10" }, lateness: { type: "number", description: "0-10" } },
     },
-    confidence: { type: "number", description: "0-100" },
+    confidence: { type: "number", description: "0-100: probability the primary ticker, in the stated direction, beats SPY from the next open to the exit" },
     unknowns: { type: "array", items: { type: "string" } },
   },
 } as const;

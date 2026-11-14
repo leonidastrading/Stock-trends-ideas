@@ -130,6 +130,12 @@ anything else happens. Cards, versions and track events are append-only, enforce
   Google's rising queries for anything worth adding to the watch-list.
 - **Watch-list**: term, kind, tickers, date, who added it; approve the scout's proposals, retire terms.
 - **Scoring**: per version (see below), with a CSV export of every card and track.
+- **Scoreboard**: the same results as a game, across all versions. Points are paper dollars beaten versus SPY on a
+  $1,000 stake per call; players are the scout's trend desk, its story desk, you, and the stream file's host and agent.
+  It shows banked and in-play points, hit rate with a coin-flip luck check, calibration (does a "70%" call win about
+  70% of the time; Brier score), wins by kind of call, and recent rounds with their post-catalyst verdicts. Commentary
+  only; the verdict stays on Scoring. A card's `confidence` is defined to the model as its probability of beating SPY
+  over the holding period; calibration counts only versions that carry that definition.
 - **Settings**: on/off, model and effort (changing either starts a new version), the daily LLM cap, candidates per
   scan, digest email; the source health panel; spend by day; versions and the frozen rules; which keys are set (values
   are never shown); recent runs.
@@ -217,7 +223,7 @@ Details in `relay/README.md`.
 ## Layout
 
 ```
-app/                 pages (digest, notice, candidates, watchlist, scoring, settings) and API routes
+app/                 pages (digest, stories, notice, candidates, watchlist, scoreboard, scoring, settings) and API routes
 components/          CardView (the thesis card), CardActions (send / invalidation), SetupNotice
 config/scout.ts      frozen rules: gates, candidate rule, caps, sectors → funds, seed watch-list, model prices
 config/universe.ts   stocks per sector for the random baseline
@@ -229,6 +235,7 @@ lib/scout/research.ts  one candidate → card → gates → log → track
 lib/scout/scan.ts    the daily scan and the candidate rule
 lib/scout/tracking.ts  paper entries, exits and drawdowns
 lib/scout/scoring.ts   the report and the random-sector baseline — pure
+lib/scout/scoreboard.ts players, points, luck check, calibration — pure
 lib/scout/swing.ts   the post to the Swing ideas log
 lib/schema.ts        idempotent SQL with append-only triggers
 relay/               the EDGAR relay (deploy on Railway)

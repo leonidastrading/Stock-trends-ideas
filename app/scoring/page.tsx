@@ -1,11 +1,10 @@
 import SetupNotice from "@/components/SetupNotice";
 import { KIND_LABEL, SCOUT, type Kind } from "@/config/scout";
-import { UNIVERSE } from "@/config/universe";
 import { hasDatabase } from "@/lib/db";
-import { buildReport, groupStats, ideaResult, type GroupStats, type IdeaResult } from "@/lib/scout/scoring";
+import { loadIdeas } from "@/lib/scout/ideas-load";
+import { buildReport, groupStats, type GroupStats } from "@/lib/scout/scoring";
 import * as store from "@/lib/scout/store";
-import { groupBars } from "@/lib/scout/tracking";
-import { addDays, toEt } from "@/lib/time";
+import { toEt } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -44,12 +43,7 @@ export default async function ScoringPage({ searchParams }: { searchParams: Prom
   const vid = Number(sp.v) || versions[versions.length - 1]?.id || 0;
   const vCards = cards.filter((c) => c.versionId === vid);
   const byCard = new Map(vCards.map((c) => [c.id, c]));
-  const vTracks = tracks.filter((t) => byCard.has(t.cardId) && t.entryDate);
-  const earliest = vTracks.map((t) => t.entryDate!).sort()[0];
-  const today = toEt(new Date()).date;
-  const symbols = [...new Set([...vTracks.flatMap((t) => [t.symbol, "SPY", t.sectorEtf]), ...vCards.flatMap((c) => UNIVERSE[c.sector as keyof typeof UNIVERSE] ?? [])])];
-  const bars = earliest ? groupBars(await store.loadBars(symbols, addDays(earliest, -3), today)) : new Map();
-  const ideas = vTracks.map((t) => ideaResult(byCard.get(t.cardId)!, t, bars)).filter((x): x is IdeaResult => x !== null);
+  const ideas = await loadIdeas(vCards, tracks);
   const report = buildReport(ideas, vCards[0]?.createdAt ?? null, new Date());
   const version = versions.find((v) => v.id === vid);
   return (
