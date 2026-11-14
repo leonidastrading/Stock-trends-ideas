@@ -184,6 +184,17 @@ anything else happens. Cards, versions and track events are append-only, enforce
   cards below them. **Send to Swing ideas (paper)** posts the card to the Swing ideas app's `/api/swing` as a time-limit
   idea; that app places the paper order on its own paper account (queued for the open if the market is closed) and
   scores it in its own log. **Invalidation met** records that the thesis was disproved; the track exits at the next open.
+- **Digest panels** (top of the Digest, full width; `components/MarketPanels.tsx`, `lib/market/`): breadth across the
+  scout's 390-stock universe (advancing vs declining, new 52-week highs vs lows) and a 0–100 market mood from four parts
+  (breadth, highs vs lows, S&P vs its 125-day average, VIX vs its 1-year average); market and rates vs the previous
+  close (SPY, QQQ, IWM, USO from Alpaca as stand-ins for futures, which need a paid feed; 10- and 30-year yields from
+  the Treasury's CSV; VIX from Cboe); earnings in the next 5 business days from Nasdaq's calendar, largest first (these
+  dates also replace the scout's estimated next-earnings date on cards); the largest new federal contract obligations of
+  the last 10 days from USAspending matched to listed parents (aliases for the big contractors, otherwise a strict
+  SEC-name match; private firms such as Anduril or SpaceX are left out); and a buzz score out of 20 (chatter spike 0–8,
+  news against its usual pace 0–6, Stocktwits trending 0–6). Each panel is cached in `dashboard_cache`, refreshed
+  in housekeeping and on a page view when stale, and falls back to the last good copy. FDA and trial dates have no
+  reliable free source and are not shown.
 - **I noticed something**: the text box from section 2B.
 - **Candidates**: everything logged in the window, including rejections and why; the last scan's measurements per term;
   Google's rising queries for anything worth adding to the watch-list.
@@ -196,7 +207,7 @@ anything else happens. Cards, versions and track events are append-only, enforce
   pasted or posted), when, how it was read, how many ideas, and each idea's outcome with a link to its card.
 - **GitHub inbox**: an outside bot can drop documents for the scout by committing them to a folder in a GitHub repo
   (`GITHUB_INBOX_REPO`, `GITHUB_INBOX_PATH` default `inbox`, `GITHUB_INBOX_TOKEN` with read-only Contents). On each
-  hourly call (or "Check the GitHub inbox" on Settings) the scout reads at most one new file: `.json` / `.md` / `.txt`
+  hourly call (or "Check the GitHub inbox" on Settings) the scout reads up to three new files: `.json` / `.md` / `.txt`
   as text, `.pdf` via text extraction; a text file with the same name as a PDF is used instead of it. Ideas come from
   the daily file's machine-readable JSON block when present, otherwise the model pulls up to 12 concrete ideas out of
   the prose (only the document's own facts; the document is treated as data, not instructions). They are handed to

@@ -512,7 +512,10 @@ export async function upsertSymbolInfo(i: Omit<SymbolInfo, "checkedAt">): Promis
   await q(
     `INSERT INTO symbol_info (symbol, name, exchange, tradable, last_earnings, next_earnings, next_basis, checked_at) VALUES ($1, $2, $3, $4, $5, $6, $7, now())
      ON CONFLICT (symbol) DO UPDATE SET name = COALESCE(excluded.name, symbol_info.name), exchange = COALESCE(excluded.exchange, symbol_info.exchange), tradable = COALESCE(excluded.tradable, symbol_info.tradable),
-       last_earnings = COALESCE(excluded.last_earnings, symbol_info.last_earnings), next_earnings = COALESCE(excluded.next_earnings, symbol_info.next_earnings), next_basis = COALESCE(excluded.next_basis, symbol_info.next_basis), checked_at = now()`,
+       last_earnings = COALESCE(excluded.last_earnings, symbol_info.last_earnings),
+       next_earnings = CASE WHEN symbol_info.next_basis LIKE 'confirmed%' AND symbol_info.next_earnings >= current_date THEN symbol_info.next_earnings ELSE COALESCE(excluded.next_earnings, symbol_info.next_earnings) END,
+       next_basis = CASE WHEN symbol_info.next_basis LIKE 'confirmed%' AND symbol_info.next_earnings >= current_date THEN symbol_info.next_basis ELSE COALESCE(excluded.next_basis, symbol_info.next_basis) END,
+       checked_at = now()`,
     [i.symbol, i.name, i.exchange, i.tradable, i.lastEarnings, i.nextEarnings, i.nextBasis],
   );
 }
@@ -613,4 +616,39 @@ export async function markInbox(path: string, sha: string, result: unknown): Pro
 
 export async function inboxRecent(limit = 50): Promise<Array<{ path: string; readAt: string; result: Record<string, unknown> | null }>> {
   return (await q(`SELECT path, read_at, result FROM inbox_files ORDER BY read_at DESC LIMIT $1`, [limit])).map((r) => ({ path: r.path, readAt: iso(r.read_at)!, result: r.result ?? null }));
+}
+
+// ------------------------------------------------------------ dashboard cache
+
+export async function cacheGet<T>(key: string): Promise<{ data: T; updatedAt: string } | null> {
+  const r = (await q(`SELECT data, updated_at FROM dashboard_cache WHERE key = $1`, [key]))[0];
+  return r ? { data: r.data as T, updatedAt: iso(r.updated_at)! } : null;
+}
+
+export async function cachePut(key: string, data: unknown): Promise<void> {
+  await q(`INSERT INTO dashboard_cache (key, data, updated_at) VALUES ($1, $2, now()) ON CONFLICT (key) DO UPDATE SET data = excluded.data, updated_at = now()`, [key, JSON.stringify(data)]);
+}
+
+/** A dated earnings release from a calendar replaces the estimate, for symbols the scout already shows. */
+export async function confirmEarnings(symbol: string, date: string, basis: string): Promise<void> {
+  await q(`UPDATE symbol_info SET next_earnings = $2, next_basis = $3 WHERE symbol = $1`, [symbol, date, basis]);
+}
+
+/** Inputs for the buzz score: the latest chatter measurement per symbol with its history, and news counts against their usual pace. */
+export async function buzzInputs(): Promise<Array<{ symbol: string; perHour: number; history: number[]; trendingRank: number | null; news: number | null; newsAvg: number | null }>> {
+  const last = dstr((await q(`SELECT max(date) AS d FROM chatter_daily`))[0]?.d);
+  const newsDay = dstr((await q(`SELECT max(date) AS d FROM ticker_news_daily`))[0]?.d);
+  const news = new Map<string, number>();
+  const avg = new Map<string, number>();
+  if (newsDay) {
+    for (const r of await q(`SELECT symbol, stories FROM ticker_news_daily WHERE date = $1`, [newsDay])) news.set(r.symbol, Number(r.stories));
+    for (const r of await q(`SELECT symbol, avg(stories) AS a FROM ticker_news_daily WHERE date < $1 AND date >= ($1::date - 30) GROUP BY symbol`, [newsDay])) avg.set(r.symbol, Number(r.a));
+  }
+  const out = new Map<string, { symbol: string; perHour: number; history: number[]; trendingRank: number | null; news: number | null; newsAvg: number | null }>();
+  if (last) {
+    for (const r of await q(`SELECT symbol, per_hour, trending_rank FROM chatter_daily WHERE date = $1`, [last])) out.set(r.symbol, { symbol: r.symbol, perHour: Number(r.per_hour), history: [], trendingRank: num(r.trending_rank), news: news.get(r.symbol) ?? null, newsAvg: avg.get(r.symbol) ?? null });
+    for (const r of await q(`SELECT symbol, per_hour FROM chatter_daily WHERE date < $1 AND date >= ($1::date - 90) ORDER BY date`, [last])) out.get(r.symbol)?.history.push(Number(r.per_hour));
+  }
+  for (const [symbol, n] of news) if (!out.has(symbol) && n >= 3) out.set(symbol, { symbol, perHour: 0, history: [], trendingRank: null, news: n, newsAvg: avg.get(symbol) ?? null });
+  return [...out.values()];
 }

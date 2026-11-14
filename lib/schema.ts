@@ -306,6 +306,13 @@ CREATE TABLE IF NOT EXISTS inbox_files (
   PRIMARY KEY (path, sha)
 );
 
+-- Dashboard panels (market quotes, earnings calendar, contracts, breadth): cached fetches, refreshed hourly.
+CREATE TABLE IF NOT EXISTS dashboard_cache (
+  key text PRIMARY KEY,
+  data jsonb NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
 -- Phone pushes already sent, so each card, review or failure is pushed once.
 CREATE TABLE IF NOT EXISTS notifications (
   key text PRIMARY KEY,

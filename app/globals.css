@@ -28,7 +28,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--surface-0); color: var(--text-primary); font: 14px/1.45 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
 a { color: var(--accent); }
-main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+main { max-width: none; margin: 0; padding: 16px 24px; }
 nav { display: flex; gap: 16px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface-1); flex-wrap: wrap; }
 nav .brand { font-weight: 600; }
 nav .shadow { margin-left: auto; font-size: 12px; color: var(--text-secondary); border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; }
@@ -96,3 +96,20 @@ pre { font-size: 12px; white-space: pre-wrap; word-break: break-word; background
 .meter-fill.over { background: var(--neg); }
 .call-with-name { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .call-name { font-size: 14px; font-weight: 500; }
+.panels-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); margin-bottom: 14px; }
+.panels-grid .card { margin-bottom: 0; }
+.panel table { width: 100%; }
+.panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; text-transform: uppercase; letter-spacing: .06em; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 8px; }
+.panel-head .small { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.accent { color: var(--warn); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; font-size: 14px; }
+.statbars { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-bottom: 10px; }
+.statbar { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--surface-1); }
+.statbar-labels { display: flex; justify-content: space-between; margin-bottom: 6px; }
+.statbar-track { height: 6px; border-radius: 3px; overflow: hidden; position: relative; }
+.statbar-track.split { background: var(--neg); }
+.statbar-track.split span { display: block; height: 100%; background: var(--pos); }
+.statbar-track.mood { background: rgba(127,127,127,.25); }
+.statbar-track.mood span { display: block; height: 100%; background: var(--warn); }
+@media (max-width: 480px) { .panels-grid { grid-template-columns: 1fr; } }

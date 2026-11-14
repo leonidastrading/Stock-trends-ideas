@@ -154,6 +154,13 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
   if (left() > 60_000) {
     out.inbox = await import("./inbox").then(async ({ inboxConfig, pollInbox }): Promise<unknown> => (inboxConfig() ? pollInbox({ ...defaultDeps(now), fetchImpl }, 3, fetchImpl ?? fetch) : "not configured")).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
   } else out.inbox = "later: not enough time";
+  // Dashboard: a year of bars for the breadth universe (once, then incremental), and the panel caches kept warm.
+  if (data && left() > 45_000) {
+    out.breadthBars = await import("../market/panels").then(({ ensureBreadthBars }) => ensureBreadthBars(data, now)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+  } else out.breadthBars = "later: not enough time";
+  if (left() > 30_000) {
+    out.panels = await import("./dashboard-warm").then(({ warmPanels }) => warmPanels(now)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
   // SEC filings: read any new daily index into the queue, then work through the queue.
   const ua = process.env.SEC_USER_AGENT?.trim();
   if (!ua) out.filings = "skipped: SEC_USER_AGENT not set";

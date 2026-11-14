@@ -1,6 +1,7 @@
 import CardActions from "@/components/CardActions";
 import CardView from "@/components/CardView";
 import Direction from "@/components/Direction";
+import MarketPanels from "@/components/MarketPanels";
 import SetupNotice from "@/components/SetupNotice";
 import { SCOUT } from "@/config/scout";
 import { hasDatabase } from "@/lib/db";
@@ -27,6 +28,7 @@ export default async function DigestPage() {
   return (
     <>
       <h1>Weekly digest</h1>
+      <MarketPanels />
       <section className="card notice small">
         The top {SCOUT.digestCards} promoted cards of the last 7 days, ranked by novelty × materiality (not by time; each card shows when it was written), with lateness shown. One tap sends a card to the Swing ideas log as a paper idea.
         Every promoted and late card is tracked on paper here whether or not you tap it, from the next open after the card to the earlier of the day after its catalyst, its time limit, or the invalidation being met.
