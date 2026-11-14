@@ -162,6 +162,25 @@ CREATE TABLE IF NOT EXISTS feedback (
 CREATE INDEX IF NOT EXISTS feedback_target_idx ON feedback (target, id DESC);
 CREATE OR REPLACE TRIGGER feedback_ro BEFORE UPDATE OR DELETE ON feedback FOR EACH ROW EXECUTE FUNCTION forbid_change();
 
+-- Post-catalyst reviews: one per card, written once. Commentary only; never changes a card or its track.
+CREATE TABLE IF NOT EXISTS catalyst_reviews (
+  card_id bigint PRIMARY KEY REFERENCES cards(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  verdict text NOT NULL,
+  summary text NOT NULL,
+  evidence jsonb,
+  move_since_entry_pct double precision,
+  model text
+);
+CREATE OR REPLACE TRIGGER catalyst_reviews_ro BEFORE UPDATE OR DELETE ON catalyst_reviews FOR EACH ROW EXECUTE FUNCTION forbid_change();
+
+-- Phone pushes already sent, so each card, review or failure is pushed once.
+CREATE TABLE IF NOT EXISTS notifications (
+  key text PRIMARY KEY,
+  title text,
+  sent_at timestamptz NOT NULL DEFAULT now()
+);
+
 -- Headline counts per ticker per day from the news stream, for story spike detection.
 CREATE TABLE IF NOT EXISTS ticker_news_daily (
   date date NOT NULL,

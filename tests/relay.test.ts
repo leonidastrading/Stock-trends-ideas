@@ -21,13 +21,13 @@ afterAll(() => new Promise<void>((r) => server.close(() => r())));
 
 describe("edgar relay", () => {
   it("allows only https on the listed hosts", () => {
-    expect(allowed("https://efts.sec.gov/LatestSearch/search-index?q=x")).toBe(true);
+    expect(allowed("https://efts.sec.gov/LATEST/search-index?q=x")).toBe(true);
     expect(allowed("http://efts.sec.gov/x")).toBe(false);
     expect(allowed("https://evil.example/x")).toBe(false);
     expect(allowed("nonsense")).toBe(false);
   });
   it("needs the token, refuses other hosts, forwards with the SEC user agent", async () => {
-    const target = encodeURIComponent("https://efts.sec.gov/LatestSearch/search-index?q=%22x%22&startdt=2026-10-01");
+    const target = encodeURIComponent("https://efts.sec.gov/LATEST/search-index?q=%22x%22&startdt=2026-10-01");
     expect((await fetch(`${base}/fetch?url=${target}`)).status).toBe(401);
     expect((await fetch(`${base}/fetch?url=${encodeURIComponent("https://evil.example/")}`, { headers: { authorization: "Bearer t0k" } })).status).toBe(400);
     const ok = await fetch(`${base}/fetch?url=${target}`, { headers: { authorization: "Bearer t0k" } });
@@ -56,5 +56,25 @@ describe("swing log 401 diagnosis", () => {
     expect(explain401({ status: 401, headers: h({ "www-authenticate": 'Basic realm="book-advisor"' }) }, "Authentication required")).toMatch(/DASHBOARD_USER/);
     expect(explain401({ status: 401, headers: h({}) }, "<html>Authentication Required</html>")).toMatch(/SWING_API_BYPASS/);
     expect(explain401({ status: 503, headers: h({}) }, "<p>no paper account</p>")).toMatch(/503: no paper account/);
+  });
+});
+
+describe("swing login check", () => {
+  it("trims pasted credentials and reports which gate refused", async () => {
+    const { testSwingLogin } = await import("@/lib/scout/swing");
+    const env = { SWING_API_URL: "https://swing.example/", SWING_API_USER: " admin ", SWING_API_PASSWORD: "pw\n" } as unknown as NodeJS.ProcessEnv;
+    let sent = "";
+    const ok = await testSwingLogin(env, (async (url: string, init: RequestInit) => {
+      sent = (init.headers as Record<string, string>).authorization;
+      expect(url).toBe("https://swing.example/");
+      expect(init.method).toBe("GET");
+      return new Response("<html/>", { status: 200 });
+    }) as unknown as typeof fetch);
+    expect(sent).toBe(`Basic ${Buffer.from("admin:pw").toString("base64")}`);
+    expect(ok.ok).toBe(true);
+    expect(ok.message).toMatch(/trimmed/);
+    const bad = await testSwingLogin(env, (async () => new Response("no", { status: 401, headers: { "www-authenticate": "Basic" } })) as unknown as typeof fetch);
+    expect(bad.ok).toBe(false);
+    expect(bad.message).toMatch(/not this app's/);
   });
 });

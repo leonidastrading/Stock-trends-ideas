@@ -19,10 +19,13 @@ export interface ScoutSettings {
   maxCandidatesPerScan: number;
   discoveryPerScan: number;
   emailDigest: boolean;
+  notifyPromoted: boolean;
+  notifyStories: boolean;
+  notifyReviews: boolean;
 }
 
 export const DEFAULT_SETTINGS: ScoutSettings = {
-  enabled: true, model: SCOUT.defaultModel, effort: SCOUT.defaultEffort, dailyCapUsd: SCOUT.defaultDailyCapUsd, maxCandidatesPerScan: SCOUT.maxCandidatesPerScan, discoveryPerScan: SCOUT.discoveryPerScan, emailDigest: true,
+  enabled: true, model: SCOUT.defaultModel, effort: SCOUT.defaultEffort, dailyCapUsd: SCOUT.defaultDailyCapUsd, maxCandidatesPerScan: SCOUT.maxCandidatesPerScan, discoveryPerScan: SCOUT.discoveryPerScan, emailDigest: true, notifyPromoted: true, notifyStories: true, notifyReviews: true,
 };
 
 export async function loadSettings(): Promise<ScoutSettings> {
@@ -298,6 +301,36 @@ export async function recentFeedback(limit = 40): Promise<Array<Feedback & { abo
     [limit],
   );
   return rows.map((r) => ({ id: Number(r.id), at: iso(r.at)!, target: r.target, vote: r.vote, note: r.note, about: r.about ?? r.target }));
+}
+
+// ----------------------------------------------------------------- reviews
+
+export interface StoredReview { cardId: number; createdAt: string; verdict: string; summary: string; evidence: Array<{ date: string; source: string; headline: string }>; moveSinceEntryPct: number | null }
+
+const toReview = (r: Row): StoredReview => ({ cardId: Number(r.card_id), createdAt: iso(r.created_at)!, verdict: r.verdict, summary: r.summary, evidence: r.evidence ?? [], moveSinceEntryPct: num(r.move_since_entry_pct) });
+
+export async function insertReview(r: { cardId: number; verdict: string; summary: string; evidence: unknown; moveSinceEntryPct: number | null; model: string }): Promise<void> {
+  await q(`INSERT INTO catalyst_reviews (card_id, verdict, summary, evidence, move_since_entry_pct, model) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (card_id) DO NOTHING`, [r.cardId, r.verdict, r.summary, JSON.stringify(r.evidence ?? []), r.moveSinceEntryPct, r.model]);
+}
+
+export async function reviewedCardIds(): Promise<Set<number>> {
+  return new Set((await q(`SELECT card_id FROM catalyst_reviews`)).map((r) => Number(r.card_id)));
+}
+
+export async function getReview(cardId: number): Promise<StoredReview | null> {
+  const r = (await q(`SELECT * FROM catalyst_reviews WHERE card_id = $1`, [cardId]))[0];
+  return r ? toReview(r) : null;
+}
+
+export async function allReviews(): Promise<Map<number, StoredReview>> {
+  return new Map((await q(`SELECT * FROM catalyst_reviews`)).map((r) => [Number(r.card_id), toReview(r)]));
+}
+
+// ----------------------------------------------------------- notifications
+
+/** Claim a push; false if it was already sent. */
+export async function claimNotification(key: string, title: string): Promise<boolean> {
+  return (await q(`INSERT INTO notifications (key, title) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING RETURNING 1`, [key, title])).length > 0;
 }
 
 // ------------------------------------------------------- ticker news counts

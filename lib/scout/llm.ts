@@ -4,6 +4,7 @@ import { callCost } from "@/config/scout";
 import { CARD_JSON_SCHEMA } from "./card";
 import { TRIAGE_JSON_SCHEMA, TRIAGE_SYSTEM_PROMPT } from "./discovery";
 import { SYSTEM_PROMPT } from "./prompt";
+import { REVIEW_JSON_SCHEMA, REVIEW_SYSTEM_PROMPT } from "./review";
 import { STORY_JSON_SCHEMA, STORY_SYSTEM_PROMPT } from "./stories";
 
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
@@ -16,13 +17,14 @@ export interface ModelReply {
   costUsd: number | null;
 }
 
-export type Purpose = "research" | "triage" | "stories";
+export type Purpose = "research" | "triage" | "stories" | "review";
 export type CallModel = (args: { model: string; effort: Effort; user: string; purpose?: Purpose }) => Promise<ModelReply>;
 
 const PROMPTS: Record<Purpose, { system: string; schema: Record<string, unknown> }> = {
   research: { system: SYSTEM_PROMPT, schema: CARD_JSON_SCHEMA as unknown as Record<string, unknown> },
   triage: { system: TRIAGE_SYSTEM_PROMPT, schema: TRIAGE_JSON_SCHEMA as unknown as Record<string, unknown> },
   stories: { system: STORY_SYSTEM_PROMPT, schema: STORY_JSON_SCHEMA as unknown as Record<string, unknown> },
+  review: { system: REVIEW_SYSTEM_PROMPT, schema: REVIEW_JSON_SCHEMA as unknown as Record<string, unknown> },
 };
 
 /** Models that accept the server-side refusal fallback. */

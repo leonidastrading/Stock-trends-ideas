@@ -1,13 +1,15 @@
 import { KIND_LABEL, type Kind } from "@/config/scout";
 import Direction from "@/components/Direction";
 import Feedback from "@/components/Feedback";
-import type { Feedback as FeedbackRow, StoredCard, Track } from "@/lib/scout/store";
+import type { Feedback as FeedbackRow, StoredCard, StoredReview, Track } from "@/lib/scout/store";
 import { fmtEt } from "@/lib/time";
 
 const pct = (x: number | null | undefined, d = 1) => (x === null || x === undefined ? "—" : `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(d)}%`);
 
 /** One thesis card, fully laid out. Server component; actions are passed in. */
-export default function CardView({ c, track, actions, feedback, opposing }: { c: StoredCard; track?: Track | null; actions?: React.ReactNode; feedback?: FeedbackRow | null; opposing?: number[] }) {
+const VERDICT: Record<string, [string, string]> = { played_out: ["✓ played out", "pos"], did_not: ["✗ did not play out", "neg"], mixed: ["~ mixed", "warn"], too_early: ["… too early to tell", "muted"] };
+
+export default function CardView({ c, track, actions, feedback, opposing, review }: { c: StoredCard; track?: Track | null; actions?: React.ReactNode; feedback?: FeedbackRow | null; opposing?: number[]; review?: StoredReview | null }) {
   const k = c.card;
   return (
     <section className="card thesis" id={`card-${c.id}`}>
@@ -39,6 +41,7 @@ export default function CardView({ c, track, actions, feedback, opposing }: { c:
         {k.unknowns.length > 0 && <><dt>Unknowns</dt><dd>{k.unknowns.join("; ")}</dd></>}
         {c.gateNotes.length > 0 && <><dt>Gate notes</dt><dd className="small secondary">{c.gateNotes.join(" · ")}</dd></>}
         {track && <><dt>Paper track</dt><dd className="small">{trackLine(track)}</dd></>}
+        {review && <><dt>After the catalyst</dt><dd className="small"><b className={VERDICT[review.verdict]?.[1] ?? ""}>{VERDICT[review.verdict]?.[0] ?? review.verdict}</b> <span className="muted">({fmtEt(review.createdAt)}{review.moveSinceEntryPct !== null ? `; trade ${review.moveSinceEntryPct >= 0 ? "+" : ""}${review.moveSinceEntryPct}% since entry` : ""})</span> — {review.summary}{review.evidence.length ? <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>{review.evidence.map((e, i) => <li key={i} className="muted">{e.date} [{e.source}] {e.headline}</li>)}</ul> : null}</dd></>}
       </dl>
       <div>
         <h3>Evidence</h3>

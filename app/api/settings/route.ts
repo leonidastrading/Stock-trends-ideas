@@ -15,6 +15,9 @@ const schema = z.object({
   maxCandidatesPerScan: z.number().int().min(0).max(50),
   discoveryPerScan: z.number().int().min(0).max(10),
   emailDigest: z.boolean(),
+  notifyPromoted: z.boolean().default(true),
+  notifyStories: z.boolean().default(true),
+  notifyReviews: z.boolean().default(true),
 });
 
 /** Changing the model or effort starts a new version; results are reported per version. */

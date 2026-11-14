@@ -18,6 +18,7 @@ export default async function StoriesPage() {
   if (!hasDatabase()) return <SetupNotice />;
   const [runs, cards, tracks, candidates, fb, recent] = await Promise.all([store.recentRuns(30), store.cardsSince(14), store.allTracks(), store.candidatesSince(14), store.latestFeedback(), store.cardsSince(120)]);
   const opp = opposingCalls(recent, tracks);
+  const reviews = await store.allReviews();
   const last = runs.find((r) => r.action === "stories" || (r.action === "daily" && (r.detail as { stories?: unknown } | null)?.stories));
   const d = last ? ((last.action === "stories" ? last.detail : (last.detail as { stories?: StoriesDetail }).stories) as StoriesDetail | null) : null;
   const storyCards = cards.filter((c) => candidates.some((k) => k.cardId === c.id && k.term.startsWith("story: ")));
@@ -63,7 +64,7 @@ export default async function StoriesPage() {
           <h2>{key} <span className="small muted">· newest card {fmtEt(cs[0].createdAt)}</span></h2>
           {cs.map((c) => {
             const tr = t.get(c.id) ?? null;
-            return <CardView key={c.id} c={c} track={tr} feedback={fb.get(`card:${c.id}`) ?? null} opposing={opp.get(c.id)} actions={<CardActions cardId={c.id} canSend={c.status !== "not_promoted"} sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} />} />;
+            return <CardView key={c.id} c={c} track={tr} feedback={fb.get(`card:${c.id}`) ?? null} opposing={opp.get(c.id)} review={reviews.get(c.id) ?? null} actions={<CardActions cardId={c.id} canSend={c.status !== "not_promoted"} sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} />} />;
           })}
         </section>
       ))}

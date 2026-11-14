@@ -29,15 +29,31 @@ export function swingConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
   return !!(env.SWING_API_URL && env.SWING_API_USER && env.SWING_API_PASSWORD);
 }
 
+function swingHeaders(env: NodeJS.ProcessEnv): Record<string, string> {
+  const user = env.SWING_API_USER!.trim();
+  const pass = env.SWING_API_PASSWORD!.trim();
+  const headers: Record<string, string> = { authorization: `Basic ${Buffer.from(`${user}:${pass}`).toString("base64")}` };
+  if (env.SWING_API_BYPASS?.trim()) headers["x-vercel-protection-bypass"] = env.SWING_API_BYPASS.trim();
+  return headers;
+}
+
+/** Settings check: does the Swing ideas app accept our login? Reads its home page only; sends nothing. */
+export async function testSwingLogin(env: NodeJS.ProcessEnv = process.env, fetchImpl: typeof fetch = fetch): Promise<{ ok: boolean; message: string }> {
+  if (!swingConfigured(env)) return { ok: false, message: "SWING_API_URL / SWING_API_USER / SWING_API_PASSWORD are not set" };
+  const padded = [env.SWING_API_USER!, env.SWING_API_PASSWORD!].some((v) => v !== v.trim());
+  const url = env.SWING_API_URL!.trim().replace(/\/$/, "");
+  const res = await fetchImpl(`${url}/`, { method: "GET", headers: swingHeaders(env), redirect: "manual" });
+  const note = padded ? " (one of the values had spaces around it; they are now trimmed)" : "";
+  if (res.status === 401) return { ok: false, message: explain401(res, "") + note };
+  if (res.status >= 500) return { ok: false, message: `${url} replied ${res.status}; the app itself is failing` };
+  return { ok: true, message: `${url} accepted the login (HTTP ${res.status})${note}` };
+}
+
 export async function sendToSwing(card: StoredCard, env: NodeJS.ProcessEnv = process.env, fetchImpl: typeof fetch = fetch): Promise<{ ok: boolean; status: number; body: unknown }> {
   if (!swingConfigured(env)) throw new Error("SWING_API_URL / SWING_API_USER / SWING_API_PASSWORD are not set");
   const idea = toSwingIdea(card, Number(env.SWING_NOTIONAL ?? 5000));
-  const headers: Record<string, string> = {
-    "content-type": "application/json",
-    authorization: `Basic ${Buffer.from(`${env.SWING_API_USER}:${env.SWING_API_PASSWORD}`).toString("base64")}`,
-  };
-  if (env.SWING_API_BYPASS) headers["x-vercel-protection-bypass"] = env.SWING_API_BYPASS;
-  const res = await fetchImpl(`${env.SWING_API_URL!.replace(/\/$/, "")}/api/swing`, { method: "POST", headers, body: JSON.stringify(idea) });
+  const headers = { "content-type": "application/json", ...swingHeaders(env) };
+  const res = await fetchImpl(`${env.SWING_API_URL!.trim().replace(/\/$/, "")}/api/swing`, { method: "POST", headers, body: JSON.stringify(idea) });
   const text = await res.text();
   let body: unknown;
   try {
@@ -52,6 +68,6 @@ export async function sendToSwing(card: StoredCard, env: NodeJS.ProcessEnv = pro
 /** Which of the two gates in front of the Swing ideas app refused: Vercel's deployment protection, or the app's own login. */
 export function explain401(res: { status: number; headers: { get(name: string): string | null } }, text: string): string {
   if (res.status !== 401) return `swing log replied ${res.status}: ${text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160)}`;
-  if (res.headers.get("www-authenticate")) return "the Swing ideas app rejected the login: SWING_API_USER / SWING_API_PASSWORD must equal that app's DASHBOARD_USER / DASHBOARD_PASSWORD";
+  if (res.headers.get("www-authenticate")) return "the Swing ideas app rejected the login: SWING_API_USER / SWING_API_PASSWORD must be exactly what you type to log in to the Swing ideas app (its own DASHBOARD_USER / DASHBOARD_PASSWORD, not this app's)";
   return "Vercel's deployment protection on the Swing ideas app blocked the call: SWING_API_BYPASS must be that project's \"Protection Bypass for Automation\" secret";
 }

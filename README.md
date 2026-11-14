@@ -181,10 +181,18 @@ the day and the candidates page says so. Each source has a per-host rate limit a
    OAuth, Resend (`RESEND_API_KEY`, `ALERT_EMAIL`, `DASHBOARD_URL`).
 3. **Swing ideas log**: `SWING_API_URL` (the spx-ai-agent deployment, no path), `SWING_API_USER` / `SWING_API_PASSWORD`
    (that app's dashboard login), `SWING_API_BYPASS` if its deployment is protected, `SWING_NOTIONAL` (default $5,000).
-   Without these the Send button is disabled and says why.
+   Without these the Send button is disabled and says why. **Settings → Test the Swing login** reads that app's home
+   page with these values and says which gate (its login, or Vercel's protection) refused.
 4. `vercel.json` schedules the two cron jobs (11:30 and 22:30 UTC, Mon–Fri; the daily cadence works on the Hobby plan).
    The routes convert to America/New_York themselves, so DST only shifts them by an hour.
-5. Open **Watch-list** and review the seed terms; add your own. Open **Settings** and check the source health after the
+5. **Phone alerts** (optional, [ntfy](https://ntfy.sh)): set `NTFY_TOPIC` to a long random name, install the ntfy app and
+   subscribe to that topic. You get a push for each new promoted scout card and story trade, for each post-catalyst
+   verdict, and when a job fails. `NTFY_SERVER` / `NTFY_TOKEN` only for a self-hosted or protected server. Toggles on
+   Settings; **Send a test to my phone** checks the wiring. Anyone who knows the topic name can read it, so keep it long.
+6. **Post-catalyst check**: after the close, the tracker asks the model (effort low, inside the daily cap) whether each
+   card whose catalyst date has passed (last 60 days) played out, from the price since entry and the news since the
+   catalyst. The verdict is stored append-only beside the card; it is commentary and never changes the score.
+7. Open **Watch-list** and review the seed terms; add your own. Open **Settings** and check the source health after the
    first scan.
 
 ## Local development

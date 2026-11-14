@@ -16,7 +16,18 @@ export async function POST(request: Request) {
     if (body.job === "track") return NextResponse.json({ ok: true, result: await runTrack() });
     if (body.job === "daily") return NextResponse.json({ ok: true, result: await runDaily() });
     if (body.job === "stories") return NextResponse.json({ ok: true, result: await runStoriesJob() });
-    return NextResponse.json({ ok: false, errors: ["job must be 'daily', 'stories' or 'track'"] }, { status: 422 });
+    if (body.job === "push-test") {
+      const { pushConfigured, sendPush } = await import("@/lib/notify");
+      if (!pushConfigured()) return NextResponse.json({ ok: false, errors: ["NTFY_TOPIC is not set"] }, { status: 422 });
+      await sendPush({ title: "Trend scout: test", message: "Phone alerts are working. New promoted cards, story trades and post-catalyst verdicts will arrive here.", tags: ["bell"], click: process.env.DASHBOARD_URL });
+      return NextResponse.json({ ok: true, result: { sent: true } });
+    }
+    if (body.job === "swing-test") {
+      const { testSwingLogin } = await import("@/lib/scout/swing");
+      const r = await testSwingLogin();
+      return NextResponse.json(r.ok ? { ok: true, result: { message: r.message } } : { ok: false, errors: [r.message] }, { status: r.ok ? 200 : 422 });
+    }
+    return NextResponse.json({ ok: false, errors: ["job must be 'daily', 'stories', 'track', 'push-test' or 'swing-test'"] }, { status: 422 });
   } catch (err) {
     return NextResponse.json({ ok: false, errors: [err instanceof Error ? err.message : String(err)] }, { status: 500 });
   }

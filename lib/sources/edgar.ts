@@ -120,7 +120,7 @@ async function fullText(term: string, now: Date, env: NodeJS.ProcessEnv, fetchIm
   const r = relayRoute(env);
   if (!r) return null;
   const today = dateStr(now);
-  const q = (start: string) => getJson<Fts>(r.url(`https://efts.sec.gov/LatestSearch/search-index?q=${encodeURIComponent(`"${term}"`)}&forms=8-K,10-K,10-Q&dateRange=custom&startdt=${start}&enddt=${today}`), { headers: r.headers, minIntervalMs: MIN_INTERVAL_MS, fetchImpl });
+  const q = (start: string) => getJson<Fts>(r.url(`https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(`"${term}"`)}&forms=8-K,10-K,10-Q&dateRange=custom&startdt=${start}&enddt=${today}`), { headers: r.headers, minIntervalMs: MIN_INTERVAL_MS, fetchImpl });
   const [m1, y1] = [await q(dateStr(daysAgo(now, 30))), await q(dateStr(daysAgo(now, 365)))];
   const monthly12 = r1(y1.hits.total.value / 12);
   const ch = change(m1.hits.total.value, monthly12);
