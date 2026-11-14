@@ -87,9 +87,15 @@ regulator's move, an indictment, a recall, a pivot, a guidance cut. `lib/scout/s
   before the story was first seen, with the rising streak ("Jensen Huang: 90k views vs 9,000/day before, 10×, rising
   3 days in a row"), and puts it in front of the desk on stage, building and follow-up reads and on the Stories page.
   It is the free stand-in for social-media intensity until Reddit access is approved.
-- **Forced flows.** After good news the desk asks who is now forced to buy or sell: index funds on an inclusion,
-  short sellers on a squeeze, funds underweight a stock that just re-rated, analysts who must raise targets (the
-  2026 Moderna run after its melanoma readout and Nasdaq-100 inclusion is the shape).
+- **Follow or fade** (from the evidence-based news playbook: Chan 2003, Tetlock 2011, Lopez-Lira & Tang, Greenwood &
+  Sammon). The desk classifies every story before choosing trades: **new or stale** (the code also measures staleness:
+  how much today's headlines repeat the ticker's ten previous stories), **fundamental, flow or noise**, and **simple or
+  complex**, and marks each trade **follow** or **fade**. New, fundamental news is followed, more so when it is bad,
+  complex or about a small or opaque company; stale, flow-driven and no-news moves are faded. Horizons match the
+  evidence: read-throughs about 5 trading days, bad-news drift weeks to months, flow trades out at the flow date,
+  fades about a week. Transparent binary news (trial results, partnerships, earnings) is priced almost at once.
+  Flows are treated with care: the S&P 500 addition effect has shrunk to about nothing and flow-driven moves tend to
+  reverse once the flow is done. A "building" story is only re-read when its coverage is not mostly re-reported.
 - The desk and the research step also ask whether the company is priced as one person's company, and name what else
   is moving the stock (an inflation print, an election, a sector sell-off, downgrades) so the result is not credited
   to the story alone.
@@ -192,8 +198,9 @@ anything else happens. Cards, versions and track events are append-only, enforce
   first in 5 days) and about 1 in 40 ordinary stock-days (picked by a hash, as controls) are logged to the append-only
   `chatter_events` the day they are measured. Outcomes come from daily bars: entry at the next open, excess over SPY
   and the sector fund after 1, 5 and 20 sessions, and the average size of the move either way. Spikes are split by
-  whether the 5 sessions before moved less than 3% against SPY (chatter leading, not following) and by bullish or
-  bearish chatter, and every row is read against the controls. Needs about a month of warm-up and two to three months
+  whether the 5 sessions before moved less than 3% against SPY (chatter leading, not following), by whether the stock
+  had any story in the news stream that day or the day before (chatter with no news is the case news research expects
+  to fade), and by bullish or bearish chatter, and every row is read against the controls. Needs about a month of warm-up and two to three months
   of events. The page also runs a **look-back** on Stocktwits' own 3-month message-volume history for the same stocks
   (`data/chatter-explore/`, fetched once through the Stocktwits connector; histories that stop early or were dark and
   then remapped are left out: AVB, EA, HES, IPG, PARA, WBD): exploratory only, since that score is scaled over the whole window (partly hindsight),
@@ -311,6 +318,7 @@ lib/scout/followup.ts  reaction gaps: stories still loud while the stock is quie
 lib/scout/options.ts   implied vs realized volatility for the how-to-trade note
 lib/scout/attention.ts coverage trend (building) and Wikipedia attention for a story's people
 lib/scout/chatter.ts   the chatter test: measurement, spikes, controls, outcomes
+lib/scout/staleness.ts how much today's headlines repeat a ticker's earlier stories
 config/chatter.ts      the chatter test's fixed 198 stocks and rules
 lib/scout/swing.ts   the post to the Swing ideas log
 lib/schema.ts        idempotent SQL with append-only triggers

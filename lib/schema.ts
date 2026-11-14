@@ -190,6 +190,8 @@ CREATE OR REPLACE TRIGGER story_events_ro BEFORE UPDATE OR DELETE ON story_event
 -- The company and the people at the centre of the story, as the desk named them (for Wikipedia attention).
 ALTER TABLE story_events ADD COLUMN IF NOT EXISTS company text;
 ALTER TABLE story_events ADD COLUMN IF NOT EXISTS people text[] NOT NULL DEFAULT '{}';
+-- The desk's classification (new/stale, fundamental/flow/noise, simple/complex) and the measured staleness.
+ALTER TABLE story_events ADD COLUMN IF NOT EXISTS labels jsonb;
 
 -- Chatter test: one Stocktwits measurement per symbol per weekday, written once.
 CREATE TABLE IF NOT EXISTS chatter_daily (

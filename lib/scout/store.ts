@@ -445,8 +445,8 @@ export async function storyEventsSince(from: string): Promise<StoryEvent[]> {
 }
 
 /** Record that the desk read a story today; once per key per day (later reads the same day are ignored). */
-export async function addStoryEvent(e: { etDate: string; key: string; symbols: string[]; stage: number; summary: string; escalation: string[]; company?: string | null; people?: string[] }): Promise<void> {
-  await q(`INSERT INTO story_events (et_date, key, symbols, stage, summary, escalation, company, people) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (key, et_date) DO NOTHING`, [e.etDate, e.key, e.symbols, e.stage, e.summary, e.escalation, e.company ?? null, e.people ?? []]);
+export async function addStoryEvent(e: { etDate: string; key: string; symbols: string[]; stage: number; summary: string; escalation: string[]; company?: string | null; people?: string[]; labels?: unknown }): Promise<void> {
+  await q(`INSERT INTO story_events (et_date, key, symbols, stage, summary, escalation, company, people, labels) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (key, et_date) DO NOTHING`, [e.etDate, e.key, e.symbols, e.stage, e.summary, e.escalation, e.company ?? null, e.people ?? [], e.labels ? JSON.stringify(e.labels) : null]);
 }
 
 // ------------------------------------------------------------ chatter test
@@ -521,4 +521,18 @@ export async function symbolInfo(symbols: string[]): Promise<Map<string, SymbolI
 /** Symbols checked within the last `hours`. */
 export async function freshSymbols(hours: number): Promise<Set<string>> {
   return new Set((await q(`SELECT symbol FROM symbol_info WHERE checked_at >= now() - ($1::int * interval '1 hour')`, [hours])).map((r) => r.symbol));
+}
+
+/** Which symbols had stories on which days, and which days the news stream was recorded at all. */
+export async function newsDays(from: string, to: string): Promise<{ bySymbol: Map<string, Set<string>>; recorded: Set<string> }> {
+  const rows = await q(`SELECT date, symbol FROM ticker_news_daily WHERE date >= $1 AND date <= $2 AND stories > 0`, [from, to]);
+  const bySymbol = new Map<string, Set<string>>();
+  const recorded = new Set<string>();
+  for (const r of rows) {
+    const d = dstr(r.date)!;
+    recorded.add(d);
+    if (!bySymbol.has(r.symbol)) bySymbol.set(r.symbol, new Set());
+    bySymbol.get(r.symbol)!.add(d);
+  }
+  return { bySymbol, recorded };
 }

@@ -15,6 +15,7 @@ import { dateStr, daysAgo } from "../sources/types";
 import { addDays, toEt } from "../time";
 import { type Attention, type CoverageTrend, coverageTrend, publicAttention } from "./attention";
 import { preferencesText } from "./preferences";
+import { STALE_FROM, staleness, stalenessLabel } from "./staleness";
 import { researchCandidate, type ResearchDeps } from "./research";
 import { normalizeTicker } from "./tickers";
 import * as store from "./store";
@@ -67,6 +68,8 @@ export interface Story {
   /** Set by runStories: the ticker's coverage over the last days (building = growing every day), and public attention to the people named earlier. */
   coverage?: CoverageTrend;
   attention?: Attention[];
+  /** Measured by code: how much today's headlines repeat the ticker's previous stories (0 new … 1 repeated). */
+  staleness?: number | null;
   /** Time of the newest headline in the story (ISO). */
   latest: string;
   /** Newest first; `at` is the headline's full ISO timestamp. */
@@ -153,12 +156,19 @@ export const STORY_SYSTEM_PROMPT = `You are the story desk of a paper-only "tren
 
 Predicting the event is not the job; asking a better second question is. Before naming trades, ask of each story:
 1. What does it reveal, not just what happened? The headline may be a crime, a resignation or a scandal; the signal may be what the reaction shows: how intensely the public, customers, employees or lawmakers feel, or what the timing implies (a CEO leaving a week before earnings).
-2. Whose incentives just changed? Politicians and regulators who now have a popular target, rivals who can take share, customers who can walk, boards and prosecutors with a reason to dig. Their responses (hearings, bills, investigations, policy reversals, boycotts) arrive over weeks and the market tends to price them late. The same question cuts the other way after good news: who is now forced to buy or sell? Index funds on an index inclusion, short sellers on a squeeze, funds underweight a stock that just re-rated (a drug trial that worked), analysts who must raise targets. Forced flows can carry a move for weeks after the event itself.
+2. Whose incentives just changed? Politicians and regulators who now have a popular target, rivals who can take share, customers who can walk, boards and prosecutors with a reason to dig. Their responses (hearings, bills, investigations, policy reversals, boycotts) arrive over weeks and the market tends to price them late. After good news, ask who is now forced to buy or sell, but treat flows with care: moves driven by flows (index changes, offerings, rebalances) tend to reverse once the flow is done, and the S&P 500 addition effect has shrunk to about nothing (most additions are migrations from the MidCap 400, whose funds sell as the S&P funds buy). What still works is small and specific: non-migration additions large against the free float, and the reversal after the effective date in small, thinly traded index additions and deletions. Short covering and underweight funds chasing a stock that truly re-rated on new fundamentals can carry a move; analysts raising targets after a rally add little.
 3. Is the market's reaction smaller than the story's intensity? A flat stock while coverage and anger keep growing is the gap to look for. A stock that already fell 15% on the day may have priced it.
 4. Is the company priced as one person's company? When the valuation rests on a founder-CEO, any threat to that person is a threat to the valuation, and the market tends to treat it as unlikely until it suddenly is not.
 5. What else is moving the stock right now (an inflation print, an election, a sector sell-off, downgrades)? Name it, so a result is not credited to the story alone, and compare against the stock's peers: a stock falling while its rivals rise is the story; everything falling together is the market.
 
-Attention that grows every day is a signal before any institution acts: a scandal that dominates the news and social media more each day forces a response sooner or later. When you are shown a story's coverage building day after day, or Wikipedia views of the people in it many times normal and rising, ask what that growing attention will force to happen next, and whether the stock has moved at all.
+Attention that grows every day can be a signal before any institution acts, but only when the coverage carries new facts: a scandal that dominates the news more each day with fresh disclosures forces a response sooner or later. Re-reported news is the opposite: recaps, follow-ups and "why X is moving" stories that repeat what was already known get overtraded by retail investors and tend to reverse (Tetlock). You are shown a measured staleness for each story (how much today's headlines repeat the ticker's earlier ones); growing coverage that is mostly stale is a fade, not a follow.
+
+Classify every story before choosing trades, because the classification decides follow or fade:
+- "novelty": "new" (a new fact) or "stale" (repeats what was already reported).
+- "nature": "fundamental" (cash flows: contracts with dollar values, guidance, regulatory outcomes, legal findings) or "flow" (index changes, offerings, rebalances, options expiry) or "noise" (no identifiable new fact).
+- "complexity": "simple" (one transparent fact the market reads at once: an earnings number, a partnership, a trial result) or "complex" (multi-step: read-throughs, insider patterns, technical or legal detail).
+- Default play: follow new, fundamental news, more so when it is bad, complex, or about a small or opaque company (bad news drifts for weeks to months; good news less); fade stale, flow-driven and no-news moves (they tend to reverse within days to a week). Transparent, binary news (trial results, partnerships, earnings) is priced almost at once: little drift to harvest.
+- Horizons that match the evidence: read-throughs to suppliers and peers about 5 trading days; bad-news drift weeks to months; flow trades out at the flow date; fades of stale or no-news moves about a week.
 
 Stories come in stages. The first headline is rarely the whole story: once an institution acts (a board hires outside investigators, a congressional committee asks for a briefing, a regulator or prosecutor opens a case, an executive resigns), the matter has to go somewhere, and every reporter starts digging. A board that hires a former prosecutor does not clear anyone in a week. When you are shown earlier stages of a story, treat the new one as a fresh catalyst on an old story: ask who has to act next (the board, Congress, export-control or other regulators, prosecutors, reporters), what that next step would do to the price, and whether the move so far has priced it. The cleanest entry is usually right after the first institution acts, before most of the move; by the late stages options are expensive.
 
@@ -171,6 +181,8 @@ Then the trades:
 
 For every story also give "company" (the main listed company's name as Wikipedia titles it; empty for a macro story) and "people" (at most three people at the centre of the story, full names as Wikipedia titles them; empty if none), so the scout can measure public attention.
 
+For every trade also give "play": "follow" (ride the information) or "fade" (bet on the move reversing).
+
 Rules: at most two trades per story, a credible reaction or second-order trade preferred over the obvious direct one. Skip stories that are noise, already fully priced, or have no listed exposure, and say why. Trades are tracked and scored as shares against SPY. Tickers must be listed on a US exchange: for a foreign company use its exchange-listed US ADR (TSM, ASML, SONY), never the home-exchange symbol, and not an OTC-only ADR such as BESIY, which cannot be priced or paper-traded. Be concrete and short.`;
 
 export const storyTriageSchema = z.object({
@@ -179,12 +191,16 @@ export const storyTriageSchema = z.object({
     summary: z.string().min(1).max(400),
     company: z.string().max(120).default(""),
     people: z.array(z.string().max(80)).max(5).default([]),
+    novelty: z.enum(["new", "stale"]).default("new"),
+    nature: z.enum(["fundamental", "flow", "noise"]).default("fundamental"),
+    complexity: z.enum(["simple", "complex"]).default("simple"),
     skip: z.boolean(),
     skip_reason: z.string().max(300),
     trades: z.array(z.object({
       ticker: z.string().min(1),
       direction: z.enum(["long", "short"]),
       role: z.enum(["direct", "second_order", "reaction"]),
+      play: z.enum(["follow", "fade"]).default("follow"),
       horizon_days: z.number().int().min(1).max(180),
       thesis: z.string().min(1).max(500),
       why_not_priced: z.string().min(1).max(400),
@@ -200,20 +216,21 @@ export const STORY_JSON_SCHEMA = {
     stories: {
       type: "array",
       items: {
-        type: "object", additionalProperties: false, required: ["key", "summary", "company", "people", "skip", "skip_reason", "trades"],
+        type: "object", additionalProperties: false, required: ["key", "summary", "company", "people", "novelty", "nature", "complexity", "skip", "skip_reason", "trades"],
         properties: {
           key: { type: "string", description: "the story key exactly as given" },
           summary: { type: "string", description: "what happened, one or two sentences" },
           company: { type: "string", description: "the main listed company's name as Wikipedia titles it; empty for a macro story" },
+          novelty: { type: "string", enum: ["new", "stale"] }, nature: { type: "string", enum: ["fundamental", "flow", "noise"] }, complexity: { type: "string", enum: ["simple", "complex"] },
           people: { type: "array", items: { type: "string" }, description: "up to three people at the centre of the story, full names as Wikipedia titles them; empty if none" },
           skip: { type: "boolean" },
           skip_reason: { type: "string", description: "empty when not skipped" },
           trades: {
             type: "array", description: "at most two; empty when skipped",
             items: {
-              type: "object", additionalProperties: false, required: ["ticker", "direction", "role", "horizon_days", "thesis", "why_not_priced", "invalidation"],
+              type: "object", additionalProperties: false, required: ["ticker", "direction", "role", "play", "horizon_days", "thesis", "why_not_priced", "invalidation"],
               properties: {
-                ticker: { type: "string", description: "US ticker symbol only, e.g. NVDA or BRK.B; no $ sign, no exchange prefix" }, direction: { type: "string", enum: ["long", "short"] }, role: { type: "string", enum: ["direct", "second_order", "reaction"] },
+                ticker: { type: "string", description: "US ticker symbol only, e.g. NVDA or BRK.B; no $ sign, no exchange prefix" }, direction: { type: "string", enum: ["long", "short"] }, role: { type: "string", enum: ["direct", "second_order", "reaction"] }, play: { type: "string", enum: ["follow", "fade"] },
                 horizon_days: { type: "integer", description: "1 to 180" }, thesis: { type: "string" }, why_not_priced: { type: "string" }, invalidation: { type: "string" },
               },
             },
@@ -229,6 +246,7 @@ export function buildStoryPrompt(stories: Story[], date: string, preferences: st
   if (preferences) L.push(`\n${preferences}`);
   for (const s of stories) {
     L.push(`\n## ${s.key} — ${s.symbols.length ? s.symbols.join(", ") : "macro"}: ${s.stories} headlines, ${s.mainstream} mainstream, ${s.shockHits} with shock wording${s.escalation.length ? `, institutions acting: ${s.escalation.slice(0, 6).join(", ")}` : ""}`);
+    if (s.staleness !== undefined) L.push(`Measured ${stalenessLabel(s.staleness)}.`);
     if (s.coverage) L.push(`${s.symbols[0] ?? s.key} ${s.coverage.line}.${s.coverage.building ? " What will this growing attention force to happen next?" : ""}`);
     for (const x of s.attention ?? []) L.push(`Public attention: ${x.line}.`);
     if (s.history?.length) {
@@ -274,8 +292,8 @@ export const storyTerm = (key: string, ticker: string) => `story: ${key} → ${t
 export interface StoriesReport {
   date: string;
   headlinesRead: number;
-  detected: Array<{ key: string; symbols: string[]; stories: number; mainstream: number; shockHits: number; stage: number | null; escalation: string[]; building: boolean; coverage: string | null; latest: string; sample: string[]; samples: Array<{ at: string; headline: string }> }>;
-  triage: Array<{ key: string; summary: string; skipped: string | null; trades: Array<{ ticker: string; direction: string; role: string; horizon_days: number }>; attention?: string[] }>;
+  detected: Array<{ key: string; symbols: string[]; stories: number; mainstream: number; shockHits: number; stage: number | null; escalation: string[]; building: boolean; coverage: string | null; staleness: number | null; latest: string; sample: string[]; samples: Array<{ at: string; headline: string }> }>;
+  triage: Array<{ key: string; summary: string; skipped: string | null; labels?: { novelty: string; nature: string; complexity: string }; trades: Array<{ ticker: string; direction: string; role: string; play?: string; horizon_days: number }>; attention?: string[] }>;
   researched: Array<{ term: string; outcome: string; reason?: string; cardId?: number }>;
   error: string | null;
 }
@@ -313,13 +331,19 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
     attachHistory(s, events, et.date);
     if (!s.key.startsWith("macro:")) s.coverage = coverageTrend(storyCounts.filter((c) => c.symbol === s.key), et.date);
   }
-  report.detected = stories.map((s) => ({ key: s.key, symbols: s.symbols, stories: s.stories, mainstream: s.mainstream, shockHits: s.shockHits, stage: s.stage ?? null, escalation: s.escalation.slice(0, 6), building: !!s.coverage?.building, coverage: s.coverage?.line ?? null, latest: s.latest, sample: s.headlines.slice(0, 3).map((h) => h.headline), samples: s.headlines.slice(0, 3).map((h) => ({ at: h.at, headline: h.headline })) }));
+  // Staleness: today's headlines against the ticker's ten previous stories (before the last 24 hours).
+  for (const s of stories.filter((x) => !x.key.startsWith("macro:"))) {
+    const earlier = await deps.data.getNews([s.key], daysAgo(deps.now, 30), daysAgo(deps.now, 1), 10).catch(() => []);
+    s.staleness = staleness(s.headlines.map((h) => h.headline), earlier.map((n) => n.headline));
+  }
+  report.detected = stories.map((s) => ({ key: s.key, symbols: s.symbols, stories: s.stories, mainstream: s.mainstream, shockHits: s.shockHits, stage: s.stage ?? null, escalation: s.escalation.slice(0, 6), building: !!s.coverage?.building, coverage: s.coverage?.line ?? null, staleness: s.staleness ?? null, latest: s.latest, sample: s.headlines.slice(0, 3).map((h) => h.headline), samples: s.headlines.slice(0, 3).map((h) => ({ at: h.at, headline: h.headline })) }));
   await store.saveTickerCounts(et.date, items);
   if (!stories.length) return report;
 
   const recent = await store.recentTerms(STORY_COOLDOWN_DAYS);
   // A new stage (an institution acted) or a building story (coverage growing every day) skips the 3-day cooldown, once a day per story.
-  const again = (s: Story) => !!s.stage || (!!s.history?.length && !!s.coverage?.building);
+  // Growing coverage only counts when it carries new facts; stale re-reporting is a fade, not a reason to look again.
+  const again = (s: Story) => !!s.stage || (!!s.history?.length && !!s.coverage?.building && (s.staleness ?? 0) < STALE_FROM);
   const fresh = stories.filter((s) => (again(s) ? !readToday.has(s.key) : ![...recent].some((t) => t.startsWith(`story: ${s.key.toLowerCase()} `))));
   if (!fresh.length) {
     report.error = `all ${stories.length} stories were researched in the last ${STORY_COOLDOWN_DAYS} days`;
@@ -362,11 +386,11 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
     const story = fresh.find((s) => s.key === t.key);
     if (!story) continue;
     const stageNo = story.stage ?? (story.history?.length ? Math.max(...story.history.map((e) => e.stage)) : 1);
-    await store.addStoryEvent({ etDate: et.date, key: story.key, symbols: story.symbols, stage: stageNo, summary: t.summary, escalation: story.escalation.slice(0, 10), company: t.company || null, people: t.people.slice(0, 3) }).catch(() => undefined);
+    await store.addStoryEvent({ etDate: et.date, key: story.key, symbols: story.symbols, stage: stageNo, summary: t.summary, escalation: story.escalation.slice(0, 10), company: t.company || null, people: t.people.slice(0, 3), labels: { novelty: t.novelty, nature: t.nature, complexity: t.complexity, staleness: story.staleness ?? null } }).catch(() => undefined);
     const termKey = story.stage ? `${story.key} (stage ${story.stage})` : story.history?.length && story.coverage?.building ? `${story.key} (building)` : story.key;
     // Public attention for a story seen for the first time, now that the desk has named its people (shown on the Stories page).
     if (!story.attention && (t.people.length || t.company)) story.attention = await publicAttention([...t.people, ...(t.company ? [t.company] : [])], story.history?.[0]?.date ?? et.date, et.date, deps.fetchImpl);
-    report.triage.push({ key: t.key, summary: t.summary, skipped: t.skip ? t.skip_reason || "skipped" : null, trades: t.trades.map((x) => ({ ticker: x.ticker, direction: x.direction, role: x.role, horizon_days: x.horizon_days })), attention: (story.attention ?? []).map((x) => x.line) });
+    report.triage.push({ key: t.key, summary: t.summary, skipped: t.skip ? t.skip_reason || "skipped" : null, labels: { novelty: t.novelty, nature: t.nature, complexity: t.complexity }, trades: t.trades.map((x) => ({ ticker: x.ticker, direction: x.direction, role: x.role, play: x.play, horizon_days: x.horizon_days })), attention: (story.attention ?? []).map((x) => x.line) });
     if (t.skip) {
       await store.addCandidate({ versionId: (await store.listVersions()).at(-1)?.id ?? 1, origin: "scout", term: `story: ${termKey}`, kindHint: "event", tickersHint: story.symbols, observation: null, trigger: storyTrigger(story, et.date), outcome: "rejected", reason: `story desk skipped: ${t.skip_reason}`, cardId: null }).catch(() => undefined);
       continue;
@@ -375,7 +399,7 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
       const stages = (story.history?.length ? `\nEarlier stages:\n${story.history.map((e) => `- ${e.date} (stage ${e.stage}): ${e.summary}`).join("\n")}${story.stage ? `\nToday is stage ${story.stage}: ${story.escalation.slice(0, 6).join(", ")}.` : ""}` : "")
         + (story.coverage ? `\n${story.symbols[0] ?? story.key} ${story.coverage.line}.` : "")
         + (story.attention ?? []).map((x) => `\nPublic attention: ${x.line}.`).join("");
-      const context = `Story: ${t.summary}${stages}\nProposed trade (${trade.role}): ${trade.direction} ${trade.ticker}, horizon ${trade.horizon_days} days.\nThesis: ${trade.thesis}\nWhy the market may still misprice it: ${trade.why_not_priced}\nInvalidation: ${trade.invalidation}\nHeadlines:\n${story.headlines.map((h) => `- [${h.source}] ${h.headline}`).join("\n")}`;
+      const context = `Story: ${t.summary}${stages}\nDesk classification: ${t.novelty} news, ${t.nature}, ${t.complexity}${story.staleness !== undefined ? `; ${stalenessLabel(story.staleness)}` : ""}.\nProposed trade (${trade.role}, ${trade.play === "fade" ? "a fade: betting the move reverses" : "a follow: riding the information"}): ${trade.direction} ${trade.ticker}, horizon ${trade.horizon_days} days.\nThesis: ${trade.thesis}\nWhy the market may still misprice it: ${trade.why_not_priced}\nInvalidation: ${trade.invalidation}\nHeadlines:\n${story.headlines.map((h) => `- [${h.source}] ${h.headline}`).join("\n")}`;
       const r = await researchCandidate({ origin: "scout", term: storyTerm(termKey, trade.ticker), kindHint: "event", tickersHint: [trade.ticker], observation: null, trigger: storyTrigger(story, et.date, trade.role), context }, deps);
       report.researched.push(r.outcome === "card" ? { term: storyTerm(termKey, trade.ticker), outcome: `card: ${r.card.status}`, cardId: r.card.id } : { term: storyTerm(termKey, trade.ticker), outcome: r.outcome, reason: r.reason });
       if (r.outcome === "capped") {

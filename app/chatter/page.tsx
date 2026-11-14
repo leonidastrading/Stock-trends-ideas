@@ -2,7 +2,7 @@ import SetupNotice from "@/components/SetupNotice";
 import { CHATTER, CHATTER_UNIVERSE } from "@/config/chatter";
 import type { DailyBar } from "@/lib/alpaca";
 import { hasDatabase } from "@/lib/db";
-import { chatterReport, eventOutcome, GROUP_LABEL, groupOf, nearEarnings, type ChatterReportRow } from "@/lib/scout/chatter";
+import { chatterReport, eventOutcome, GROUP_LABEL, groupOf, hadNews, nearEarnings, type ChatterReportRow } from "@/lib/scout/chatter";
 import { exploreEvents, exploreOutcomes, loadExplore } from "@/lib/scout/chatter-explore";
 import { CHATTER_EXPLORE_FROM } from "@/lib/scout/engine";
 import * as store from "@/lib/scout/store";
@@ -56,16 +56,16 @@ export default async function ChatterPage() {
   if (!hasDatabase()) return <SetupNotice />;
   const today = toEt(new Date()).date;
   const symbols = [...new Set(["SPY", ...CHATTER_UNIVERSE.flatMap((u) => [u.symbol, u.etf])])];
-  const [status, events, barRows, earnings] = await Promise.all([store.chatterStatus(), store.chatterEvents(), store.loadBars(symbols, CHATTER_EXPLORE_FROM, today), store.earningsDatesBySymbol()]);
+  const [status, events, barRows, earnings, news] = await Promise.all([store.chatterStatus(), store.chatterEvents(), store.loadBars(symbols, CHATTER_EXPLORE_FROM, today), store.earningsDatesBySymbol(), store.newsDays(CHATTER_EXPLORE_FROM, today)]);
   const bars = groupBars(barRows);
   const etf = new Map(CHATTER_UNIVERSE.map((u) => [u.symbol, u.etf]));
-  const forward = events.map((e) => ({ ...e, nearEarnings: nearEarnings(e.date, earnings.get(e.symbol)), outcome: eventOutcome(e.date, bars.get(e.symbol) ?? [], bars.get("SPY") ?? [], bars.get(etf.get(e.symbol) ?? "") ?? []) }));
+  const forward = events.map((e) => ({ ...e, nearEarnings: nearEarnings(e.date, earnings.get(e.symbol)), news: hadNews(e.date, e.symbol, news.bySymbol, news.recorded), outcome: eventOutcome(e.date, bars.get(e.symbol) ?? [], bars.get("SPY") ?? [], bars.get(etf.get(e.symbol) ?? "") ?? []) }));
   const fwdRows = chatterReport(forward);
   const spikes = forward.filter((e) => e.kind === "spike").slice().reverse();
 
   const ex = loadExplore();
   const exEvents = exploreOutcomes(exploreEvents(ex.series), bars);
-  const exRows = chatterReport(exEvents.map((e) => ({ kind: e.kind, bullishShare: null, outcome: e.outcome, nearEarnings: nearEarnings(e.date, earnings.get(e.symbol)) })));
+  const exRows = chatterReport(exEvents.map((e) => ({ kind: e.kind, bullishShare: null, outcome: e.outcome, nearEarnings: nearEarnings(e.date, earnings.get(e.symbol)), news: hadNews(e.date, e.symbol, news.bySymbol, news.recorded) })));
   const exSpikes = exEvents.filter((e) => e.kind === "spike").length;
 
   return (
@@ -73,7 +73,7 @@ export default async function ChatterPage() {
       <h1>Chatter test</h1>
       <section className="card notice small">
         Does a spike in Stocktwits chatter while the price is still quiet predict the move? News research says prices under-react and catch up as a story spreads; message-board research says chatter predicts the size of moves more reliably than their direction. This is an experiment beside the scout: nothing here becomes card evidence.
-        <br />Fixed in advance: {CHATTER_UNIVERSE.length} stocks ({CHATTER.perSector} per sector). Each weekday every one is measured once (messages per hour over its latest 30, bullish share of tagged messages). A <b>spike</b> is a log rate {CHATTER.spikeZ}+ standard deviations above the stock&apos;s own previous {CHATTER.minHistory}–{CHATTER.lookbackDays} measurements, the first in {CHATTER.episodeGapDays} days. <b>Quiet</b> means the 5 sessions before moved less than {CHATTER.quietPct}% against SPY. About 1 in {CHATTER.controlOneIn} ordinary stock-days is logged as a <b>control</b>. Entry is the next open; results are the excess over SPY after 1, 5 and 20 sessions. &quot;Avg size&quot; is the average move either way, the thing chatter is known to predict. Spikes within 3 days of an earnings release (8-K item 2.02) are a known event and get their own row.
+        <br />Fixed in advance: {CHATTER_UNIVERSE.length} stocks ({CHATTER.perSector} per sector). Each weekday every one is measured once (messages per hour over its latest 30, bullish share of tagged messages). A <b>spike</b> is a log rate {CHATTER.spikeZ}+ standard deviations above the stock&apos;s own previous {CHATTER.minHistory}–{CHATTER.lookbackDays} measurements, the first in {CHATTER.episodeGapDays} days. <b>Quiet</b> means the 5 sessions before moved less than {CHATTER.quietPct}% against SPY. About 1 in {CHATTER.controlOneIn} ordinary stock-days is logged as a <b>control</b>. Entry is the next open; results are the excess over SPY after 1, 5 and 20 sessions. &quot;Avg size&quot; is the average move either way, the thing chatter is known to predict. Spikes within 3 days of an earnings release (8-K item 2.02) are a known event and get their own row. Quiet-price spikes with no story in the news stream that day or the day before get their own row too: news research expects chatter on no news to fade, so compare that row&apos;s average with the &quot;with news&quot; rows.
       </section>
 
       <section className="card">
@@ -87,7 +87,7 @@ export default async function ChatterPage() {
           <div className="table-wrap"><table>
             <thead><tr><th>Date</th><th>Stock</th><th className="num">z</th><th className="num">msgs/hour</th><th className="num">usual</th><th className="num">bullish</th><th>Group</th><th className="num">5 sessions vs SPY</th></tr></thead>
             <tbody>{spikes.slice(0, 30).map((e) => {
-              const g = e.outcome ? groupOf(e.kind, e.bullishShare, e.outcome.quiet, e.nearEarnings) : null;
+              const g = e.outcome ? groupOf(e.kind, e.bullishShare, e.outcome.quiet, e.nearEarnings, e.news) : null;
               const x = e.outcome?.excess[5] ?? null;
               return <tr key={e.id}><td className="small">{e.date}</td><td><b>{e.symbol}</b></td><td className="num">{e.z?.toFixed(1)}</td><td className="num">{e.perHour}</td><td className="num">{e.baselinePerHour ?? "—"}</td><td className="num">{e.bullishShare === null ? "—" : `${Math.round(e.bullishShare * 100)}%`}</td><td className="small">{g ? GROUP_LABEL[g] : "waiting for bars"}</td><td className={`num ${cls(x)}`}>{pct(x)}</td></tr>;
             })}</tbody>

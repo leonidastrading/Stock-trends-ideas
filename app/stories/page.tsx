@@ -12,7 +12,7 @@ import { fmtEt } from "@/lib/time";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-interface StoriesDetail { headlinesRead: number; detected: Array<{ key: string; symbols: string[]; stories: number; mainstream: number; shockHits: number; stage?: number | null; escalation?: string[]; building?: boolean; coverage?: string | null; latest?: string; sample: string[]; samples?: Array<{ at: string; headline: string }> }>; triage: Array<{ key: string; summary: string; skipped: string | null; trades: Array<{ ticker: string; direction: string; role: string; horizon_days: number }>; attention?: string[] }>; researched: Array<{ term: string; outcome: string; reason?: string; cardId?: number }>; error: string | null }
+interface StoriesDetail { headlinesRead: number; detected: Array<{ key: string; symbols: string[]; stories: number; mainstream: number; shockHits: number; stage?: number | null; escalation?: string[]; building?: boolean; coverage?: string | null; staleness?: number | null; latest?: string; sample: string[]; samples?: Array<{ at: string; headline: string }> }>; triage: Array<{ key: string; summary: string; skipped: string | null; labels?: { novelty: string; nature: string; complexity: string }; trades: Array<{ ticker: string; direction: string; role: string; play?: string; horizon_days: number }>; attention?: string[] }>; researched: Array<{ term: string; outcome: string; reason?: string; cardId?: number }>; error: string | null }
 
 interface GapRow { key: string; ticker: string; storyDate: string; ageDays: number; gap: boolean; loud: boolean; building?: boolean; quiet: boolean; why: string }
 interface FollowupDetail { checked: GapRow[]; researched: Array<{ term: string; outcome: string; reason?: string; cardId?: number }>; skipped: Array<{ key: string; reason: string }>; error: string | null }
@@ -42,6 +42,7 @@ export default async function StoriesPage() {
         Breaking stories from the news stream (a CEO scandal, a war, a ban, a pivot, a regulator's move) and the trades they imply, direct and one step away. Every trade is a card that went through the same gates:
         most are logged as <span className="tag late">late</span> because the story is already everywhere, and they are tracked on paper anyway. The Scoring page's "promoted versus late" table is where this style gets its verdict.
         Runs with the midday scan and whenever "Scan stories now" is pressed; for breaking news during the day, point an hourly cron-job.org job at <code>/api/cron/stories</code>.
+        Every story is classified first: new or stale (measured against the ticker&apos;s earlier headlines), fundamental, flow or noise, simple or complex. New, fundamental news is followed (bad news drifts longest); stale, flow-driven and no-news moves are faded.
         The desk asks of every story: what does it reveal, whose incentives just changed, is the market's reaction smaller than the story's intensity, is the company priced as one person's company, and what else is moving the stock?
         A story whose coverage grows every day is marked <span className="tag late">building</span> and read again at once, and the desk sees public attention (Wikipedia views of the people in it, against normal).
         Stories come in stages: when an institution acts on a story seen in the last 30 days (a board investigation, a congressional letter, a regulator, a resignation), it is read again at once as <span className="tag late">stage 2</span>, 3…, with the earlier stages in front of the desk.
@@ -85,9 +86,10 @@ export default async function StoriesPage() {
                 {s.samples ? (
                   <ul className="small secondary" style={{ margin: "4px 0", paddingLeft: 18 }}>{s.samples.map((h) => <li key={h.at + h.headline}><span className="muted">{fmtEt(h.at)}</span> {h.headline}</li>)}</ul>
                 ) : <div className="small secondary">{s.sample.join(" · ")}</div>}
-                {s.coverage && <div className="small muted">{s.coverage}</div>}
+                {s.coverage && <div className="small muted">{s.coverage}{s.staleness !== undefined && s.staleness !== null ? ` · staleness ${s.staleness.toFixed(2)}${s.staleness >= 0.45 ? " (mostly re-reported)" : ""}` : ""}</div>}
+                {tr?.labels && <div className="inline" style={{ marginTop: 4 }}><span className={`tag ${tr.labels.novelty === "stale" ? "late" : "ok"}`}>{tr.labels.novelty}</span><span className="tag">{tr.labels.nature}</span><span className="tag">{tr.labels.complexity}</span></div>}
                 {(tr?.attention ?? []).map((line) => <div key={line} className="small muted">👁 {line}</div>)}
-                {tr && <div className="small" style={{ marginTop: 4 }}>{tr.summary} {tr.skipped ? <span className="muted">— skipped: {tr.skipped}</span> : tr.trades.map((x) => <span key={x.ticker} style={{ display: "inline-block", margin: "4px 6px 0 0" }}><Direction direction={x.direction as "long" | "short"} ticker={x.ticker} size="small" /> <span className="tag">{x.role.replace("_", "-")} · {x.horizon_days}d</span></span>)}</div>}
+                {tr && <div className="small" style={{ marginTop: 4 }}>{tr.summary} {tr.skipped ? <span className="muted">— skipped: {tr.skipped}</span> : tr.trades.map((x) => <span key={x.ticker} style={{ display: "inline-block", margin: "4px 6px 0 0" }}><Direction direction={x.direction as "long" | "short"} ticker={x.ticker} size="small" /> <span className="tag">{x.role.replace("_", "-")}{x.play ? ` · ${x.play}` : ""} · {x.horizon_days}d</span></span>)}</div>}
                 <Feedback target={`story:${s.key}`} initial={fb.get(`story:${s.key}`) ? { vote: fb.get(`story:${s.key}`)!.vote, note: fb.get(`story:${s.key}`)!.note } : null} />
               </div>
             );

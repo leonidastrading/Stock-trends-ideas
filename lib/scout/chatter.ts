@@ -87,12 +87,13 @@ export function eventOutcome(date: string, sym: DailyBar[], spy: DailyBar[], etf
   return { entryDate: entry.date, prior5Excess, quiet: prior5Excess === null ? null : Math.abs(prior5Excess) * 100 < CHATTER.quietPct, excess, excessSector };
 }
 
-export type Group = "quiet_bullish" | "quiet_bearish" | "quiet_mixed" | "after_move" | "earnings" | "control";
+export type Group = "quiet_bullish" | "quiet_bearish" | "quiet_mixed" | "quiet_no_news" | "after_move" | "earnings" | "control";
 export const GROUP_LABEL: Record<Group, string> = {
+  quiet_no_news: "Spike, quiet price, no news that day (chatter alone: the fade case)",
   earnings: "Spike within 3 days of an earnings release (a known event, read apart)",
-  quiet_bullish: "Spike, quiet price, bullish chatter",
-  quiet_bearish: "Spike, quiet price, bearish chatter",
-  quiet_mixed: "Spike, quiet price, mixed or untagged",
+  quiet_bullish: "Spike, quiet price, with news, bullish chatter",
+  quiet_bearish: "Spike, quiet price, with news, bearish chatter",
+  quiet_mixed: "Spike, quiet price, with news, mixed or untagged chatter",
   after_move: "Spike after a 3%+ move (chatter following price)",
   control: "Control: ordinary days, random",
 };
@@ -102,11 +103,13 @@ export function nearEarnings(date: string, earnings: string[] | undefined, days 
   return !!earnings?.some((d) => Math.abs(daysBetween(d, date)) <= days);
 }
 
-export function groupOf(kind: "spike" | "control", bullishShare: number | null, quiet: boolean | null, earnings = false): Group | null {
+/** `news`: did the ticker have any story in the news stream that day or the day before (null: not recorded then). */
+export function groupOf(kind: "spike" | "control", bullishShare: number | null, quiet: boolean | null, earnings = false, news: boolean | null = null): Group | null {
   if (kind === "control") return "control";
   if (earnings) return "earnings";
   if (quiet === null) return null;
   if (!quiet) return "after_move";
+  if (news === false) return "quiet_no_news";
   if (bullishShare !== null && bullishShare >= CHATTER.bullishShare) return "quiet_bullish";
   if (bullishShare !== null && bullishShare <= CHATTER.bearishShare) return "quiet_bearish";
   return "quiet_mixed";
@@ -125,10 +128,10 @@ export function stat(xs: Array<number | null>): GroupStat {
 export interface ChatterReportRow { group: Group; events: number; byHorizon: Record<number, GroupStat>; byHorizonSector: Record<number, GroupStat> }
 
 /** Pure: group events with outcomes into the report table. */
-export function chatterReport(events: Array<{ kind: "spike" | "control"; bullishShare: number | null; outcome: Outcome | null; nearEarnings?: boolean }>): ChatterReportRow[] {
-  const groups: Group[] = ["quiet_bullish", "quiet_bearish", "quiet_mixed", "after_move", "earnings", "control"];
+export function chatterReport(events: Array<{ kind: "spike" | "control"; bullishShare: number | null; outcome: Outcome | null; nearEarnings?: boolean; news?: boolean | null }>): ChatterReportRow[] {
+  const groups: Group[] = ["quiet_bullish", "quiet_bearish", "quiet_mixed", "quiet_no_news", "after_move", "earnings", "control"];
   return groups.map((g) => {
-    const mine = events.filter((e) => e.outcome && groupOf(e.kind, e.bullishShare, e.outcome.quiet, e.nearEarnings) === g);
+    const mine = events.filter((e) => e.outcome && groupOf(e.kind, e.bullishShare, e.outcome.quiet, e.nearEarnings, e.news ?? null) === g);
     const byHorizon: Record<number, GroupStat> = {}, byHorizonSector: Record<number, GroupStat> = {};
     for (const n of CHATTER.horizons) {
       byHorizon[n] = stat(mine.map((e) => e.outcome!.excess[n]));
@@ -221,4 +224,11 @@ export async function refreshEarningsDates(env: NodeJS.ProcessEnv, from: string,
     }
   }
   return { symbols, dates, missing };
+}
+
+/** Pure: news that day or the day before, from the per-ticker daily story counts; null when the stream was not recorded for those days. */
+export function hadNews(date: string, symbol: string, counts: Map<string, Set<string>>, recordedDays: Set<string>): boolean | null {
+  const days = [date, addDays(date, -1)];
+  if (!days.some((d) => recordedDays.has(d))) return null;
+  return days.some((d) => counts.get(symbol)?.has(d) ?? false);
 }

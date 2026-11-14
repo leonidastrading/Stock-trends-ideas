@@ -73,7 +73,9 @@ describe("story desk end to end", () => {
         ] }] }), stopReason: "end_turn", modelServed: "m", usage: { input_tokens: 10, output_tokens: 10 }, costUsd: 0.01 };
       }
       expect(user).toMatch(/Story desk context/);
-      const ticker = /trade \(\w+\): short (\w+)/.exec(user)![1];
+      expect(user).toMatch(/Desk classification: new news, fundamental, simple/);
+      expect(user).toMatch(/a follow: riding the information/);
+      const ticker = /trade \([^)]*\): short (\w+)/.exec(user)![1];
       const t = sampleCard().tickers[0];
       return { text: JSON.stringify(sampleCard({ kind: "event", direction: "short", title: `${ticker} after the shooting`, tickers: [{ ...t, symbol: ticker, sector: "health_care" }] })), stopReason: "end_turn", modelServed: "m", usage: { input_tokens: 10, output_tokens: 10 }, costUsd: 0.02 };
     };

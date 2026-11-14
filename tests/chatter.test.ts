@@ -64,6 +64,9 @@ describe("chatter test: the rules", () => {
     expect(groupOf("control", 0.8, false)).toBe("control");
     expect(groupOf("spike", 0.8, null)).toBeNull();
     expect(groupOf("spike", 0.8, true, true)).toBe("earnings");
+    expect(groupOf("spike", 0.8, true, false, false)).toBe("quiet_no_news");
+    expect(groupOf("spike", 0.8, true, false, true)).toBe("quiet_bullish");
+    expect(groupOf("spike", 0.8, false, false, false)).toBe("after_move");
     expect(groupOf("control", 0.8, true, true)).toBe("control");
     expect(nearEarnings("2026-10-30", ["2026-10-29"])).toBe(true); // MSFT-style: chatter the day after results
     expect(nearEarnings("2026-11-05", ["2026-10-29"])).toBe(false);
@@ -148,5 +151,16 @@ describe("earnings dates from SEC filings", () => {
     const { earningsDates } = await import("@/lib/sources/edgar");
     const subs = { cik: "1", filings: { recent: { accessionNumber: ["a", "b", "c", "d"], filingDate: ["2026-10-29", "2026-09-02", "2026-07-30", "2026-04-28"], form: ["8-K", "8-K", "8-K/A", "8-K"], items: ["2.02,9.01", "5.02", "2.02", "2.02"], primaryDocument: ["x", "x", "x", "x"] } } };
     expect(earningsDates(subs, "2026-07-20")).toEqual(["2026-07-30", "2026-10-29"]);
+  });
+});
+
+describe("news that day", () => {
+  it("true, false, or unknown when the stream was not recorded", async () => {
+    const { hadNews } = await import("@/lib/scout/chatter");
+    const counts = new Map([["AAPL", new Set(["2026-11-16"])]]);
+    const recorded = new Set(["2026-11-16", "2026-11-17"]);
+    expect(hadNews("2026-11-17", "AAPL", counts, recorded)).toBe(true); // the day before counts
+    expect(hadNews("2026-11-17", "MSFT", counts, recorded)).toBe(false);
+    expect(hadNews("2026-09-10", "AAPL", counts, recorded)).toBeNull(); // look-back period: no stream recorded
   });
 });

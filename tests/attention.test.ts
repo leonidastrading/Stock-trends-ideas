@@ -68,14 +68,37 @@ describe("public attention (Wikipedia)", () => {
 
 describe("desk: forced flows, growing attention, names", () => {
   it("prompt and schema", () => {
-    expect(STORY_SYSTEM_PROMPT).toMatch(/who is now forced to buy or sell\?/);
-    expect(STORY_SYSTEM_PROMPT).toMatch(/index inclusion/);
-    expect(STORY_SYSTEM_PROMPT).toMatch(/Attention that grows every day/);
+    expect(STORY_SYSTEM_PROMPT).toMatch(/who is now forced to buy or sell/);
+    expect(STORY_SYSTEM_PROMPT).toMatch(/S&P 500 addition effect has shrunk to about nothing/);
+    expect(STORY_SYSTEM_PROMPT).toMatch(/tend to reverse once the flow is done/);
+    expect(STORY_SYSTEM_PROMPT).toMatch(/Attention that grows every day can be a signal .* only when the coverage carries new facts/);
+    expect(STORY_SYSTEM_PROMPT).toMatch(/"novelty": "new"/);
+    expect(STORY_SYSTEM_PROMPT).toMatch(/"play": "follow"/);
     const props = (STORY_JSON_SCHEMA.properties.stories.items as { required: readonly string[] }).required;
     expect(props).toEqual(expect.arrayContaining(["company", "people"]));
     const t = parseStoryTriage(JSON.stringify({ stories: [{ key: "NVDA", summary: "s", company: "Nvidia", people: ["Jensen Huang"], skip: true, skip_reason: "denied report", trades: [] }] }));
     expect(t.stories[0]).toMatchObject({ company: "Nvidia", people: ["Jensen Huang"] });
     const old = parseStoryTriage(JSON.stringify({ stories: [{ key: "X", summary: "s", skip: true, skip_reason: "r", trades: [] }] }));
     expect(old.stories[0]).toMatchObject({ company: "", people: [] });
+  });
+});
+
+describe("staleness (Tetlock): re-reported news vs new facts", () => {
+  it("scores today's headlines against earlier ones", async () => {
+    const { staleness, stalenessLabel } = await import("@/lib/scout/staleness");
+    const earlier = ["Robinhood crypto trading volume falls 48% in October", "Goldman cuts Robinhood price target to $115", "Supreme Court to hear Robinhood IPO disclosure appeal"];
+    const recap = ["Why Robinhood stock is falling: crypto trading volume falls 48%", "Robinhood Supreme Court IPO appeal: what to know"];
+    const fresh = ["Robinhood agrees to acquire Bitstamp rival in $2 billion deal"];
+    expect(staleness(recap, earlier)!).toBeGreaterThanOrEqual(0.45);
+    expect(staleness(fresh, earlier)!).toBeLessThan(0.25);
+    expect(staleness(fresh, [])).toBeNull();
+    expect(stalenessLabel(0.6)).toMatch(/stale/);
+    expect(stalenessLabel(0.1)).toMatch(/\(new\)/);
+  });
+  it("a building story that is mostly re-reported is not re-read", async () => {
+    const { parseStoryTriage } = await import("@/lib/scout/stories");
+    const t = parseStoryTriage(JSON.stringify({ stories: [{ key: "HOOD", summary: "recaps", company: "Robinhood Markets", people: [], novelty: "stale", nature: "noise", complexity: "simple", skip: false, skip_reason: "", trades: [{ ticker: "HOOD", direction: "long", role: "direct", play: "fade", horizon_days: 5, thesis: "re-reported selloff should reverse", why_not_priced: "retail overreaction to recaps", invalidation: "new fact appears" }] }] }));
+    expect(t.stories[0]).toMatchObject({ novelty: "stale", nature: "noise" });
+    expect(t.stories[0].trades[0].play).toBe("fade");
   });
 });
