@@ -189,6 +189,16 @@ anything else happens. Cards, versions and track events are append-only, enforce
   Google's rising queries for anything worth adding to the watch-list.
 - **Watch-list**: term, kind, tickers, date, who added it; approve the scout's proposals, retire terms.
 - **Scoring**: per version (see below), with a CSV export of every card and track.
+- **GitHub inbox**: an outside bot can drop documents for the scout by committing them to a folder in a GitHub repo
+  (`GITHUB_INBOX_REPO`, `GITHUB_INBOX_PATH` default `inbox`, `GITHUB_INBOX_TOKEN` with read-only Contents). On each
+  hourly call (or "Check the GitHub inbox" on Settings) the scout reads at most one new file: `.json` / `.md` / `.txt`
+  as text, `.pdf` via text extraction; a text file with the same name as a PDF is used instead of it. Ideas come from
+  the daily file's machine-readable JSON block when present, otherwise the model pulls up to 12 concrete ideas out of
+  the prose (only the document's own facts; the document is treated as data, not instructions). They are handed to
+  `/api/cron/import`, researched in the background, logged as `inbox: <term>` and scored as "Your bot" on the
+  Scoreboard. Each file version (path + git sha) is read once; a new commit of the same file is read again. The bot can
+  also skip GitHub and POST `{ "text": "<the JSON array>", "label": "<name>" }` to `/api/cron/import` with
+  `Authorization: Bearer $CRON_SECRET`.
 - **Filings** (the playbook's best-documented signals): EDGAR's daily index is read the day after filing (www.sec.gov,
   declared User-Agent, under 8 requests a second) into a queue of Form 4, 8-K and Schedule 13D filings, worked through
   in time-limited slices on each hourly story call and after the close. Form 4 → open-market purchases (code P, not
@@ -331,6 +341,7 @@ lib/scout/chatter.ts   the chatter test: measurement, spikes, controls, outcomes
 lib/scout/staleness.ts how much today's headlines repeat a ticker's earlier stories
 lib/sources/filings.ts EDGAR daily index, Form 4, 8-K and 13D header parsers
 lib/scout/filings.ts   the filings desk: queue, signals, research
+lib/scout/inbox.ts     the GitHub inbox: list, read, extract ideas, hand to the import
 config/chatter.ts      the chatter test's fixed 198 stocks and rules
 lib/scout/swing.ts   the post to the Swing ideas log
 lib/schema.ts        idempotent SQL with append-only triggers

@@ -297,6 +297,15 @@ CREATE TABLE IF NOT EXISTS filing_alerts (
 );
 CREATE OR REPLACE TRIGGER filing_alerts_ro BEFORE UPDATE OR DELETE ON filing_alerts FOR EACH ROW EXECUTE FUNCTION forbid_change();
 
+-- GitHub inbox: each file version (path + git sha) read once, with what came of it.
+CREATE TABLE IF NOT EXISTS inbox_files (
+  path text NOT NULL,
+  sha text NOT NULL,
+  read_at timestamptz NOT NULL DEFAULT now(),
+  result jsonb,
+  PRIMARY KEY (path, sha)
+);
+
 -- Phone pushes already sent, so each card, review or failure is pushed once.
 CREATE TABLE IF NOT EXISTS notifications (
   key text PRIMARY KEY,

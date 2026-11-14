@@ -17,7 +17,8 @@ export const importItemSchema = z.object({
   tickers: z.array(z.string()).max(8).default([]),
   direction: z.enum(["long", "short"]).optional(),
   catalyst_date: z.string().optional(),
-  source: z.enum(["host", "agent"]).catch("host"),
+  /** host / agent: the daily stream file; bot: a document from the GitHub inbox. */
+  source: z.enum(["host", "agent", "bot"]).catch("host"),
   confirmed: z.string().optional(),
   stream_time: z.string().optional(),
 });
@@ -26,15 +27,21 @@ export type ImportItem = z.infer<typeof importItemSchema>;
 /** Accepts the JSON block as pasted, including PDF line wraps and ```json fences. */
 export function parseImport(text: string): { items: ImportItem[]; errors: string[] } {
   const body = text.replace(/```(?:json)?/g, "").replace(/[\r\n]+/g, " ").trim();
-  const start = body.indexOf("[");
+  // The block is an array of objects: start at a "[" followed by "{" (not "[context unclear]" in the prose).
+  const starts = [...body.matchAll(/\[\s*\{/g)].map((m) => m.index!);
   const end = body.lastIndexOf("]");
-  if (start < 0 || end < start) return { items: [], errors: ["no JSON array found"] };
+  if (!starts.length || end < starts[0]) return { items: [], errors: ["no JSON array found"] };
   let raw: unknown;
-  try {
-    raw = JSON.parse(body.slice(start, end + 1));
-  } catch (err) {
-    return { items: [], errors: [`not valid JSON: ${err instanceof Error ? err.message : String(err)}`] };
+  let lastErr = "";
+  for (const start of starts) {
+    try {
+      raw = JSON.parse(body.slice(start, end + 1));
+      break;
+    } catch (err) {
+      lastErr = err instanceof Error ? err.message : String(err);
+    }
   }
+  if (raw === undefined) return { items: [], errors: [`not valid JSON: ${lastErr}`] };
   if (!Array.isArray(raw)) return { items: [], errors: ["expected a JSON array"] };
   const items: ImportItem[] = [];
   const errors: string[] = [];
@@ -46,13 +53,13 @@ export function parseImport(text: string): { items: ImportItem[]; errors: string
   return { items, errors };
 }
 
-export const importTerm = (it: ImportItem) => `stream ${it.source}: ${it.term}`.slice(0, 80);
+export const importTerm = (it: ImportItem) => (it.source === "bot" ? `inbox: ${it.term}` : `stream ${it.source}: ${it.term}`).slice(0, 80);
 
 export function importObservation(it: ImportItem, label: string): string {
-  const who = it.source === "host" ? "the stream host's idea" : "the file agent's own idea";
+  const who = it.source === "host" ? "the stream host's idea" : it.source === "bot" ? "an idea from Vadim's research bot" : "the file agent's own idea";
   const bits = [
     it.observation,
-    `(From the ${label} daily stream file; ${who}`,
+    it.source === "bot" ? `(From the inbox document "${label}"; ${who}` : `(From the ${label} daily stream file; ${who}`,
     it.direction ? `; proposed direction: ${it.direction}` : "",
     it.catalyst_date ? `; catalyst date: ${it.catalyst_date}` : "",
     it.confirmed ? `; facts confirmed: ${it.confirmed}` : "",

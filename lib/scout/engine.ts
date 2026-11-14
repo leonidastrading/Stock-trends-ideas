@@ -150,6 +150,10 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
   if (data && left() > 40_000) {
     out.chatterBars = await import("./chatter").then(({ ensureChatterBars }) => ensureChatterBars(data, now, CHATTER_EXPLORE_FROM)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
   } else out.chatterBars = "later: not enough time";
+  // GitHub inbox: at most one new file per call; its ideas go to the import, which researches them separately.
+  if (left() > 60_000) {
+    out.inbox = await import("./inbox").then(async ({ inboxConfig, pollInbox }): Promise<unknown> => (inboxConfig() ? pollInbox({ ...defaultDeps(now), fetchImpl }, 1, fetchImpl ?? fetch) : "not configured")).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+  } else out.inbox = "later: not enough time";
   // SEC filings: read any new daily index into the queue, then work through the queue.
   const ua = process.env.SEC_USER_AGENT?.trim();
   if (!ua) out.filings = "skipped: SEC_USER_AGENT not set";

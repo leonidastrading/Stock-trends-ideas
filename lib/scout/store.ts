@@ -596,3 +596,17 @@ export async function addFilingAlert(a: FilingAlert): Promise<void> {
 export async function filingAlertsSince(from: string): Promise<FilingAlert[]> {
   return (await q(`SELECT * FROM filing_alerts WHERE filed >= $1 ORDER BY filed DESC`, [from])).map((r) => ({ accession: r.accession, kind: r.kind, filed: dstr(r.filed)!, cik: r.cik, symbol: r.symbol, company: r.company, items: r.items ?? [], filer: r.filer }));
 }
+
+// ------------------------------------------------------------ GitHub inbox
+
+export async function inboxSeen(): Promise<Set<string>> {
+  return new Set((await q(`SELECT path, sha FROM inbox_files`)).map((r) => `${r.path}@${r.sha}`));
+}
+
+export async function markInbox(path: string, sha: string, result: unknown): Promise<void> {
+  await q(`INSERT INTO inbox_files (path, sha, result) VALUES ($1, $2, $3) ON CONFLICT (path, sha) DO NOTHING`, [path, sha, JSON.stringify(result)]);
+}
+
+export async function inboxRecent(limit = 20): Promise<Array<{ path: string; readAt: string; result: Record<string, unknown> | null }>> {
+  return (await q(`SELECT path, read_at, result FROM inbox_files ORDER BY read_at DESC LIMIT $1`, [limit])).map((r) => ({ path: r.path, readAt: iso(r.read_at)!, result: r.result ?? null }));
+}

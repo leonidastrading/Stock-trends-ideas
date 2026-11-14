@@ -22,12 +22,18 @@ export async function POST(request: Request) {
       await sendPush({ title: "Trend scout: test", message: "Phone alerts are working. New promoted cards, story trades and post-catalyst verdicts will arrive here.", tags: ["bell"], click: process.env.DASHBOARD_URL });
       return NextResponse.json({ ok: true, result: { sent: true } });
     }
+    if (body.job === "inbox") {
+      const { inboxConfig, pollInbox } = await import("@/lib/scout/inbox");
+      if (!inboxConfig()) return NextResponse.json({ ok: false, errors: ["GITHUB_INBOX_REPO is not set"] }, { status: 422 });
+      const { defaultDeps } = await import("@/lib/scout/engine");
+      return NextResponse.json({ ok: true, result: await pollInbox(defaultDeps(), 3) });
+    }
     if (body.job === "swing-test") {
       const { testSwingLogin } = await import("@/lib/scout/swing");
       const r = await testSwingLogin();
       return NextResponse.json(r.ok ? { ok: true, result: { message: r.message } } : { ok: false, errors: [r.message] }, { status: r.ok ? 200 : 422 });
     }
-    return NextResponse.json({ ok: false, errors: ["job must be 'daily', 'stories', 'track', 'push-test' or 'swing-test'"] }, { status: 422 });
+    return NextResponse.json({ ok: false, errors: ["job must be 'daily', 'stories', 'track', 'push-test', 'swing-test' or 'inbox'"] }, { status: 422 });
   } catch (err) {
     return NextResponse.json({ ok: false, errors: [err instanceof Error ? err.message : String(err)] }, { status: 500 });
   }
