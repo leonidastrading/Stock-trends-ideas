@@ -135,3 +135,15 @@ describe("Inbox format and track record", () => {
     expect(rows[1]).toMatchObject({ read: "could not be read", error: "GitHub 404 reading inbox/broken.pdf" });
   });
 });
+
+describe("a new inbox repo", () => {
+  it("no inbox folder yet is an empty inbox; an unreadable repo says why", async () => {
+    const { listInbox } = await import("@/lib/scout/inbox");
+    const cfg = { repo: "leonidastrading/scout-inbox", path: "inbox", branch: null, token: "t" };
+    const readable = (async (url: string) => (url.endsWith("/contents/inbox") ? new Response("{}", { status: 404 }) : new Response("{}", { status: 200 }))) as unknown as typeof fetch;
+    expect(await listInbox(cfg, readable)).toEqual([]);
+    const hidden = (async () => new Response("{}", { status: 404 })) as unknown as typeof fetch;
+    await expect(listInbox(cfg, hidden)).rejects.toThrow(/cannot read leonidastrading\/scout-inbox with GITHUB_INBOX_TOKEN/);
+    await expect(listInbox({ ...cfg, token: null }, hidden)).rejects.toThrow(/private repo: set GITHUB_INBOX_TOKEN/);
+  });
+});

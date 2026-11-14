@@ -45,7 +45,12 @@ function gh(cfg: InboxConfig, url: string, accept: string, fetchImpl: typeof fet
 export async function listInbox(cfg: InboxConfig, fetchImpl: typeof fetch = fetch): Promise<InboxFile[]> {
   const url = `https://api.github.com/repos/${cfg.repo}/contents/${encodeURI(cfg.path)}${cfg.branch ? `?ref=${encodeURIComponent(cfg.branch)}` : ""}`;
   const res = await gh(cfg, url, "application/vnd.github+json", fetchImpl);
-  if (res.status === 404) throw new Error(`GitHub: ${cfg.repo}/${cfg.path} not found (or the token cannot read it)`);
+  if (res.status === 404) {
+    // No inbox folder yet (a new repo): fine if the repo itself is readable; otherwise the token cannot see it.
+    const repo = await gh(cfg, `https://api.github.com/repos/${cfg.repo}`, "application/vnd.github+json", fetchImpl);
+    if (repo.ok) return [];
+    throw new Error(`GitHub: cannot read ${cfg.repo}${cfg.token ? " with GITHUB_INBOX_TOKEN (check it has read-only Contents on this repo)" : " (private repo: set GITHUB_INBOX_TOKEN)"}`);
+  }
   if (!res.ok) throw new Error(`GitHub ${res.status}: ${(await res.text()).slice(0, 160)}`);
   const list = (await res.json()) as Array<{ type: string; name: string; path: string; sha: string; size: number }>;
   return (Array.isArray(list) ? list : []).filter((f) => f.type === "file" && READABLE.test(f.name) && f.size <= MAX_BYTES).map((f) => ({ name: f.name, path: f.path, sha: f.sha, size: f.size }));
