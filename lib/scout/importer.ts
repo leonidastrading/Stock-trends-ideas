@@ -21,11 +21,24 @@ export const importItemSchema = z.object({
   source: z.enum(["host", "agent", "bot"]).catch("host"),
   confirmed: z.string().optional(),
   stream_time: z.string().optional(),
+  /** Optional extras from outside bots (see the Inbox tab's format). */
+  company: z.string().max(120).optional(),
+  invalidation: z.string().max(400).optional(),
+  horizon_days: z.number().int().min(1).max(180).optional().catch(undefined),
+  sources: z.array(z.string().max(300)).max(10).optional().catch(undefined),
 });
 export type ImportItem = z.infer<typeof importItemSchema>;
 
 /** Accepts the JSON block as pasted, including PDF line wraps and ```json fences. */
 export function parseImport(text: string): { items: ImportItem[]; errors: string[] } {
+  // A whole JSON file: { "ideas": [...] } (the Inbox format) or a bare array.
+  try {
+    const whole = JSON.parse(text.replace(/^\uFEFF/, ""));
+    const arr = Array.isArray(whole) ? whole : Array.isArray(whole?.ideas) ? whole.ideas : null;
+    if (arr) return validateItems(arr);
+  } catch {
+    /* not a whole JSON file: look for the block inside prose */
+  }
   const body = text.replace(/```(?:json)?/g, "").replace(/[\r\n]+/g, " ").trim();
   // The block is an array of objects: start at a "[" followed by "{" (not "[context unclear]" in the prose).
   const starts = [...body.matchAll(/\[\s*\{/g)].map((m) => m.index!);
@@ -43,6 +56,10 @@ export function parseImport(text: string): { items: ImportItem[]; errors: string
   }
   if (raw === undefined) return { items: [], errors: [`not valid JSON: ${lastErr}`] };
   if (!Array.isArray(raw)) return { items: [], errors: ["expected a JSON array"] };
+  return validateItems(raw);
+}
+
+function validateItems(raw: unknown[]): { items: ImportItem[]; errors: string[] } {
   const items: ImportItem[] = [];
   const errors: string[] = [];
   raw.forEach((x, i) => {
@@ -64,6 +81,10 @@ export function importObservation(it: ImportItem, label: string): string {
     it.catalyst_date ? `; catalyst date: ${it.catalyst_date}` : "",
     it.confirmed ? `; facts confirmed: ${it.confirmed}` : "",
     it.stream_time ? `; stream time ${it.stream_time}` : "",
+    it.company ? `; company named: ${it.company}` : "",
+    it.horizon_days ? `; expected horizon ${it.horizon_days} days` : "",
+    it.invalidation ? `; would be proven wrong by: ${it.invalidation}` : "",
+    it.sources?.length ? `; sources: ${it.sources.join(", ")}` : "",
     ".)",
   ];
   return bits.join("").slice(0, 2000);

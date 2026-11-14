@@ -412,6 +412,10 @@ export async function recentRuns(limit = 20): Promise<Array<{ id: number; action
   return (await q(`SELECT * FROM runs ORDER BY id DESC LIMIT $1`, [limit])).map((r) => ({ id: Number(r.id), action: r.action, startedAt: iso(r.started_at)!, finishedAt: iso(r.finished_at), status: r.status, detail: r.detail, error: r.error }));
 }
 
+export async function runsByAction(action: string, limit = 50): Promise<Array<{ id: number; startedAt: string; finishedAt: string | null; status: string; detail: unknown; error: string | null }>> {
+  return (await q(`SELECT * FROM runs WHERE action = $1 ORDER BY id DESC LIMIT $2`, [action, limit])).map((r) => ({ id: Number(r.id), startedAt: iso(r.started_at)!, finishedAt: iso(r.finished_at), status: r.status, detail: r.detail, error: r.error }));
+}
+
 /** When a job last started, finished or not. */
 export async function lastStarted(action: string): Promise<string | null> {
   const r = (await q(`SELECT started_at FROM runs WHERE action = $1 ORDER BY id DESC LIMIT 1`, [action]))[0];
@@ -607,6 +611,6 @@ export async function markInbox(path: string, sha: string, result: unknown): Pro
   await q(`INSERT INTO inbox_files (path, sha, result) VALUES ($1, $2, $3) ON CONFLICT (path, sha) DO NOTHING`, [path, sha, JSON.stringify(result)]);
 }
 
-export async function inboxRecent(limit = 20): Promise<Array<{ path: string; readAt: string; result: Record<string, unknown> | null }>> {
+export async function inboxRecent(limit = 50): Promise<Array<{ path: string; readAt: string; result: Record<string, unknown> | null }>> {
   return (await q(`SELECT path, read_at, result FROM inbox_files ORDER BY read_at DESC LIMIT $1`, [limit])).map((r) => ({ path: r.path, readAt: iso(r.read_at)!, result: r.result ?? null }));
 }

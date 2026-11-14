@@ -96,3 +96,42 @@ describe("GitHub inbox: a poll (PGlite, fake GitHub and model)", () => {
     expect(parseImport(call!.body.text).items[0]).toMatchObject({ source: "bot" });
   });
 });
+
+describe("Inbox format and track record", () => {
+  it("the documented example file is read exactly, extras included", async () => {
+    const { INBOX_EXAMPLE, botPrompt } = await import("@/lib/scout/inbox-spec");
+    const { importObservation } = await import("@/lib/scout/importer");
+    const r = parseImport(JSON.stringify(INBOX_EXAMPLE, null, 2));
+    expect(r.errors).toEqual([]);
+    expect(r.items).toHaveLength(1);
+    const obs = importObservation({ ...r.items[0], source: "bot" }, "2026-11-16-my-research-bot");
+    expect(obs).toMatch(/From the inbox document "2026-11-16-my-research-bot"/);
+    expect(obs).toMatch(/company named: Coinbase Global, Inc\..*expected horizon 30 days.*would be proven wrong by: US retail crypto.*sources: https/);
+    const p = botPrompt("vadim/scout-inbox", "inbox");
+    expect(p).toMatch(/commit it to the GitHub repository vadim\/scout-inbox, folder inbox\//);
+    expect(p).toMatch(/inbox\/YYYY-MM-DD-<your-name>\.json/);
+    expect(p).toMatch(/"term" \(required\)/);
+    expect(botPrompt(null, "inbox")).toMatch(/the GitHub repository and folder Vadim gives you/);
+    // A bare array and prose with a block still work; junk does not.
+    expect(parseImport(JSON.stringify(INBOX_EXAMPLE.ideas)).items).toHaveLength(1);
+    expect(parseImport("{\"ideas\": 3}").items).toEqual([]);
+  });
+
+  it("track record joins each file to the research run it started, and lists pasted imports", async () => {
+    const { trackRecord } = await import("@/lib/scout/inbox-record");
+    const rows = trackRecord(
+      [
+        { path: "inbox/2026-11-16-bot.json", readAt: "2026-11-16T14:00:00Z", result: { via: "block", ideas: 2, sent: "2 idea(s) sent to research" } },
+        { path: "inbox/2026-11-16-bot.pdf", readAt: "2026-11-16T14:00:00Z", result: { via: "twin of 2026-11-16-bot.json" } },
+        { path: "inbox/broken.pdf", readAt: "2026-11-15T14:00:00Z", result: { error: "GitHub 404 reading inbox/broken.pdf" } },
+      ],
+      [
+        { id: 2, startedAt: "2026-11-16T14:00:05Z", finishedAt: "2026-11-16T14:03:00Z", status: "ok", detail: { label: "2026-11-16-bot", results: [{ term: "inbox: Coinbase retail slump", outcome: "card: promoted", cardId: 41 }, { term: "inbox: Old news", outcome: "rejected", reason: "no evidence" }] }, error: null },
+        { id: 1, startedAt: "2026-11-14T02:00:00Z", finishedAt: "2026-11-14T02:04:00Z", status: "ok", detail: { label: "2026-11-13", results: [{ term: "stream host: GTA VI launch", outcome: "card: late", cardId: 30 }] }, error: null },
+      ],
+    );
+    expect(rows.map((r) => [r.label, r.how, r.ideas, r.outcomes.length])).toEqual([["2026-11-16-bot", "github", 2, 2], ["broken", "github", null, 0], ["2026-11-13", "pasted or posted", 1, 1]]);
+    expect(rows[0]).toMatchObject({ read: "JSON ideas read directly", researchStatus: "ok", researchedAt: "2026-11-16T14:03:00Z" });
+    expect(rows[1]).toMatchObject({ read: "could not be read", error: "GitHub 404 reading inbox/broken.pdf" });
+  });
+});

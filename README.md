@@ -189,6 +189,11 @@ anything else happens. Cards, versions and track events are append-only, enforce
   Google's rising queries for anything worth adding to the watch-list.
 - **Watch-list**: term, kind, tickers, date, who added it; approve the scout's proposals, retire terms.
 - **Scoring**: per version (see below), with a CSV export of every card and track.
+- **Inbox tab**: setup status, the prompt to give any bot (copy button), the file format (`lib/scout/inbox-spec.ts`:
+  one JSON object `{ bot, generated_at, ideas: [...] }` per file, named `inbox/YYYY-MM-DD-<bot>.json`, ideas with
+  term, observation, kind, tickers and optional company, direction, catalyst_date, horizon_days, invalidation,
+  confirmed, sources), the direct-POST alternative, and the **track record**: every document received (GitHub file,
+  pasted or posted), when, how it was read, how many ideas, and each idea's outcome with a link to its card.
 - **GitHub inbox**: an outside bot can drop documents for the scout by committing them to a folder in a GitHub repo
   (`GITHUB_INBOX_REPO`, `GITHUB_INBOX_PATH` default `inbox`, `GITHUB_INBOX_TOKEN` with read-only Contents). On each
   hourly call (or "Check the GitHub inbox" on Settings) the scout reads at most one new file: `.json` / `.md` / `.txt`
