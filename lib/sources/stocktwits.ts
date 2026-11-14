@@ -8,8 +8,10 @@
 import { getJson } from "../http";
 import { dateStr, guarded, r1, type Signal, type Source } from "./types";
 
-const UA = { "user-agent": "Mozilla/5.0 (trend-scout)", accept: "application/json" };
-const HOST = "https://api.stocktwits.com/api/2";
+export const ST_UA = { "user-agent": "Mozilla/5.0 (trend-scout)", accept: "application/json" };
+const UA = ST_UA;
+export const ST_HOST = "https://api.stocktwits.com/api/2";
+const HOST = ST_HOST;
 const MAX_TICKERS = 3;
 
 export interface StMessage { id: number; created_at: string; entities?: { sentiment?: { basic?: string } | null } }

@@ -90,7 +90,7 @@ const money = (v: number) => (v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : `$${Math.
 // ------------------------------------------------------------------- io
 
 /** SEC ticker list uses dashes for share classes (BRK-B). */
-async function cikFor(ticker: string, headers: Record<string, string>, fetchImpl?: typeof fetch): Promise<string | null> {
+export async function cikFor(ticker: string, headers: Record<string, string>, fetchImpl?: typeof fetch): Promise<string | null> {
   const list = await getJson<Record<string, { cik_str: number; ticker: string }>>("https://www.sec.gov/files/company_tickers.json", { headers, minIntervalMs: MIN_INTERVAL_MS, cacheMs: 24 * 60 * 60000, fetchImpl });
   const want = ticker.toUpperCase().replace(/\./g, "-");
   const hit = Object.values(list).find((x) => x.ticker.toUpperCase() === want);
@@ -195,3 +195,23 @@ export const edgar: Source = {
 
 /** Kept for the relay test and older callers. */
 export const route = relayRoute;
+
+/** Pure: dates of earnings releases (8-K item 2.02, results of operations) on or after `from`. */
+export function earningsDates(s: Submissions, from: string): string[] {
+  const r = s.filings.recent;
+  const out = new Set<string>();
+  for (let i = 0; i < r.form.length; i++) {
+    if (!r.form[i].startsWith("8-K") || r.filingDate[i] < from) continue;
+    if ((r.items[i] ?? "").split(",").map((x) => x.trim()).includes("2.02")) out.add(r.filingDate[i]);
+  }
+  return [...out].sort();
+}
+
+/** Earnings-release dates for a ticker from data.sec.gov (declared User-Agent, rate-limited). */
+export async function fetchEarningsDates(ticker: string, from: string, userAgent: string, fetchImpl?: typeof fetch): Promise<string[] | null> {
+  const headers = { "user-agent": userAgent, "accept-encoding": "gzip, deflate" };
+  const cik = await cikFor(ticker, headers, fetchImpl);
+  if (!cik) return null;
+  const subs = await getJson<Submissions>(`https://data.sec.gov/submissions/CIK${cik}.json`, { headers, minIntervalMs: MIN_INTERVAL_MS, cacheMs: 6 * 60 * 60000, fetchImpl });
+  return earningsDates(subs, from);
+}

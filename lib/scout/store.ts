@@ -437,3 +437,52 @@ export async function storyEventsSince(from: string): Promise<StoryEvent[]> {
 export async function addStoryEvent(e: { etDate: string; key: string; symbols: string[]; stage: number; summary: string; escalation: string[]; company?: string | null; people?: string[] }): Promise<void> {
   await q(`INSERT INTO story_events (et_date, key, symbols, stage, summary, escalation, company, people) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (key, et_date) DO NOTHING`, [e.etDate, e.key, e.symbols, e.stage, e.summary, e.escalation, e.company ?? null, e.people ?? []]);
 }
+
+// ------------------------------------------------------------ chatter test
+
+export interface ChatterDay { date: string; symbol: string; measuredAt: string; perHour: number; sampled: number; spanHours: number; bullishShare: number | null; watchers: number | null; trendingRank: number | null }
+export interface ChatterEvent { id: number; createdAt: string; date: string; symbol: string; kind: "spike" | "control"; z: number | null; perHour: number; baselinePerHour: number | null; bullishShare: number | null }
+
+const toChatterDay = (r: Row): ChatterDay => ({ date: dstr(r.date)!, symbol: r.symbol, measuredAt: iso(r.measured_at)!, perHour: Number(r.per_hour), sampled: Number(r.sampled), spanHours: Number(r.span_hours), bullishShare: num(r.bullish_share), watchers: num(r.watchers), trendingRank: num(r.trending_rank) });
+
+export async function chatterMeasuredOn(date: string): Promise<Set<string>> {
+  return new Set((await q(`SELECT symbol FROM chatter_daily WHERE date = $1`, [date])).map((r) => r.symbol));
+}
+
+/** A symbol's measurements before `date`, oldest first (at most `limit`, the most recent). */
+export async function chatterHistory(symbol: string, date: string, limit: number): Promise<ChatterDay[]> {
+  return (await q(`SELECT * FROM (SELECT * FROM chatter_daily WHERE symbol = $1 AND date < $2 ORDER BY date DESC LIMIT $3) x ORDER BY date`, [symbol, date, limit])).map(toChatterDay);
+}
+
+export async function addChatterDay(d: Omit<ChatterDay, "measuredAt">): Promise<void> {
+  await q(`INSERT INTO chatter_daily (date, symbol, per_hour, sampled, span_hours, bullish_share, watchers, trending_rank) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (date, symbol) DO NOTHING`, [d.date, d.symbol, d.perHour, d.sampled, d.spanHours, d.bullishShare, d.watchers, d.trendingRank]);
+}
+
+export async function addChatterEvent(e: Omit<ChatterEvent, "id" | "createdAt">): Promise<void> {
+  await q(`INSERT INTO chatter_events (date, symbol, kind, z, per_hour, baseline_per_hour, bullish_share) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (date, symbol, kind) DO NOTHING`, [e.date, e.symbol, e.kind, e.z, e.perHour, e.baselinePerHour, e.bullishShare]);
+}
+
+export async function chatterSpikeSince(symbol: string, from: string): Promise<boolean> {
+  return (await q(`SELECT 1 FROM chatter_events WHERE symbol = $1 AND kind = 'spike' AND date >= $2 LIMIT 1`, [symbol, from])).length > 0;
+}
+
+export async function chatterEvents(): Promise<ChatterEvent[]> {
+  return (await q(`SELECT * FROM chatter_events ORDER BY date, symbol`)).map((r) => ({ id: Number(r.id), createdAt: iso(r.created_at)!, date: dstr(r.date)!, symbol: r.symbol, kind: r.kind, z: num(r.z), perHour: Number(r.per_hour), baselinePerHour: num(r.baseline_per_hour), bullishShare: num(r.bullish_share) }));
+}
+
+export async function chatterStatus(): Promise<{ days: number; firstDate: string | null; lastDate: string | null; rows: number; lastDayCount: number }> {
+  const r = (await q(`SELECT count(DISTINCT date) AS days, min(date) AS first, max(date) AS last, count(*) AS rows FROM chatter_daily`))[0] ?? {};
+  const last = dstr(r.last);
+  const n = last ? Number((await q(`SELECT count(*) AS n FROM chatter_daily WHERE date = $1`, [last]))[0]?.n ?? 0) : 0;
+  return { days: Number(r.days ?? 0), firstDate: dstr(r.first), lastDate: last, rows: Number(r.rows ?? 0), lastDayCount: n };
+}
+
+export async function addEarningsDates(symbol: string, dates: string[]): Promise<void> {
+  if (dates.length) await q(`INSERT INTO earnings_dates (symbol, date) SELECT $1, unnest($2::date[]) ON CONFLICT DO NOTHING`, [symbol, dates]);
+}
+
+export async function earningsDatesBySymbol(): Promise<Map<string, string[]>> {
+  const m = new Map<string, string[]>();
+  for (const r of await q(`SELECT symbol, date FROM earnings_dates ORDER BY symbol, date`)) m.set(r.symbol, [...(m.get(r.symbol) ?? []), dstr(r.date)!]);
+  return m;
+}

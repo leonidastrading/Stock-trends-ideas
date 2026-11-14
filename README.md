@@ -170,6 +170,21 @@ anything else happens. Cards, versions and track events are append-only, enforce
   Google's rising queries for anything worth adding to the watch-list.
 - **Watch-list**: term, kind, tickers, date, who added it; approve the scout's proposals, retire terms.
 - **Scoring**: per version (see below), with a CSV export of every card and track.
+- **Chatter test** (an experiment beside the scout; nothing in it becomes card evidence): does a spike in Stocktwits
+  chatter while the price is still quiet predict the move? 198 stocks fixed in advance (the first 18 of each sector in
+  the baseline universe). Each weekday every one is measured once from Stocktwits' public stream (messages per hour
+  over the latest 30, bullish share of tagged messages) into the append-only `chatter_daily`, in fixed batches of 50
+  that ride on the hourly story call (`/api/cron/stories`; `/api/cron/chatter` is a separate entry if needed) and the
+  after-close job. A spike (log rate 2.5+ standard deviations above the stock's own previous 20–60 measurements, the
+  first in 5 days) and about 1 in 40 ordinary stock-days (picked by a hash, as controls) are logged to the append-only
+  `chatter_events` the day they are measured. Outcomes come from daily bars: entry at the next open, excess over SPY
+  and the sector fund after 1, 5 and 20 sessions, and the average size of the move either way. Spikes are split by
+  whether the 5 sessions before moved less than 3% against SPY (chatter leading, not following) and by bullish or
+  bearish chatter, and every row is read against the controls. Needs about a month of warm-up and two to three months
+  of events. The page also runs a **look-back** on Stocktwits' own 3-month message-volume history for the same stocks
+  (`data/chatter-explore/`, fetched once through the Stocktwits connector; histories that stop early or were dark and
+  then remapped are left out): exploratory only, since that score is scaled over the whole window (partly hindsight),
+  smoothed, and has no sentiment.
 - **Scoreboard**: the same results as a game, across all versions. Points are paper dollars beaten versus SPY on a
   $1,000 stake per call; players are the scout's trend desk, its story desk, you, and the stream file's host and agent.
   It shows banked and in-play points, the same points against each call's sector fund (was it the company or its
@@ -282,6 +297,8 @@ lib/scout/scoreboard.ts players, points, luck check, calibration — pure
 lib/scout/followup.ts  reaction gaps: stories still loud while the stock is quiet
 lib/scout/options.ts   implied vs realized volatility for the how-to-trade note
 lib/scout/attention.ts coverage trend (building) and Wikipedia attention for a story's people
+lib/scout/chatter.ts   the chatter test: measurement, spikes, controls, outcomes
+config/chatter.ts      the chatter test's fixed 198 stocks and rules
 lib/scout/swing.ts   the post to the Swing ideas log
 lib/schema.ts        idempotent SQL with append-only triggers
 relay/               the EDGAR relay (deploy on Railway)

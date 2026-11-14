@@ -55,11 +55,14 @@ export async function runDaily(deps = defaultDeps()) {
 /** The story desk on its own: safe to call hourly (cron-job.org or the Run now button). */
 export async function runStoriesJob(deps = defaultDeps()) {
   const run = await store.startRun("stories");
+  const started = Date.now();
   try {
     const r = await runStories(deps);
     const pushed = await pushNewCards(deps.env).catch((err) => `push failed: ${err instanceof Error ? err.message : String(err)}`);
-    await store.finishRun(run, r.error && !r.researched.length ? "skipped" : "ok", { ...r, pushed });
-    return { status: "ok" as const, ...r, pushed };
+    // The chatter test rides on the hourly call: the next batch of symbols, if there is time left in the function.
+    const chatter = Date.now() - started < 150_000 ? await chatterBatch(deps.now, deps.fetchImpl) : "skipped: story scan ran long";
+    await store.finishRun(run, r.error && !r.researched.length ? "skipped" : "ok", { ...r, pushed, chatter });
+    return { status: "ok" as const, ...r, pushed, chatter };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await store.finishRun(run, "error", null, message);
@@ -92,10 +95,14 @@ export async function runTrack(now = new Date()) {
       return { status: "skipped" as const, reason: "Alpaca keys not set" };
     }
     const r = await updateTracks(data, now);
+    const chatter = await chatterBatch(now);
+    // Bars for the chatter test's 198 stocks, SPY and the sector funds, from the start of the look-back window.
+    const chatterBars = await import("./chatter").then(({ ensureChatterBars }) => ensureChatterBars(data, now, CHATTER_EXPLORE_FROM)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+    const earnings = await import("./chatter").then(({ refreshEarningsDates }) => refreshEarningsDates(process.env, CHATTER_EXPLORE_FROM)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
     // The day after a catalyst: read what happened and push the verdict.
     const reviews = await runReviews({ data, callModel: callResearchModel, now }).catch((err) => [{ cardId: 0, error: err instanceof Error ? err.message : String(err) }]);
     const pushed = await pushReviews(reviews as Array<{ cardId: number; verdict?: string }>).catch((err) => `push failed: ${err instanceof Error ? err.message : String(err)}`);
-    const detail = { ...r, reviews, pushedReviews: pushed };
+    const detail = { ...r, reviews, pushedReviews: pushed, chatter, chatterBars, earnings };
     await store.finishRun(run, "ok", detail);
     return { status: "ok" as const, ...detail };
   } catch (err) {
@@ -103,5 +110,18 @@ export async function runTrack(now = new Date()) {
     await store.finishRun(run, "error", null, message);
     await pushFailure("tracker", message);
     throw err;
+  }
+}
+
+/** Bars for the look-back pass start here (the exploratory Stocktwits history covers the 3 months before the test began). */
+export const CHATTER_EXPLORE_FROM = "2026-07-20";
+
+/** One batch of the chatter test; never fails the job it rides on. */
+export async function chatterBatch(now = new Date(), fetchImpl?: typeof fetch) {
+  try {
+    const { runChatterBatch } = await import("./chatter");
+    return await runChatterBatch(now, fetchImpl);
+  } catch (err) {
+    return `failed: ${err instanceof Error ? err.message : String(err)}`;
   }
 }

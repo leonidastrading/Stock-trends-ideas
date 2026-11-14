@@ -191,6 +191,43 @@ CREATE OR REPLACE TRIGGER story_events_ro BEFORE UPDATE OR DELETE ON story_event
 ALTER TABLE story_events ADD COLUMN IF NOT EXISTS company text;
 ALTER TABLE story_events ADD COLUMN IF NOT EXISTS people text[] NOT NULL DEFAULT '{}';
 
+-- Chatter test: one Stocktwits measurement per symbol per weekday, written once.
+CREATE TABLE IF NOT EXISTS chatter_daily (
+  date date NOT NULL,
+  symbol text NOT NULL,
+  measured_at timestamptz NOT NULL DEFAULT now(),
+  per_hour double precision NOT NULL,
+  sampled int NOT NULL,
+  span_hours double precision NOT NULL,
+  bullish_share double precision,
+  watchers int,
+  trending_rank int,
+  PRIMARY KEY (date, symbol)
+);
+CREATE OR REPLACE TRIGGER chatter_daily_ro BEFORE UPDATE OR DELETE ON chatter_daily FOR EACH ROW EXECUTE FUNCTION forbid_change();
+
+-- Chatter spikes and random controls, logged on the day they are measured (no hindsight). Outcomes are computed from bars.
+CREATE TABLE IF NOT EXISTS chatter_events (
+  id bigserial PRIMARY KEY,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  date date NOT NULL,
+  symbol text NOT NULL,
+  kind text NOT NULL,
+  z double precision,
+  per_hour double precision NOT NULL,
+  baseline_per_hour double precision,
+  bullish_share double precision,
+  UNIQUE (date, symbol, kind)
+);
+CREATE OR REPLACE TRIGGER chatter_events_ro BEFORE UPDATE OR DELETE ON chatter_events FOR EACH ROW EXECUTE FUNCTION forbid_change();
+
+-- Earnings-release dates (8-K item 2.02) for the chatter test's stocks, so spikes around earnings are read apart.
+CREATE TABLE IF NOT EXISTS earnings_dates (
+  symbol text NOT NULL,
+  date date NOT NULL,
+  PRIMARY KEY (symbol, date)
+);
+
 -- Phone pushes already sent, so each card, review or failure is pushed once.
 CREATE TABLE IF NOT EXISTS notifications (
   key text PRIMARY KEY,
