@@ -22,7 +22,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Link href="/scoring">Scoring</Link>
           <Link href="/chatter">Chatter test</Link>
           <Link href="/settings">Settings</Link>
-          <span className="shadow">Paper only · suggests and records · never places an order</span>
         </nav>
         <main>{children}</main>
       </body>
