@@ -157,6 +157,9 @@ Rules enforced by code (`lib/scout/card.ts`), in order:
    whose symbol now trades as a preferred or note (or not at all) are excluded automatically by the after-close job,
    and a card's **Wrong security** button does the same by hand. Exclusion is an append-only `track_events` row with
    the reason; the card is never edited, it shows the reason, and it is left out of every score.
+   Every card also shows, beside its ticker, the name the symbol **trades as today** (live listing, refreshed daily;
+   red with ⚠ when it is not the named company's stock), and the **next earnings date**, estimated from the company's
+   past earnings releases at the SEC (8-K item 2.02, usual quarterly gap), flagged when it falls before the card's exit.
 1. **Evidence.** Every item needs a source and a date; items without are dropped. No evidence, no card — the candidate
    is logged as rejected.
 2. **Materiality.** If the primary ticker's product or line is under **10%** of revenue, or the model could not estimate

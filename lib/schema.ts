@@ -228,6 +228,18 @@ CREATE TABLE IF NOT EXISTS earnings_dates (
   PRIMARY KEY (symbol, date)
 );
 
+-- What each card's symbol trades as now, and its earnings dates (refreshed daily; a cache, not a record).
+CREATE TABLE IF NOT EXISTS symbol_info (
+  symbol text PRIMARY KEY,
+  name text,
+  exchange text,
+  tradable boolean,
+  last_earnings date,
+  next_earnings date,
+  next_basis text,
+  checked_at timestamptz NOT NULL DEFAULT now()
+);
+
 -- Phone pushes already sent, so each card, review or failure is pushed once.
 CREATE TABLE IF NOT EXISTS notifications (
   key text PRIMARY KEY,

@@ -1,16 +1,28 @@
 import { KIND_LABEL, type Kind } from "@/config/scout";
 import Direction from "@/components/Direction";
 import Feedback from "@/components/Feedback";
+import { hasDatabase } from "@/lib/db";
+import { namesMatch, notCommon } from "@/lib/scout/identity";
+import * as store from "@/lib/scout/store";
 import type { Feedback as FeedbackRow, StoredCard, StoredReview, Track } from "@/lib/scout/store";
-import { fmtEt } from "@/lib/time";
+import { daysBetween, fmtEt, toEt } from "@/lib/time";
+
+const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
 const pct = (x: number | null | undefined, d = 1) => (x === null || x === undefined ? "—" : `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(d)}%`);
 
 /** One thesis card, fully laid out. Server component; actions are passed in. */
 const VERDICT: Record<string, [string, string]> = { played_out: ["✓ played out", "pos"], did_not: ["✗ did not play out", "neg"], mixed: ["~ mixed", "warn"], too_early: ["… too early to tell", "muted"] };
 
-export default function CardView({ c, track, actions, feedback, opposing, review }: { c: StoredCard; track?: Track | null; actions?: React.ReactNode; feedback?: FeedbackRow | null; opposing?: number[]; review?: StoredReview | null }) {
+export default async function CardView({ c, track, actions, feedback, opposing, review }: { c: StoredCard; track?: Track | null; actions?: React.ReactNode; feedback?: FeedbackRow | null; opposing?: number[]; review?: StoredReview | null }) {
   const k = c.card;
+  const info = hasDatabase() ? (await store.symbolInfo([c.primaryTicker]).catch(() => new Map())).get(c.primaryTicker) ?? null : null;
+  const company = k.tickers.find((t) => t.symbol === c.primaryTicker)?.company ?? null;
+  // Warn when the symbol trades as something other than the company's stock (a reused ticker).
+  const wrong = !!info?.name && (info.tradable === false || !!notCommon(info.name) || (!!company && !namesMatch(company, info.name)));
+  const today = toEt(new Date()).date;
+  const nextE = info?.nextEarnings && daysBetween(today, info.nextEarnings) >= -3 ? info.nextEarnings : null;
+  const beforeExit = nextE && track && !track.exitDate && nextE <= track.deadlineDate;
   return (
     <section className="card thesis" id={`card-${c.id}`}>
       <div>
@@ -21,8 +33,14 @@ export default function CardView({ c, track, actions, feedback, opposing, review
           <span className="small muted">#{c.id} · {fmtEt(c.createdAt)} · {c.model} · v{c.versionId}</span>
         </div>
         {track?.excluded && <div className="small neg" style={{ marginTop: 6 }}><b>Excluded from scoring: wrong security.</b> {track.excluded}</div>}
-        <div style={{ margin: "8px 0 4px" }}><Direction direction={c.direction} ticker={c.primaryTicker} />
+        <div style={{ margin: "8px 0 4px" }}><Direction direction={c.direction} ticker={c.primaryTicker} name={info?.name ?? company} warn={wrong} />
           {opposing?.length ? <span className="tag warn" style={{ marginLeft: 8 }}>⚠ opposite call on {c.primaryTicker}: {opposing.map((id) => <a key={id} href={`/candidates?days=90#card-${id}`}>#{id} </a>)}</span> : null}</div>
+        {(nextE || info?.lastEarnings) && (
+          <div className="small secondary">
+            {nextE ? <>Next earnings <b>~{fmtDay(nextE)}</b> <span className="muted">({info!.nextBasis})</span></> : <>Last earnings {fmtDay(info!.lastEarnings!)}</>}
+            {beforeExit ? <span className="tag warn" style={{ marginLeft: 6 }}>before this card&apos;s exit ({fmtDay(track!.deadlineDate)})</span> : null}
+          </div>
+        )}
         <h2 style={{ margin: "6px 0 2px" }}>{k.title}</h2>
         <div className="scores">
           <span>novelty <b>{k.scores.novelty}</b></span><span>materiality <b>{k.scores.materiality}</b></span><span>breadth <b>{k.scores.breadth_of_evidence}</b></span>

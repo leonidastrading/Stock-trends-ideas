@@ -491,3 +491,28 @@ export async function earningsDatesBySymbol(): Promise<Map<string, string[]>> {
   for (const r of await q(`SELECT symbol, date FROM earnings_dates ORDER BY symbol, date`)) m.set(r.symbol, [...(m.get(r.symbol) ?? []), dstr(r.date)!]);
   return m;
 }
+
+// ------------------------------------------------------------ symbol info
+
+export interface SymbolInfo { symbol: string; name: string | null; exchange: string | null; tradable: boolean | null; lastEarnings: string | null; nextEarnings: string | null; nextBasis: string | null; checkedAt: string }
+
+const toSymbolInfo = (r: Row): SymbolInfo => ({ symbol: r.symbol, name: r.name ?? null, exchange: r.exchange ?? null, tradable: r.tradable ?? null, lastEarnings: dstr(r.last_earnings), nextEarnings: dstr(r.next_earnings), nextBasis: r.next_basis ?? null, checkedAt: iso(r.checked_at)! });
+
+export async function upsertSymbolInfo(i: Omit<SymbolInfo, "checkedAt">): Promise<void> {
+  await q(
+    `INSERT INTO symbol_info (symbol, name, exchange, tradable, last_earnings, next_earnings, next_basis, checked_at) VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+     ON CONFLICT (symbol) DO UPDATE SET name = COALESCE(excluded.name, symbol_info.name), exchange = COALESCE(excluded.exchange, symbol_info.exchange), tradable = COALESCE(excluded.tradable, symbol_info.tradable),
+       last_earnings = COALESCE(excluded.last_earnings, symbol_info.last_earnings), next_earnings = COALESCE(excluded.next_earnings, symbol_info.next_earnings), next_basis = COALESCE(excluded.next_basis, symbol_info.next_basis), checked_at = now()`,
+    [i.symbol, i.name, i.exchange, i.tradable, i.lastEarnings, i.nextEarnings, i.nextBasis],
+  );
+}
+
+export async function symbolInfo(symbols: string[]): Promise<Map<string, SymbolInfo>> {
+  if (!symbols.length) return new Map();
+  return new Map((await q(`SELECT * FROM symbol_info WHERE symbol = ANY($1::text[])`, [symbols])).map((r) => [r.symbol, toSymbolInfo(r)]));
+}
+
+/** Symbols checked within the last `hours`. */
+export async function freshSymbols(hours: number): Promise<Set<string>> {
+  return new Set((await q(`SELECT symbol FROM symbol_info WHERE checked_at >= now() - ($1::int * interval '1 hour')`, [hours])).map((r) => r.symbol));
+}

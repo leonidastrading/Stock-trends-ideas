@@ -98,11 +98,14 @@ export async function runTrack(now = new Date()) {
     const chatter = await chatterBatch(now);
     // Bars for the chatter test's 198 stocks, SPY and the sector funds, from the start of the look-back window.
     const chatterBars = await import("./chatter").then(({ ensureChatterBars }) => ensureChatterBars(data, now, CHATTER_EXPLORE_FROM)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+    // Name and next earnings for every symbol on a card from the last 120 days (once a day).
+    const symbols = await store.cardsSince(120).then((cs) => [...new Set(cs.flatMap((c) => c.card.tickers.map((t) => t.symbol)))]);
+    const symbolInfo = await import("./symbols").then(({ refreshSymbolInfo }) => refreshSymbolInfo(data, process.env, symbols, now)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
     const earnings = await import("./chatter").then(({ refreshEarningsDates }) => refreshEarningsDates(process.env, CHATTER_EXPLORE_FROM)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
     // The day after a catalyst: read what happened and push the verdict.
     const reviews = await runReviews({ data, callModel: callResearchModel, now }).catch((err) => [{ cardId: 0, error: err instanceof Error ? err.message : String(err) }]);
     const pushed = await pushReviews(reviews as Array<{ cardId: number; verdict?: string }>).catch((err) => `push failed: ${err instanceof Error ? err.message : String(err)}`);
-    const detail = { ...r, reviews, pushedReviews: pushed, chatter, chatterBars, earnings };
+    const detail = { ...r, reviews, pushedReviews: pushed, chatter, chatterBars, earnings, symbolInfo };
     await store.finishRun(run, "ok", detail);
     return { status: "ok" as const, ...detail };
   } catch (err) {

@@ -131,6 +131,8 @@ export async function researchCandidate(input: ResearchInput, deps: ResearchDeps
     status: gated.status, gateNotes: gated.notes, catalystDate: cDate, rankScore: rankScore(gated.card),
   });
   const candidate = await store.addCandidate({ ...base, outcome: "card", reason: gated.status, cardId: stored.id });
+  // The name each symbol trades as and its next earnings, for the card's header.
+  await import("./symbols").then(({ refreshSymbolInfo }) => refreshSymbolInfo(deps.data, deps.env, gated.card.tickers.map((t) => t.symbol), deps.now, 20, deps.fetchImpl)).catch(() => undefined);
 
   // Paper track for promoted and late cards: entry at the next open, exit at the earlier of catalyst + 1 day and the time limit.
   if (gated.status !== "not_promoted") {
