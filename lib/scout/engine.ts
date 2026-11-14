@@ -150,9 +150,9 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
   if (data && left() > 40_000) {
     out.chatterBars = await import("./chatter").then(({ ensureChatterBars }) => ensureChatterBars(data, now, CHATTER_EXPLORE_FROM)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
   } else out.chatterBars = "later: not enough time";
-  // GitHub inbox: up to three new files per call; their ideas go to the import, which researches them separately.
+  // GitHub inbox: every new file (until near the deadline); their ideas go to the import, which researches them separately.
   if (left() > 60_000) {
-    out.inbox = await import("./inbox").then(async ({ inboxConfig, pollInbox }): Promise<unknown> => (inboxConfig() ? pollInbox({ ...defaultDeps(now), fetchImpl }, 3, fetchImpl ?? fetch) : "not configured")).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+    out.inbox = await import("./inbox").then(async ({ inboxConfig, pollInbox }): Promise<unknown> => (inboxConfig() ? pollInbox({ ...defaultDeps(now), fetchImpl }, 50, fetchImpl ?? fetch, undefined, deadline - 50_000) : "not configured")).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
   } else out.inbox = "later: not enough time";
   // Dashboard: a year of bars for the breadth universe (once, then incremental), and the panel caches kept warm.
   if (data && left() > 45_000) {

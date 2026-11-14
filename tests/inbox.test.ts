@@ -80,6 +80,10 @@ describe("GitHub inbox: a poll (PGlite, fake GitHub and model)", () => {
     expect(seenAuth.every((a) => a === "Bearer tok")).toBe(true);
     const again = await pollInbox(deps, 1, gh, async () => "should not run");
     expect(again.read).toEqual([]); // read once
+    expect(again.error).toBeNull(); // the lock was released after the first poll
+    expect(await store.tryLock("lock:inbox", 10)).toBe(true); // someone else is reading
+    expect((await pollInbox(deps, 1, gh, async () => "should not run")).error).toMatch(/another check/);
+    await store.unlock("lock:inbox");
     expect((await store.inboxRecent())[0]).toMatchObject({ path: "inbox/2026-11-14.md", result: { via: "model", ideas: 1 } });
   });
 
@@ -145,5 +149,19 @@ describe("a new inbox repo", () => {
     const hidden = (async () => new Response("{}", { status: 404 })) as unknown as typeof fetch;
     await expect(listInbox(cfg, hidden)).rejects.toThrow(/cannot read leonidastrading\/scout-inbox with GITHUB_INBOX_TOKEN/);
     await expect(listInbox({ ...cfg, token: null }, hidden)).rejects.toThrow(/private repo: set GITHUB_INBOX_TOKEN/);
+  });
+});
+
+describe("inbox webhook and lock", () => {
+  it("checks GitHub's signature", async () => {
+    const { createHmac } = await import("node:crypto");
+    const { validSignature } = await import("@/lib/scout/inbox");
+    const body = '{"ref":"refs/heads/main"}';
+    const sig = `sha256=${createHmac("sha256", "s3cret").update(body).digest("hex")}`;
+    expect(validSignature(body, sig, "s3cret")).toBe(true);
+    expect(validSignature(body, sig, "other")).toBe(false);
+    expect(validSignature(body + " ", sig, "s3cret")).toBe(false);
+    expect(validSignature(body, null, "s3cret")).toBe(false);
+    expect(validSignature(body, sig, "")).toBe(false);
   });
 });

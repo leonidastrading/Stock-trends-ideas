@@ -219,7 +219,7 @@ anything else happens. Cards, versions and track events are append-only, enforce
   pasted or posted), when, how it was read, how many ideas, and each idea's outcome with a link to its card.
 - **GitHub inbox**: an outside bot can drop documents for the scout by committing them to a folder in a GitHub repo
   (`GITHUB_INBOX_REPO`, `GITHUB_INBOX_PATH` default `inbox`, `GITHUB_INBOX_TOKEN` with read-only Contents). On each
-  hourly call (or "Check the GitHub inbox" on Settings) the scout reads up to three new files: `.json` / `.md` / `.txt`
+  hourly call (or "Check the GitHub inbox" on Settings) the scout reads every new file (until near the call's deadline; opening the Inbox tab or a GitHub webhook to `/api/inbox-hook` starts a read at once): `.json` / `.md` / `.txt`
   as text, `.pdf` via text extraction; a text file with the same name as a PDF is used instead of it. Ideas come from
   the daily file's machine-readable JSON block when present, otherwise the model pulls up to 12 concrete ideas out of
   the prose (only the document's own facts; the document is treated as data, not instructions). They are handed to

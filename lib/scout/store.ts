@@ -681,3 +681,15 @@ export async function congressFilingsStatus(): Promise<{ read: number; withTrade
   const r = (await q(`SELECT count(*) AS read, count(*) FILTER (WHERE trades > 0) AS with_trades, count(*) FILTER (WHERE status LIKE 'scanned%') AS scanned, count(*) FILTER (WHERE status LIKE 'error%') AS errors, max(filed) AS latest FROM congress_filings`))[0] ?? {};
   return { read: Number(r.read ?? 0), withTrades: Number(r.with_trades ?? 0), scanned: Number(r.scanned ?? 0), errors: Number(r.errors ?? 0), latest: dstr(r.latest) };
 }
+
+// ------------------------------------------------------------ locks
+
+/** Atomic: take `key` unless someone else took it less than `ttlMin` minutes ago (a crashed holder's lock expires). */
+export async function tryLock(key: string, ttlMin: number): Promise<boolean> {
+  const r = await q(`INSERT INTO dashboard_cache (key, data, updated_at) VALUES ($1, '{}'::jsonb, now()) ON CONFLICT (key) DO UPDATE SET updated_at = now() WHERE dashboard_cache.updated_at < now() - make_interval(mins => $2) RETURNING key`, [key, ttlMin]);
+  return r.length > 0;
+}
+
+export async function unlock(key: string): Promise<void> {
+  await q(`DELETE FROM dashboard_cache WHERE key = $1`, [key]);
+}

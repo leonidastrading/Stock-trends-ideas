@@ -26,7 +26,7 @@ export async function POST(request: Request) {
       const { inboxConfig, pollInbox } = await import("@/lib/scout/inbox");
       if (!inboxConfig()) return NextResponse.json({ ok: false, errors: ["GITHUB_INBOX_REPO is not set"] }, { status: 422 });
       const { defaultDeps } = await import("@/lib/scout/engine");
-      return NextResponse.json({ ok: true, result: await pollInbox(defaultDeps(), 3) });
+      return NextResponse.json({ ok: true, result: await pollInbox(defaultDeps(), 50, fetch, undefined, Date.now() + 240_000) });
     }
     if (body.job === "swing-test") {
       const { testSwingLogin } = await import("@/lib/scout/swing");

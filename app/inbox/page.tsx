@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import SetupNotice from "@/components/SetupNotice";
 import { hasDatabase } from "@/lib/db";
 import { trackRecord } from "@/lib/scout/inbox-record";
@@ -9,6 +10,7 @@ import CopyBox from "./CopyBox";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 export default async function InboxPage() {
   if (!hasDatabase()) return <SetupNotice />;
@@ -28,6 +30,13 @@ export default async function InboxPage() {
       return [] as string[];
     }
   })();
+  // Files waiting: start reading them now, in the background, rather than at the next hourly check.
+  if (waiting.length) {
+    after(async () => {
+      const [{ pollInbox }, { defaultDeps }] = await Promise.all([import("@/lib/scout/inbox"), import("@/lib/scout/engine")]);
+      await pollInbox(defaultDeps(), 50, fetch, undefined, Date.now() + 240_000).catch(() => undefined);
+    });
+  }
   const cardById = new Map(cards.map((c) => [c.id, c]));
   const base = (process.env.DASHBOARD_URL?.trim() || "https://<this app>").replace(/\/$/, "");
   return (
@@ -44,7 +53,7 @@ export default async function InboxPage() {
       <section className="card">
         <h2>Track record</h2>
         <p className="small secondary">Every document received, newest first, and what the scout did with each idea.</p>
-        {waiting.length > 0 && <p className="small warn">Waiting to be read: {waiting.join(", ")}. Up to three files are read on each hourly check; &quot;Check the GitHub inbox&quot; on Settings reads them now.</p>}
+        {waiting.length > 0 && <p className="small warn">Reading now: {waiting.join(", ")}. Opening this page starts the read; refresh in a minute or two to see them here (text and PDF files take longer than JSON, because the model pulls the ideas out of the prose).</p>}
         <div className="table-wrap"><table>
           <thead><tr><th>Received</th><th>Document</th><th>How it was read</th><th className="num">Ideas</th><th>What the scout did</th></tr></thead>
           <tbody>

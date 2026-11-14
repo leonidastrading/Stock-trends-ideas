@@ -16,6 +16,7 @@
  *   the background (its own function run), logged as "inbox: <term>" and scored
  *   as the bot's calls on the Scoreboard.
  */
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { KINDS } from "@/config/scout";
 import { importItemSchema, parseImport, type ImportItem } from "./importer";
@@ -153,15 +154,29 @@ export interface InboxReport { checked: boolean; files: number; read: Array<{ fi
  * /api/cron/import (a separate function run with its own time limit) so research never
  * runs inside this call.
  */
-export async function pollInbox(deps: ResearchDeps, max = 1, fetchImpl: typeof fetch = fetch, deliver?: (items: ImportItem[], label: string) => Promise<string>): Promise<InboxReport> {
+/**
+ * Read new inbox files, oldest first, until `max` files or the deadline. One reader at a time (a page view and the
+ * hourly call can overlap), so a file is never handed to the import twice.
+ */
+export async function pollInbox(deps: ResearchDeps, max = 1, fetchImpl: typeof fetch = fetch, deliver?: (items: ImportItem[], label: string) => Promise<string>, deadline = Infinity): Promise<InboxReport> {
   const cfg = inboxConfig(deps.env);
   const report: InboxReport = { checked: false, files: 0, read: [], error: null };
   if (!cfg) return { ...report, error: "GITHUB_INBOX_REPO not set" };
+  if (!(await store.tryLock("lock:inbox", 10))) return { ...report, error: "another check is reading the inbox right now" };
+  try {
+    return await readNew(cfg, deps, max, fetchImpl, deliver, deadline, report);
+  } finally {
+    await store.unlock("lock:inbox").catch(() => undefined);
+  }
+}
+
+async function readNew(cfg: InboxConfig, deps: ResearchDeps, max: number, fetchImpl: typeof fetch, deliver: ((items: ImportItem[], label: string) => Promise<string>) | undefined, deadline: number, report: InboxReport): Promise<InboxReport> {
   const files = await listInbox(cfg, fetchImpl);
   report.checked = true;
   report.files = files.length;
   const seen = await store.inboxSeen();
   for (const { use, also } of pickFiles(files, seen).slice(0, max)) {
+    if (Date.now() > deadline) break;
     const label = use.name.replace(/\.[^.]+$/, "").slice(0, 40);
     try {
       const text = await fileText(use.name, await downloadFile(cfg, use, fetchImpl));
@@ -189,4 +204,12 @@ export function sendToImport(env: NodeJS.ProcessEnv, fetchImpl: typeof fetch = f
     if (!res.ok) throw new Error(`import replied ${res.status}: ${(body.errors ?? []).join("; ")}`);
     return `${body.accepted ?? items.length} idea(s) sent to research`;
   };
+}
+
+/** Pure: GitHub's X-Hub-Signature-256 check (HMAC-SHA256 of the raw body). */
+export function validSignature(body: string, header: string | null, secret: string): boolean {
+  if (!header?.startsWith("sha256=") || !secret) return false;
+  const want = Buffer.from(`sha256=${createHmac("sha256", secret).update(body).digest("hex")}`);
+  const got = Buffer.from(header);
+  return want.length === got.length && timingSafeEqual(want, got);
 }
