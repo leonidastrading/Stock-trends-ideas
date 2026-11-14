@@ -18,10 +18,13 @@ const VERDICT: Record<string, [string, string]> = { played_out: ["✓ played out
 
 export default async function CardView({ c, track, actions, feedback, opposing, review }: { c: StoredCard; track?: Track | null; actions?: React.ReactNode; feedback?: FeedbackRow | null; opposing?: number[]; review?: StoredReview | null }) {
   const k = c.card;
-  const info = hasDatabase() ? (await store.symbolInfo([c.primaryTicker]).catch(() => new Map())).get(c.primaryTicker) ?? null : null;
-  // Not looked up yet (an older card): fetch name and earnings after this response, so the next view has them.
+  let info = hasDatabase() ? (await store.symbolInfo([c.primaryTicker]).catch(() => new Map())).get(c.primaryTicker) ?? null : null;
+  // Not looked up yet (an older card): look it up now, for at most a few seconds; anything slower finishes after the response.
   if (hasDatabase() && !info) {
-    after(() => import("@/lib/scout/symbols").then(({ refreshSymbolInfo }) => refreshSymbolInfo(marketDataFromEnv(), process.env, [c.primaryTicker], new Date())).catch(() => undefined));
+    const lookup = import("@/lib/scout/symbols").then(({ refreshSymbolInfo }) => refreshSymbolInfo(marketDataFromEnv(), process.env, [c.primaryTicker], new Date())).catch((err) => console.warn(`card #${c.id} symbol lookup: ${err}`));
+    const done = await Promise.race([lookup.then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), 4000))]);
+    if (done) info = (await store.symbolInfo([c.primaryTicker]).catch(() => new Map())).get(c.primaryTicker) ?? null;
+    else after(() => lookup);
   }
   const company = k.tickers.find((t) => t.symbol === c.primaryTicker)?.company ?? null;
   // Warn when the symbol trades as something other than the company's stock (a reused ticker).

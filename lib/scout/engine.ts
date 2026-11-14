@@ -59,10 +59,10 @@ export async function runStoriesJob(deps = defaultDeps()) {
   try {
     const r = await runStories(deps);
     const pushed = await pushNewCards(deps.env).catch((err) => `push failed: ${err instanceof Error ? err.message : String(err)}`);
-    // The chatter test rides on the hourly call: the next batch of symbols, if there is time left in the function.
-    const chatter = Date.now() - started < 150_000 ? await chatterBatch(deps.now, deps.fetchImpl) : "skipped: story scan ran long";
-    await store.finishRun(run, r.error && !r.researched.length ? "skipped" : "ok", { ...r, pushed, chatter });
-    return { status: "ok" as const, ...r, pushed, chatter };
+    // Housekeeping rides on the hourly call, in whatever time is left in the function.
+    const upkeep = await maintenance(started + 240_000, deps.now, deps.fetchImpl);
+    await store.finishRun(run, r.error && !r.researched.length ? "skipped" : "ok", { ...r, pushed, upkeep });
+    return { status: "ok" as const, ...r, pushed, upkeep };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await store.finishRun(run, "error", null, message);
@@ -94,18 +94,14 @@ export async function runTrack(now = new Date()) {
       await store.finishRun(run, "skipped", { reason: "ALPACA_API_KEY_ID / ALPACA_API_SECRET_KEY not set" });
       return { status: "skipped" as const, reason: "Alpaca keys not set" };
     }
+    const started = Date.now();
     const r = await updateTracks(data, now);
-    const chatter = await chatterBatch(now);
-    // Bars for the chatter test's 198 stocks, SPY and the sector funds, from the start of the look-back window.
-    const chatterBars = await import("./chatter").then(({ ensureChatterBars }) => ensureChatterBars(data, now, CHATTER_EXPLORE_FROM)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
-    // Name and next earnings for every symbol on a card from the last 120 days (once a day).
-    const symbols = await store.cardsSince(120).then((cs) => [...new Set(cs.flatMap((c) => c.card.tickers.map((t) => t.symbol)))]);
-    const symbolInfo = await import("./symbols").then(({ refreshSymbolInfo }) => refreshSymbolInfo(data, process.env, symbols, now)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
-    const earnings = await import("./chatter").then(({ refreshEarningsDates }) => refreshEarningsDates(process.env, CHATTER_EXPLORE_FROM)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
     // The day after a catalyst: read what happened and push the verdict.
     const reviews = await runReviews({ data, callModel: callResearchModel, now }).catch((err) => [{ cardId: 0, error: err instanceof Error ? err.message : String(err) }]);
     const pushed = await pushReviews(reviews as Array<{ cardId: number; verdict?: string }>).catch((err) => `push failed: ${err instanceof Error ? err.message : String(err)}`);
-    const detail = { ...r, reviews, pushedReviews: pushed, chatter, chatterBars, earnings, symbolInfo };
+    // Then housekeeping in time-limited slices, so the core job always finishes inside the function's limit.
+    const upkeep = await maintenance(started + 240_000, now);
+    const detail = { ...r, reviews, pushedReviews: pushed, upkeep };
     await store.finishRun(run, "ok", detail);
     return { status: "ok" as const, ...detail };
   } catch (err) {
@@ -127,4 +123,32 @@ export async function chatterBatch(now = new Date(), fetchImpl?: typeof fetch) {
   } catch (err) {
     return `failed: ${err instanceof Error ? err.message : String(err)}`;
   }
+}
+
+/**
+ * Housekeeping in slices, each only if there is time before `deadline`:
+ * names and earnings for card symbols (daily), a chatter-test batch, the
+ * chatter test's bars, and names / earnings dates for its 198 stocks (weekly).
+ * Whatever is left is picked up by the next call (hourly story call, after-close job).
+ */
+export async function maintenance(deadline: number, now = new Date(), fetchImpl?: typeof fetch) {
+  const left = () => deadline - Date.now();
+  const out: Record<string, unknown> = {};
+  const data = marketDataFromEnv();
+  const { refreshSymbolInfo } = await import("./symbols");
+  try {
+    const symbols = await store.cardsSince(120).then((cs) => [...new Set(cs.flatMap((c) => c.card.tickers.map((t) => t.symbol)))]);
+    out.cardSymbols = await refreshSymbolInfo(data, process.env, symbols, now, 20, fetchImpl, deadline - 5_000);
+  } catch (err) {
+    out.cardSymbols = `failed: ${err instanceof Error ? err.message : String(err)}`;
+  }
+  out.chatter = left() > 100_000 ? await chatterBatch(now, fetchImpl) : "later: not enough time";
+  if (data && left() > 40_000) {
+    out.chatterBars = await import("./chatter").then(({ ensureChatterBars }) => ensureChatterBars(data, now, CHATTER_EXPLORE_FROM)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+  } else out.chatterBars = "later: not enough time";
+  if (left() > 20_000) {
+    const { CHATTER_UNIVERSE } = await import("@/config/chatter");
+    out.chatterSymbols = await refreshSymbolInfo(data, process.env, CHATTER_UNIVERSE.map((u) => u.symbol), now, 7 * 24, fetchImpl, deadline - 5_000).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+  } else out.chatterSymbols = "later: not enough time";
+  return out;
 }

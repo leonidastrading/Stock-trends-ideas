@@ -28,3 +28,19 @@ describe("story scans called too often", () => {
     expect(bad.status).toBe(401);
   });
 });
+
+describe("housekeeping slices", () => {
+  let pg: PGlite;
+  beforeAll(() => {
+    pg = new PGlite();
+    setQuerierForTests({ query: async (text, params) => (await pg.query(text, params as unknown[])).rows as Record<string, unknown>[] });
+  });
+  afterAll(() => setQuerierForTests(null));
+
+  it("with no time left, every slice is deferred instead of overrunning the function", async () => {
+    const { maintenance } = await import("@/lib/scout/engine");
+    const r = await maintenance(Date.now() - 1, new Date("2026-11-14T21:00:00Z"));
+    expect(r).toMatchObject({ chatter: "later: not enough time", chatterBars: "later: not enough time", chatterSymbols: "later: not enough time" });
+    expect(r.cardSymbols).toMatchObject({ checked: 0 });
+  });
+});

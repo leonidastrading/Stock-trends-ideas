@@ -27,20 +27,27 @@ export function estimateNextEarnings(dates: string[], today: string): { last: st
 }
 
 /** Look up and store name and earnings for symbols not checked in the last `maxAgeHours`. Never throws. */
-export async function refreshSymbolInfo(data: MarketData | null, env: NodeJS.ProcessEnv, symbols: string[], now: Date, maxAgeHours = 20, fetchImpl?: typeof fetch): Promise<{ checked: number; errors: string[] }> {
-  const out = { checked: 0, errors: [] as string[] };
+export async function refreshSymbolInfo(data: MarketData | null, env: NodeJS.ProcessEnv, symbols: string[], now: Date, maxAgeHours = 20, fetchImpl?: typeof fetch, deadline = Infinity): Promise<{ checked: number; left: number; errors: string[] }> {
+  const out = { checked: 0, left: 0, errors: [] as string[] };
   const today = toEt(now).date;
   const fresh = await store.freshSymbols(maxAgeHours);
   const ua = env.SEC_USER_AGENT?.trim();
-  for (const symbol of [...new Set(symbols)].filter((s) => !fresh.has(s))) {
+  const todo = [...new Set(symbols)].filter((s) => !fresh.has(s));
+  for (const [i, symbol] of todo.entries()) {
+    if (Date.now() > deadline) {
+      out.left = todo.length - i;
+      break;
+    }
     try {
       const asset = data?.getAsset ? await data.getAsset(symbol) : undefined;
       const dates = ua ? await fetchEarningsDates(symbol, addDays(today, -460), ua, fetchImpl).catch(() => null) : null;
       const e = dates ? estimateNextEarnings(dates, today) : { last: null, next: null, basis: null };
+      if (dates?.length) await store.addEarningsDates(symbol, dates);
       await store.upsertSymbolInfo({ symbol, name: asset === undefined ? null : asset?.name || "(not a listed symbol now)", exchange: asset?.exchange ?? null, tradable: asset === undefined ? null : !!asset?.tradable, lastEarnings: e.last, nextEarnings: e.next, nextBasis: e.basis });
       out.checked++;
     } catch (err) {
       out.errors.push(`${symbol}: ${err instanceof Error ? err.message.slice(0, 100) : String(err)}`);
+      console.warn(`symbol info ${symbol}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
   return out;
