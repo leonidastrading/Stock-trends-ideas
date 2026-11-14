@@ -30,7 +30,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
           <span className={`tag ${c.status}`}>{c.status.replace("_", " ")}</span>
           <span className="tag">{KIND_LABEL[c.kind as Kind] ?? c.kind}</span>
           <span className="tag">{c.origin === "human" ? "human-originated" : "scout"}</span>
-          <span className="small muted">#{c.id} · {fmtEt(c.createdAt)} · {c.model} · v{c.versionId}</span>
+          <span className="small muted" title={`card #${c.id} · ${c.model} · version ${c.versionId}`}>{fmtEt(c.createdAt)}</span>
         </div>
         {track?.excluded && <div className="small neg" style={{ marginTop: 6 }}><b>Excluded from scoring: wrong security.</b> {track.excluded}</div>}
         <div style={{ margin: "8px 0 4px" }}><Direction direction={c.direction} ticker={c.primaryTicker} name={info?.name ?? company} warn={wrong} />
