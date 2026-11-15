@@ -28,7 +28,7 @@ export default async function WatchlistPage() {
                   <tr key={w.id}>
                     <td>{w.term}{w.note ? <div className="small muted">{w.note}</div> : null}</td><td className="small">{w.kind.replace("_", "-")}</td><td className="small">{w.tickers.join(", ")}</td>
                     <td className="small">{toEt(new Date(w.addedAt)).date}</td><td className="small">{w.addedBy}</td>
-                    <td>{w.status === "proposed" && <StatusButton id={w.id} action="approve" label="Approve" />}{w.status === "active" && <StatusButton id={w.id} action="retire" label="Retire" />}{w.status === "retired" && <StatusButton id={w.id} action="reactivate" label="Reactivate" />}</td>
+                    <td>{w.status === "proposed" && <><StatusButton id={w.id} action="approve" label="Approve" /> <StatusButton id={w.id} action="retire" label="Dismiss" /></>}{w.status === "active" && <StatusButton id={w.id} action="retire" label="Retire" />}{w.status === "retired" && <StatusButton id={w.id} action="reactivate" label="Reactivate" />}</td>
                   </tr>
                 ))}
               </tbody>
