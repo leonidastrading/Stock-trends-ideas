@@ -75,15 +75,19 @@ export default function ChatWindow({ past, tickers }: { past: Past[]; tickers: s
         try { localStorage.setItem(KEY, String(id)); } catch { /* storage unavailable */ }
       }
       setStatus("Thinking…");
+      // The reply arrives in pieces; it is shown once, whole, when it is done (with a word count meanwhile).
       const reader = res.body.getReader();
       const dec = new TextDecoder();
+      let reply = "";
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        const piece = dec.decode(value, { stream: true });
-        setStatus(null);
-        setMsgs((x) => { const y = x.slice(); y[y.length - 1] = { role: "assistant", content: y[y.length - 1].content + piece }; return y; });
+        reply += dec.decode(value, { stream: true });
+        const words = reply.trim().split(/\s+/).length;
+        setStatus(`Writing the reply… ${words.toLocaleString("en-US")} word${words === 1 ? "" : "s"} so far`);
       }
+      reply += dec.decode();
+      setMsgs((x) => { const y = x.slice(); y[y.length - 1] = { role: "assistant", content: reply || "(No reply.)" }; return y; });
     } catch (err) {
       setMsgs((x) => { const y = x.slice(); y[y.length - 1] = { role: "assistant", content: `(Error: ${err instanceof Error ? err.message : String(err)})` }; return y; });
     } finally {
