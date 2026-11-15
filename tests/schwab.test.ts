@@ -32,9 +32,9 @@ describe("Schwab: read-only market data", () => {
   });
 
   it("tokens are stored encrypted; a different app secret cannot read them", () => {
-    const t = { refresh: "R1", refreshIssuedAt: "2026-11-15T12:00:00Z", access: "A1", accessExpiresAt: "2026-11-15T12:30:00Z" };
+    const t = { refresh: "refresh-token-plaintext-XYZ", refreshIssuedAt: "2026-11-15T12:00:00Z", access: "access-token-plaintext-XYZ", accessExpiresAt: "2026-11-15T12:30:00Z" };
     const blob = seal(cfg, t);
-    expect(blob).not.toContain("R1");
+    expect(blob).not.toMatch(/plaintext|refresh-token|access-token/);
     expect(unseal(cfg, blob)).toEqual(t);
     expect(unseal({ ...cfg, secret: "other" }, blob)).toBeNull();
   });
@@ -78,7 +78,7 @@ describe("Schwab: weekly sign-in and token refresh (PGlite, fake Schwab)", () =>
     expect(calls[0].body).toBe("grant_type=authorization_code&code=CODE%401&redirect_uri=https%3A%2F%2Fscout.example%2Fapi%2Fschwab%2Fcallback");
     expect(calls[0].auth).toBe(`Basic ${Buffer.from("app-key:app-secret").toString("base64")}`);
     // Stored encrypted: the database never holds the tokens in clear.
-    expect(JSON.stringify((await store.cacheGet("secret:schwab"))?.data)).not.toMatch(/"R1"|"A1"/);
+    expect(JSON.stringify((await store.cacheGet("secret:schwab"))?.data)).not.toMatch(/"R1"|"A1"|grant|refresh/); // only an opaque blob
 
     expect(await accessToken(fake, env, new Date("2026-11-15T12:10:00Z"))).toBe("A1"); // still fresh
     expect(await accessToken(fake, env, new Date("2026-11-15T12:45:00Z"))).toBe("A2"); // refreshed
