@@ -47,12 +47,10 @@ export default async function MarketPanels() {
         {b ? (
           <section className="statbars">
             <Bar left={<>Advancing <b>{Math.round((b.advancing / Math.max(b.advancing + b.declining, 1)) * 100)}%</b> ({b.advancing})</>} right={<>Declining ({b.declining})</>} share={(b.advancing / Math.max(b.advancing + b.declining, 1)) * 100} />
-            <Bar left={<>New 52-week highs <b>{b.highs}</b></>} right={<>New lows <b>{b.lows}</b></>} share={b.highs + b.lows ? (b.highs / (b.highs + b.lows)) * 100 : 50} />
-            <Bar left={<>Market mood <b>{b.moodLabel}</b></>} right={<>Score <b>{b.mood}</b></>} share={b.mood} color="mood" />
           </section>
         ) : null}
       </div>
-      {b && <p className="small muted" style={{ margin: "-4px 0 12px" }}>Breadth across the scout&apos;s {b.stocks} large and mid caps on {fmtDay(b.asOf)}, not the whole market. Mood: {b.parts}.</p>}
+      {b && <p className="small muted" style={{ margin: "-4px 0 12px" }}>Breadth across the scout&apos;s {b.stocks} large and mid caps on {fmtDay(b.asOf)}, not the whole market.</p>}
 
       <div className="panels-grid">
         <MoversTable gainers={movers.data?.gainers ?? []} losers={movers.data?.losers ?? []} scope={movers.data?.scope ?? "all US stocks"} />
