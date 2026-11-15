@@ -1,0 +1,48 @@
+/**
+ * News tab: the last day's headlines from Alpaca's news stream (Benzinga) plus Trump posts judged
+ * market-relevant, ranked for "top" by freshness, event words, how many headlines pile onto the same
+ * stock, and whether the stock is on one of the scout's cards. The page polls for new items.
+ */
+import { marketDataFromEnv, type NewsItem } from "../alpaca";
+import { eventWord } from "./stories";
+import * as store from "./store";
+
+export interface FeedItem { id: string; at: string; headline: string; summary: string; source: string; url: string; symbols: string[]; event: string | null; cardIds: number[]; buzz: number; score: number; kind: "news" | "trump" }
+
+/** Pure: score and rank. Freshness halves every 6 hours; an event word, a pile-up on one stock and a card on it each lift a story. */
+export function rankFeed(items: Array<Omit<FeedItem, "score" | "buzz" | "event" | "cardIds">>, cards: Map<string, number[]>, now: Date): FeedItem[] {
+  const recentBySym = new Map<string, number>();
+  for (const i of items) if (now.getTime() - Date.parse(i.at) < 6 * 3600_000) for (const s of i.symbols) recentBySym.set(s, (recentBySym.get(s) ?? 0) + 1);
+  return items.map((i) => {
+    const ageH = Math.max(0, (now.getTime() - Date.parse(i.at)) / 3600_000);
+    const event = eventWord(`${i.headline} ${i.summary}`);
+    const cardIds = [...new Set(i.symbols.flatMap((s) => cards.get(s) ?? []))];
+    const buzz = Math.max(0, ...i.symbols.map((s) => recentBySym.get(s) ?? 0));
+    const broad = i.symbols.length > 4; // round-ups tagged with many tickers are rarely the story
+    const weight = 1 + (event ? 1.5 : 0) + Math.min(2, Math.max(0, buzz - 1) * 0.5) + (cardIds.length ? 1.5 : 0) + (i.kind === "trump" ? 1.5 : 0) - (broad ? 1 : 0);
+    return { ...i, event, cardIds, buzz, score: Math.round(weight * Math.pow(0.5, ageH / 6) * 100) / 100 };
+  });
+}
+
+const cache = { at: 0, items: [] as FeedItem[] };
+
+/** The last 24 hours, newest data at most 30 seconds old. */
+export async function newsFeed(now = new Date()): Promise<FeedItem[]> {
+  if (Date.now() - cache.at < 30_000 && cache.items.length) return cache.items;
+  const data = marketDataFromEnv();
+  const since = new Date(now.getTime() - 24 * 3600_000);
+  const [news, posts, cards] = await Promise.all([
+    data ? data.getNews([], since, now, 200).catch(() => [] as NewsItem[]) : Promise.resolve([] as NewsItem[]),
+    store.truthPostsSince(since.toISOString(), true).catch(() => []),
+    store.cardsSince(30).catch(() => []),
+  ]);
+  const bySym = new Map<string, number[]>();
+  for (const c of cards) for (const t of c.card.tickers) bySym.set(t.symbol, [...(bySym.get(t.symbol) ?? []), c.id]);
+  const items = [
+    ...news.map((n) => ({ id: `n${n.id}`, at: n.ts, headline: n.headline, summary: n.summary, source: n.source || "news", url: n.url, symbols: n.symbols.slice(0, 8), kind: "news" as const })),
+    ...posts.filter((p) => p.read).map((p) => ({ id: `t${p.id}`, at: p.at, headline: `Trump: ${p.read!.summary}`, summary: p.text.slice(0, 400), source: "Truth Social", url: p.url, symbols: p.read!.tickers, kind: "trump" as const })),
+  ];
+  cache.items = rankFeed(items, bySym, now);
+  cache.at = Date.now();
+  return cache.items;
+}

@@ -167,3 +167,14 @@ details.section[open] > summary::before { content: "▾ "; }
 a.ticker { text-decoration: none; font-weight: 650; }
 a.ticker:hover { text-decoration: underline; }
 a.call { text-decoration: none; }
+/* News tab */
+.news { max-width: 1000px; }
+.news-item { padding: 10px 14px; margin: 8px 0; transition: border-color 1.5s, background 1.5s; }
+.news-item.fresh { border-color: var(--pos); background: color-mix(in srgb, var(--pos) 8%, var(--surface-1)); }
+.news-meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.news-headline { font-size: 16px; font-weight: 600; margin: 4px 0 2px; line-height: 1.35; }
+.news-headline a { color: var(--text-primary); text-decoration: none; }
+.news-headline a:hover { text-decoration: underline; }
+.news-summary { margin-top: 3px; }
+button.chip { background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+button.chip.active { border-color: var(--accent); color: var(--accent); }
