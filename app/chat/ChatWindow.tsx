@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { renderReply } from "./render";
+import { shownUserText } from "@/lib/scout/chat-text";
 
 interface Msg { role: "user" | "assistant"; content: string }
 interface Past { id: number; createdAt: string; first: string | null; turns: number }
@@ -121,7 +122,7 @@ export default function ChatWindow({ past, tickers }: { past: Past[]; tickers: s
         {msgs.map((m, i) => (
           <div key={i} className={`chat-msg ${m.role}`}>
             <div className="chat-who small muted">{m.role === "user" ? "You" : "Scout"}</div>
-            <div className="chat-text">{m.content ? (m.role === "assistant" ? renderReply(m.content, known) : m.content) : (busy && i === msgs.length - 1 ? <span className="muted">{status ?? "…"}</span> : "")}</div>
+            <div className="chat-text">{m.content ? (m.role === "assistant" ? renderReply(m.content, known) : shownUserText(m.content)) : (busy && i === msgs.length - 1 ? <span className="muted">{status ?? "…"}</span> : "")}</div>
           </div>
         ))}
         {!busy && msgs.length > 0 && msgs[msgs.length - 1].role === "user" && (

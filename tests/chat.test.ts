@@ -64,3 +64,17 @@ describe("briefing and threads (PGlite)", () => {
     expect((await store.recentChatThreads())[0]).toMatchObject({ id, first: "hi", turns: 2 });
   });
 });
+
+describe("asking from a card", () => {
+  it("sends the question with the whole card, and the chat shows only the question", async () => {
+    const { cardQuestion } = await import("@/lib/scout/chat");
+    const { shownUserText } = await import("@/lib/scout/chat-text");
+    const c = { id: 152, createdAt: "2026-11-14T19:52:00Z", status: "late", gateNotes: ["stock up 31% in 30 days"], direction: "long", primaryTicker: "LMT", title: "Trump urges lame-duck Senate to pass $350B defense bill", card: { title: "Trump urges…", confidence: 46, invalidation: "Bill dies in the Senate" } } as unknown as store.StoredCard;
+    const msg = cardQuestion(c, null, "  Is it too late?  ");
+    expect(msg.startsWith("About card #152 (long LMT: Trump urges lame-duck Senate to pass $350B defense bill): Is it too late?")).toBe(true);
+    expect(msg).toContain('"invalidation": "Bill dies in the Senate"');
+    expect(msg).toContain('"paperTrack": null');
+    expect(shownUserText(msg)).toBe("About card #152 (long LMT: Trump urges lame-duck Senate to pass $350B defense bill): Is it too late?");
+    expect(shownUserText("plain question")).toBe("plain question");
+  });
+});

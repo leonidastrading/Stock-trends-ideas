@@ -2,14 +2,14 @@ import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { checkBasicAuth } from "@/lib/auth";
 import { hasDatabase } from "@/lib/db";
-import { buildBriefing, CHAT_MAX_CHARS, chatTurn } from "@/lib/scout/chat";
+import { buildBriefing, CHAT_MAX_CHARS, cardQuestion, chatTurn } from "@/lib/scout/chat";
 import * as store from "@/lib/scout/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-const body = z.object({ thread: z.number().int().positive().optional(), message: z.string().trim().min(1).max(CHAT_MAX_CHARS, `That message is too long (over ${CHAT_MAX_CHARS.toLocaleString("en-US")} characters). Split it into parts.`) });
+const body = z.object({ thread: z.number().int().positive().optional(), cardId: z.number().int().positive().optional(), message: z.string().trim().min(1).max(CHAT_MAX_CHARS, `That message is too long (over ${CHAT_MAX_CHARS.toLocaleString("en-US")} characters). Split it into parts.`) });
 
 /** A thread's messages (for reloading the page). */
 export async function GET(request: Request) {
@@ -32,7 +32,13 @@ export async function POST(request: Request) {
     thread = (await store.getChatThread(id))!;
   }
   const t = thread;
-  const message = parsed.data.message;
+  // Asked from a card: the whole card and its paper track go with the question (and stay in the chat's history).
+  let message = parsed.data.message;
+  if (parsed.data.cardId) {
+    const card = await store.getCard(parsed.data.cardId);
+    if (!card) return NextResponse.json({ ok: false, errors: [`no card #${parsed.data.cardId}`] }, { status: 404 });
+    message = cardQuestion(card, await store.getTrack(card.id).catch(() => null), message);
+  }
   // Your message is saved now; the reply is saved when it finishes, even if the page was closed meanwhile.
   await store.appendChat(t.id, [{ role: "user", content: message, at: new Date().toISOString() }]);
   const enc = new TextEncoder();

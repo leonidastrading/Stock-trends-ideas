@@ -11,6 +11,7 @@ import { type DailyBar, marketDataFromEnv } from "../alpaca";
 import { addDays, daysBetween, fmtEt, toEt } from "../time";
 import { bySymbol } from "./congress";
 import { describeFlag } from "./options-flow";
+import { CARD_ATTACHED } from "./chat-text";
 import * as store from "./store";
 
 export const CHAT_SYSTEM = `You are the research partner inside Trend scout, Vadim's paper-only research assistant. Below the rules is a briefing: everything the scout has logged and measured, as of the time stated. Use it as your memory.
@@ -226,4 +227,11 @@ export async function chatTurn(thread: store.ChatThread, userText: string, onTex
   const note = out.final.stop_reason === "refusal" ? "\n\n(The model declined to answer this.)" : out.final.stop_reason === "max_tokens" ? "\n\n(Reply cut off at the length limit.)" : "";
   if (note) { text += note; onText(note); }
   return { text, costUsd };
+}
+
+/** Pure: the message for a question asked from a card: the question first, then the whole card and its paper track. */
+export function cardQuestion(c: store.StoredCard, track: store.Track | null, question: string): string {
+  const head = `About card #${c.id} (${c.direction} ${c.primaryTicker}: ${c.title}): ${question.trim()}`;
+  const details = { id: c.id, logged: c.createdAt, status: c.status, gateNotes: c.gateNotes, card: c.card, paperTrack: track };
+  return `${head}${CARD_ATTACHED}${JSON.stringify(details, null, 1).slice(0, 20_000)}`;
 }

@@ -210,3 +210,6 @@ button.chip.active { border-color: var(--accent); color: var(--accent); }
 .gauges-row .statbars { align-self: flex-start; }
 .digest-docs summary { cursor: pointer; }
 .digest-docs > div { margin-left: 14px; }
+.card-ask { flex-basis: 100%; }
+.card-ask textarea { width: 100%; box-sizing: border-box; }
+.card-ask-answer { border-left: 3px solid var(--accent); padding: 4px 0 4px 10px; margin-bottom: 8px; }

@@ -1,5 +1,6 @@
 import { KIND_LABEL, SCOUT, type Kind } from "@/config/scout";
 import Direction from "@/components/Direction";
+import CardAsk from "@/components/CardAsk";
 import Feedback from "@/components/Feedback";
 import { after } from "next/server";
 import { marketDataFromEnv } from "@/lib/alpaca";
@@ -90,7 +91,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
         <h3>Evidence</h3>
         <ul className="evidence">{k.evidence.map((e, i) => <li key={i}><span className="src">{e.source}</span>{e.metric}: {e.value} <span className="muted">({e.change_vs_12m} vs 12m, as of {e.as_of})</span></li>)}</ul>
       </div>
-      {actions && <div className="actions">{actions}</div>}
+      <div className="actions">{actions}<CardAsk cardId={c.id} symbol={c.primaryTicker} tickers={k.tickers.map((t) => t.symbol)} /></div>
       <Feedback target={`card:${c.id}`} initial={feedback ? { vote: feedback.vote, note: feedback.note } : null} />
     </section>
   );
