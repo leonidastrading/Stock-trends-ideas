@@ -38,10 +38,16 @@ function layout(nodes: MapNode[]) {
   return { src, pts };
 }
 
-export default function IdeaMap({ nodes }: { nodes: MapNode[] }) {
+type Show = "all" | "card" | "promoted";
+
+export default function IdeaMap({ nodes: all }: { nodes: MapNode[] }) {
+  const [show, setShow] = useState<Show>("all");
+  // The map is laid out again around the stocks shown, so a filtered view is not crowded by hidden ones.
+  const nodes = useMemo(() => all.filter((n) => show === "all" || (show === "card" ? !!n.cardId : n.status === "promoted")), [all, show]);
   const { src, pts } = useMemo(() => layout(nodes), [nodes]);
   const [hover, setHover] = useState<string | null>(null);
   const [only, setOnly] = useState<MapSourceKey | null>(null);
+  const shows: Array<[Show, string, number]> = [["all", "All stocks", all.length], ["card", "With a card", all.filter((n) => n.cardId).length], ["promoted", "Promoted cards only", all.filter((n) => n.status === "promoted").length]];
   const counts = new Map<string, number>();
   for (const n of nodes) for (const l of n.links) counts.set(l.source, (counts.get(l.source) ?? 0) + 1);
   const lit = (p: { n: MapNode }) => (hover ? p.n.symbol === hover : only ? p.n.links.some((l) => l.source === only) : true);
@@ -49,6 +55,12 @@ export default function IdeaMap({ nodes }: { nodes: MapNode[] }) {
 
   return (
     <div className="idea-map card">
+      <div className="toolbar" style={{ margin: "0 4px 6px" }}>
+        <span className="filter-links small">
+          {shows.map(([k, label, n]) => <button key={k} className={`chip${show === k ? " active" : ""}`} onClick={() => { setShow(k); setHover(null); }}>{label} <span className="muted">{n}</span></button>)}
+        </span>
+      </div>
+      {nodes.length === 0 && <p className="small muted" style={{ margin: "0 4px 6px" }}>{show === "promoted" ? "No promoted cards in the last 30 days." : "No stocks with a card in the last 30 days."}</p>}
       <div className="small muted map-status">
         {only ? <>Showing <b style={{ color: src.get(only)!.color }}>{src.get(only)!.label}</b>: {counts.get(only) ?? 0} stocks · <button className="chip" onClick={() => setOnly(null)}>show all</button></>
           : <>{nodes.length} stocks · {nodes.filter((n) => n.links.length > 1).length} flagged by more than one source · hover a stock for why, click a source to isolate it</>}
