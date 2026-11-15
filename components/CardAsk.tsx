@@ -2,12 +2,16 @@
 
 import { useState } from "react";
 import { renderReply } from "@/app/chat/render";
+import { ATTACHED } from "@/lib/scout/chat-text";
 
 /** The chat page's thread key: a question asked here joins the chat you have open there. */
 const KEY = "scout-chat-thread";
 
-/** "Ask the scout" on a card: a question about this card, answered here, with the whole card attached. */
-export default function CardAsk({ cardId, symbol, tickers }: { cardId: number; symbol: string; tickers: string[] }) {
+/**
+ * "Ask the scout": a question answered in place, joining the current chat. On a card the whole card is attached
+ * by the server (cardId); elsewhere (a rumor) the caller passes its details as `context` and a `subject` line.
+ */
+export default function CardAsk({ cardId, symbol, tickers, subject, context, noun = "card" }: { cardId?: number; symbol: string; tickers: string[]; subject?: string; context?: string; noun?: string }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -22,7 +26,7 @@ export default function CardAsk({ cardId, symbol, tickers }: { cardId: number; s
     setBusy(thread ? "Thinking…" : "Loading what the scout knows, then thinking…");
     setAnswer(null);
     try {
-      const res = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ thread, cardId, message: question }) });
+      const res = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(cardId ? { thread, cardId, message: question } : { thread, message: `About ${subject ?? noun}: ${question}${context ? `${ATTACHED}${context}` : ""}` }) });
       if (!res.ok || !res.body) {
         const j = await res.json().catch(() => ({ errors: [`HTTP ${res.status}`] }));
         throw new Error((j.errors ?? [j.error ?? "failed"]).join("; "));
@@ -61,7 +65,7 @@ export default function CardAsk({ cardId, symbol, tickers }: { cardId: number; s
         </div>
       )}
       <form onSubmit={ask}>
-        <textarea value={q} onChange={(e) => setQ(e.target.value)} rows={2} placeholder={`Ask about this ${symbol} card: is it still on? what would change your mind? how would you trade it?`}
+        <textarea value={q} onChange={(e) => setQ(e.target.value)} rows={2} placeholder={noun === "card" ? `Ask about this ${symbol} card: is it still on? what would change your mind? how would you trade it?` : `Ask about this ${noun}: is there anything to it? who would it hit? what would confirm it?`}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(); } }} disabled={!!busy} />
         <div className="toolbar" style={{ margin: "6px 0 0" }}>
           <button className="primary" type="submit" disabled={!!busy || !q.trim()}>{busy ? "…" : "Ask"}</button>
@@ -69,7 +73,7 @@ export default function CardAsk({ cardId, symbol, tickers }: { cardId: number; s
           {busy && <span className="small muted">{busy}</span>}
         </div>
       </form>
-      <p className="small muted" style={{ margin: "4px 0 0" }}>The whole card and its paper track go with your question; it joins your current chat. Counts toward the daily AI cap.</p>
+      <p className="small muted" style={{ margin: "4px 0 0" }}>{noun === "card" ? "The whole card and its paper track go with your question" : `The full ${noun} goes with your question`}; it joins your current chat. Counts toward the daily AI cap.</p>
     </div>
   );
 }

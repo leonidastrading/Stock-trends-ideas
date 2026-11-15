@@ -76,5 +76,7 @@ describe("asking from a card", () => {
     expect(msg).toContain('"paperTrack": null');
     expect(shownUserText(msg)).toBe("About card #152 (long LMT: Trump urges lame-duck Senate to pass $350B defense bill): Is it too late?");
     expect(shownUserText("plain question")).toBe("plain question");
+    const { ATTACHED } = await import("@/lib/scout/chat-text");
+    expect(shownUserText(`About rumor #7 (BA): is there anything to it?${ATTACHED}UNVERIFIED rumor from r-conspiracy.txt…`)).toBe("About rumor #7 (BA): is there anything to it?");
   });
 });

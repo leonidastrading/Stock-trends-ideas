@@ -7,6 +7,21 @@ import * as store from "@/lib/scout/store";
 import { etLabel } from "@/lib/time";
 import RumorDrop from "./RumorDrop";
 import RumorResearch from "./RumorResearch";
+import RumorInvestigate from "./RumorInvestigate";
+import CardAsk from "@/components/CardAsk";
+import type { Rumor } from "@/lib/scout/rumors";
+
+/** Pure: a rumor written out in full, for the investigation and the scout's answer. */
+function rumorDetails(r: Rumor): string {
+  return [
+    `UNVERIFIED rumor from ${r.docSource}${r.source ? ` (${r.source})` : ""}, logged ${r.createdAt.slice(0, 10)}: ${r.claim}`,
+    r.tickers.length ? `Tickers: ${r.tickers.join(", ")}${r.direction !== "none" ? `; if true: ${r.direction} ${r.tickers[0]}` : ""}.` : "",
+    r.timeframe ? `Supposed timing: ${r.timeframe}.` : "",
+    r.confirm ? `Would be confirmed by: ${r.confirm}` : "",
+    r.quote ? `Quote: "${r.quote}"` : "",
+    r.mainstream ? `Mainstream news this week: ${r.mainstream.headlines7d} headline(s) on ${r.tickers.join(", ")}${r.mainstream.matches.length ? `; similar: ${r.mainstream.matches.map((m) => m.headline).join("; ")}` : "; nothing similar"}.` : "",
+  ].filter(Boolean).join("\n");
+}
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -78,8 +93,10 @@ export default async function RumorsPage({ searchParams }: { searchParams: Promi
             )}
             {r.confirm && <div className="small secondary">Would be confirmed by: {r.confirm}</div>}
             {r.quote && <details className="small"><summary>Quote</summary>&ldquo;{r.quote}&rdquo;</details>}
-            <div className="small" style={{ marginTop: 4 }}>
+            <div className="small rumor-actions" style={{ marginTop: 4 }}>
               {done ? (done.cardId ? <a href={`/ideas?days=90&card=${done.cardId}#card-${done.cardId}`}>checked: card #{done.cardId} ({done.outcome.replace("_", " ")})</a> : <span className="muted">checked: {done.outcome}</span>) : <RumorResearch id={r.id} />}
+              <RumorInvestigate text={rumorDetails(r)} />
+              <CardAsk symbol={r.tickers[0] ?? ""} tickers={r.tickers} noun="rumor" subject={`rumor #${r.id} (${r.tickers.join(", ") || r.category}): ${r.claim.slice(0, 140)}`} context={rumorDetails(r)} />
             </div>
           </section>
         );
