@@ -614,8 +614,26 @@ export async function inboxSeen(): Promise<Set<string>> {
   return new Set((await q(`SELECT path, sha FROM inbox_files`)).map((r) => `${r.path}@${r.sha}`));
 }
 
-export async function markInbox(path: string, sha: string, result: unknown): Promise<void> {
-  await q(`INSERT INTO inbox_files (path, sha, result) VALUES ($1, $2, $3) ON CONFLICT (path, sha) DO NOTHING`, [path, sha, JSON.stringify(result)]);
+export async function markInbox(path: string, sha: string, result: unknown, text: string | null = null): Promise<void> {
+  await q(`INSERT INTO inbox_files (path, sha, result, text) VALUES ($1, $2, $3, $4) ON CONFLICT (path, sha) DO NOTHING`, [path, sha, JSON.stringify(result), text]);
+}
+
+/** Documents read since `from`, newest first, with their text where it was kept. */
+export async function inboxDocsSince(from: string): Promise<Array<{ path: string; sha: string; readAt: string; text: string | null; result: Record<string, unknown> | null }>> {
+  return (await q(`SELECT path, sha, read_at, text, result FROM inbox_files WHERE read_at >= $1 ORDER BY read_at DESC`, [from])).map((r) => ({ path: r.path, sha: r.sha, readAt: iso(r.read_at)!, text: r.text ?? null, result: r.result ?? null }));
+}
+
+export async function setInboxText(path: string, sha: string, text: string): Promise<void> {
+  await q(`UPDATE inbox_files SET text = $3 WHERE path = $1 AND sha = $2`, [path, sha, text]);
+}
+
+export async function addInboxDigest(docs: string[], digest: unknown, costUsd: number | null): Promise<void> {
+  await q(`INSERT INTO inbox_digests (docs, digest, cost_usd) VALUES ($1, $2, $3)`, [docs, JSON.stringify(digest), costUsd]);
+}
+
+export async function latestInboxDigest<T>(): Promise<{ createdAt: string; docs: string[]; digest: T } | null> {
+  const r = (await q(`SELECT created_at, docs, digest FROM inbox_digests ORDER BY id DESC LIMIT 1`))[0];
+  return r ? { createdAt: iso(r.created_at)!, docs: r.docs ?? [], digest: r.digest as T } : null;
 }
 
 export async function inboxRecent(limit = 50): Promise<Array<{ path: string; readAt: string; result: Record<string, unknown> | null }>> {

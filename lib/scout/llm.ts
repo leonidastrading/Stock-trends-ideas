@@ -1,5 +1,6 @@
 /** The research model call. Network side effects live here; prompt and parsing are pure modules. */
 import { INBOX_JSON_SCHEMA, INBOX_SYSTEM_PROMPT } from "./inbox";
+import { INBOX_DIGEST_PROMPT, INBOX_DIGEST_SCHEMA } from "./inbox-digest";
 import Anthropic from "@anthropic-ai/sdk";
 import { callCost } from "@/config/scout";
 import { CARD_JSON_SCHEMA } from "./card";
@@ -18,7 +19,7 @@ export interface ModelReply {
   costUsd: number | null;
 }
 
-export type Purpose = "research" | "triage" | "stories" | "review" | "inbox";
+export type Purpose = "research" | "triage" | "stories" | "review" | "inbox" | "inbox_digest";
 export type CallModel = (args: { model: string; effort: Effort; user: string; purpose?: Purpose }) => Promise<ModelReply>;
 
 const PROMPTS: Record<Purpose, { system: string; schema: Record<string, unknown> }> = {
@@ -27,6 +28,7 @@ const PROMPTS: Record<Purpose, { system: string; schema: Record<string, unknown>
   stories: { system: STORY_SYSTEM_PROMPT, schema: STORY_JSON_SCHEMA as unknown as Record<string, unknown> },
   review: { system: REVIEW_SYSTEM_PROMPT, schema: REVIEW_JSON_SCHEMA as unknown as Record<string, unknown> },
   inbox: { system: INBOX_SYSTEM_PROMPT, schema: INBOX_JSON_SCHEMA as unknown as Record<string, unknown> },
+  inbox_digest: { system: INBOX_DIGEST_PROMPT, schema: INBOX_DIGEST_SCHEMA as unknown as Record<string, unknown> },
 };
 
 /** Models that accept the server-side refusal fallback. */

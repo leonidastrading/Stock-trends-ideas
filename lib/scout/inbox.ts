@@ -147,7 +147,7 @@ export async function ideasFrom(text: string, name: string, deps: ResearchDeps):
 
 // --------------------------------------------------------------- the poll
 
-export interface InboxReport { checked: boolean; files: number; read: Array<{ file: string; via?: string; ideas?: number; sent?: string; error?: string }>; error: string | null }
+export interface InboxReport { checked: boolean; files: number; read: Array<{ file: string; via?: string; ideas?: number; sent?: string; error?: string }>; error: string | null; digest?: string }
 
 /**
  * Check the inbox; read at most `max` new files. Ideas are handed to the scout's own
@@ -164,7 +164,10 @@ export async function pollInbox(deps: ResearchDeps, max = 1, fetchImpl: typeof f
   if (!cfg) return { ...report, error: "GITHUB_INBOX_REPO not set" };
   if (!(await store.tryLock("lock:inbox", 10))) return { ...report, error: "another check is reading the inbox right now" };
   try {
-    return await readNew(cfg, deps, max, fetchImpl, deliver, deadline, report);
+    const r = await readNew(cfg, deps, max, fetchImpl, deliver, deadline, report);
+    // New documents: rewrite the summary at the top of the Inbox tab.
+    if (r.read.some((x) => !x.error)) r.digest = await import("./inbox-digest").then(({ refreshInboxDigest }) => refreshInboxDigest(deps, fetchImpl)).catch((err) => `summary failed: ${err instanceof Error ? err.message : String(err)}`);
+    return r;
   } finally {
     await store.unlock("lock:inbox").catch(() => undefined);
   }
@@ -182,7 +185,7 @@ async function readNew(cfg: InboxConfig, deps: ResearchDeps, max: number, fetchI
       const text = await fileText(use.name, await downloadFile(cfg, use, fetchImpl));
       const { items, via } = await ideasFrom(text, use.name, deps);
       const sent = items.length ? await (deliver ?? sendToImport(deps.env, fetchImpl))(items, label) : "no ideas found";
-      for (const f of [use, ...also]) await store.markInbox(f.path, f.sha, f === use ? { via, ideas: items.length, sent } : { via: `twin of ${use.name}` });
+      for (const f of [use, ...also]) await store.markInbox(f.path, f.sha, f === use ? { via, ideas: items.length, sent } : { via: `twin of ${use.name}` }, f === use ? text.slice(0, 200_000) : null);
       report.read.push({ file: use.path, via, ideas: items.length, sent });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

@@ -4,9 +4,11 @@ import { hasDatabase } from "@/lib/db";
 import { trackRecord } from "@/lib/scout/inbox-record";
 import { botPrompt, INBOX_EXAMPLE, INBOX_FIELDS } from "@/lib/scout/inbox-spec";
 import * as store from "@/lib/scout/store";
-import { fmtEt } from "@/lib/time";
+import { DIGEST_DAYS, rank, type Digest } from "@/lib/scout/inbox-digest";
+import { fmtEt, toEt } from "@/lib/time";
 import ImportForm from "../notice/ImportForm";
 import CopyBox from "./CopyBox";
+import RefreshDigest from "./RefreshDigest";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -38,10 +40,61 @@ export default async function InboxPage() {
     });
   }
   const cardById = new Map(cards.map((c) => [c.id, c]));
-  const base = (process.env.DASHBOARD_URL?.trim() || "https://<this app>").replace(/\/$/, "");
+  const digest = await store.latestInboxDigest<Digest>().catch(() => null);
+  const today = toEt(new Date()).date;
+  // Documents but no summary yet (they came before the summary existed): write one now, in the background.
+  if (!digest && files.length) {
+    after(async () => {
+      const [{ refreshInboxDigest }, { defaultDeps }] = await Promise.all([import("@/lib/scout/inbox-digest"), import("@/lib/scout/engine")]);
+      await refreshInboxDigest(defaultDeps()).catch(() => undefined);
+    });
+  }
+  const ideas = digest ? rank(digest.digest.ideas, today) : [];
+  const news = digest ? rank(digest.digest.news, today) : [];
+  const base =(process.env.DASHBOARD_URL?.trim() || "https://<this app>").replace(/\/$/, "");
   return (
     <>
       <h1>Inbox</h1>
+      <div className="panel-head" style={{ margin: "0 0 8px" }}>
+        <span className="small secondary">{digest ? <>Summary of {digest.docs.length} document(s) from the last {DIGEST_DAYS} days ({digest.docs.join(", ")}) · written {fmtEt(digest.createdAt)}</> : files.length ? "Writing the first summary of your documents… refresh in a minute." : "The summary appears after the first documents arrive."}</span>
+        <RefreshDigest />
+      </div>
+      {digest && (
+        <div className="panels-grid digest-grid">
+          <section className="card panel">
+            <div className="panel-head"><span>Top ideas</span><span className="small muted">breaking, important and recent first</span></div>
+            {ideas.length === 0 && <p className="small muted">No ideas in these documents.</p>}
+            {ideas.map((x, i) => {
+              const c = x.card_id ? cardById.get(x.card_id) : undefined;
+              return (
+                <div key={i} className="digest-item">
+                  <div>
+                    {x.breaking && <span className="tag not_promoted">breaking</span>}
+                    <b className={x.direction === "long" ? "pos" : x.direction === "short" ? "neg" : ""}>{x.direction === "long" ? "▲ " : x.direction === "short" ? "▼ " : ""}{x.tickers.slice(0, 4).join(", ")}</b> <b>{x.title}</b>
+                  </div>
+                  <div className="small">{x.summary}</div>
+                  <div className="small muted">
+                    {"●".repeat(Math.max(1, Math.min(5, x.importance)))}{"○".repeat(5 - Math.max(1, Math.min(5, x.importance)))} · {x.date} · {x.source}
+                    {c ? <> · <a href={`/candidates?days=365#card-${c.id}`}>card #{c.id} ({c.status.replace("_", " ")})</a></> : null}
+                  </div>
+                </div>
+              );
+            })}
+          </section>
+          <section className="card panel">
+            <div className="panel-head"><span>News</span><span className="small muted">breaking, important and recent first</span></div>
+            {news.length === 0 && <p className="small muted">No news in these documents.</p>}
+            {news.map((x, i) => (
+              <div key={i} className="digest-item">
+                <div>{x.breaking && <span className="tag not_promoted">breaking</span>}<b>{x.headline}</b>{x.tickers.length ? <span className="small muted"> · {x.tickers.slice(0, 4).join(", ")}</span> : null}</div>
+                <div className="small">{x.summary}</div>
+                <div className="small muted">{"●".repeat(Math.max(1, Math.min(5, x.importance)))}{"○".repeat(5 - Math.max(1, Math.min(5, x.importance)))} · {x.date} · {x.source}</div>
+              </div>
+            ))}
+          </section>
+        </div>
+      )}
+
       <section className="card notice small">
         Other bots can send the scout ideas as files. Each idea is researched with the scout&apos;s own data, logged as a thesis card that is never edited, gated like everything else, tracked on paper against SPY, and scored as <b>&quot;Your bot&quot;</b> on the Scoreboard. Nothing places an order.
         <div style={{ marginTop: 6 }}>

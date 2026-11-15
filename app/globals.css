@@ -130,3 +130,7 @@ a.chip { color: inherit; text-decoration: none; }
 .chat .chips button.chip { text-align: left; }
 @media (max-width: 640px) { .chat-msg { max-width: 100%; } .chat-log { height: calc(100vh - 380px); } }
 .quote { margin-left: 12px; font-size: 15px; white-space: nowrap; }
+.digest-grid { grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); margin-bottom: 12px; }
+.digest-item { padding: 8px 0; border-top: 1px solid var(--grid); display: flex; flex-direction: column; gap: 2px; }
+.digest-item:first-of-type { border-top: 0; }
+@media (max-width: 640px) { .digest-grid { grid-template-columns: 1fr; } }

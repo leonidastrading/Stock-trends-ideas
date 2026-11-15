@@ -305,6 +305,16 @@ CREATE TABLE IF NOT EXISTS inbox_files (
   result jsonb,
   PRIMARY KEY (path, sha)
 );
+ALTER TABLE inbox_files ADD COLUMN IF NOT EXISTS text text;
+
+-- Inbox summary: the top ideas and news of the documents received in the last few days, rewritten when new ones arrive.
+CREATE TABLE IF NOT EXISTS inbox_digests (
+  id serial PRIMARY KEY,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  docs text[] NOT NULL,
+  digest jsonb NOT NULL,
+  cost_usd double precision
+);
 
 -- Congress trades (STOCK Act periodic transaction reports): each report read once, and its listed trades, never edited.
 CREATE TABLE IF NOT EXISTS congress_filings (

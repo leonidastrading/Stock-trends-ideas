@@ -28,12 +28,16 @@ export async function POST(request: Request) {
       const { defaultDeps } = await import("@/lib/scout/engine");
       return NextResponse.json({ ok: true, result: await pollInbox(defaultDeps(), 50, fetch, undefined, Date.now() + 240_000) });
     }
+    if (body.job === "inbox-digest") {
+      const [{ refreshInboxDigest }, { defaultDeps }] = await Promise.all([import("@/lib/scout/inbox-digest"), import("@/lib/scout/engine")]);
+      return NextResponse.json({ ok: true, result: { message: await refreshInboxDigest(defaultDeps()) } });
+    }
     if (body.job === "swing-test") {
       const { testSwingLogin } = await import("@/lib/scout/swing");
       const r = await testSwingLogin();
       return NextResponse.json(r.ok ? { ok: true, result: { message: r.message } } : { ok: false, errors: [r.message] }, { status: r.ok ? 200 : 422 });
     }
-    return NextResponse.json({ ok: false, errors: ["job must be 'daily', 'stories', 'track', 'push-test', 'swing-test' or 'inbox'"] }, { status: 422 });
+    return NextResponse.json({ ok: false, errors: ["job must be 'daily', 'stories', 'track', 'push-test', 'swing-test', 'inbox' or 'inbox-digest'"] }, { status: 422 });
   } catch (err) {
     return NextResponse.json({ ok: false, errors: [err instanceof Error ? err.message : String(err)] }, { status: 500 });
   }

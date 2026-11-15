@@ -229,6 +229,18 @@ anything else happens. Cards, versions and track events are append-only, enforce
   Google's rising queries for anything worth adding to the watch-list.
 - **Watch-list**: term, kind, tickers, date, who added it; approve the scout's proposals, retire terms.
 - **Scoring**: per version (see below), with a CSV export of every card and track.
+- **Inbox summary** (top of the Inbox tab, `lib/scout/inbox-digest.ts`): after new documents are read, one model call
+  (low effort, logged as "inbox_digest") summarises the last 3 days' documents into two separate lists, top ideas and
+  news, each item with tickers, a one-or-two-sentence summary, source, date, importance 1–5 and a breaking flag; ideas
+  link to the scout's card when it made one. Ranked breaking and important first, then recent (a "breaking" item older
+  than a day no longer jumps the queue). Document text is now kept with each inbox file; older files are fetched again
+  from GitHub. "Refresh summary" rewrites it on demand. Not part of the scored version.
+- **Duplicates**: one card per stock and direction per player within 14 days (`lib/scout/dedupe.ts`); a repeat is logged
+  as a rejected candidate ("duplicate: card #N …") before any model call, and checked again before the card is stored.
+  Ideas in one document about the same stock and direction are merged before research. The story desk and the options
+  desk are exempt (the story desk re-researches a story as it moves through stages).
+- **Card prices**: each card header shows the current price and the move since the previous close (Alpaca snapshots,
+  IEX feed, one batched call per page, cached a minute; no price rather than a slow page).
 - **Inbox tab**: setup status, the prompt to give any bot (copy button), the file format (`lib/scout/inbox-spec.ts`:
   one JSON object `{ bot, generated_at, ideas: [...] }` per file, named `inbox/YYYY-MM-DD-<bot>.json`, ideas with
   term, observation, kind, tickers and optional company, direction, catalyst_date, horizon_days, invalidation,
