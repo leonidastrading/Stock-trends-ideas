@@ -13,6 +13,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <nav>
           <span className="brand">Trend scout</span>
+          <Link href="/">Home</Link>
           <Link href="/ideas">Ideas</Link>
           <Link href="/news">News</Link>
           <Link href="/map">Map</Link>
