@@ -11,6 +11,7 @@ import { PLAYER_LABEL, PLAYERS, playerOf, type Player } from "@/lib/scout/scoreb
 import * as store from "@/lib/scout/store";
 import { swingConfigured } from "@/lib/scout/swing";
 import { toEt } from "@/lib/time";
+import RememberFilters from "@/components/RememberFilters";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -68,6 +69,7 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   return (
     <>
       <h1>Ideas</h1>
+      <RememberFilters keys={["days", "sort", "status", "source"]} />
       <TickerSearch />
       <details className="card notice small section">
         <summary><b>How this page works</b></summary>

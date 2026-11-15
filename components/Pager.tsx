@@ -6,7 +6,7 @@ export function hrefWith(params: Params, change: Params, hash = ""): string {
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries({ ...params, ...change })) if (v !== undefined && v !== "") q.set(k, v);
   const s = q.toString();
-  return `?${s}${hash}`;
+  return `?${s || "all=1"}${hash}`;
 }
 
 /** Pure: the slice for a page (1-based, clamped) and the page count. */

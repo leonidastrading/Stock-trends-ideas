@@ -10,6 +10,7 @@ import RumorResearch from "./RumorResearch";
 import RumorInvestigate from "./RumorInvestigate";
 import CardAsk from "@/components/CardAsk";
 import type { Rumor } from "@/lib/scout/rumors";
+import RememberFilters from "@/components/RememberFilters";
 
 /** Pure: a rumor written out in full, for the investigation and the scout's answer. */
 function rumorDetails(r: Rumor): string {
@@ -52,6 +53,7 @@ export default async function RumorsPage({ searchParams }: { searchParams: Promi
   return (
     <>
       <h1>Rumors</h1>
+      <RememberFilters keys={["days", "cat", "tickers"]} />
       <p className="small warn">Unverified claims from conspiracy forums and fringe sites. Listed as claims, not facts; nothing here is researched or traded unless you press Check it.</p>
       <details className="card section">
         <summary><b>How this page works</b> <span className="small muted">where rumors come from and what the scout does with them</span></summary>

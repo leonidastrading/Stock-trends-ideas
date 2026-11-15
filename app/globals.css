@@ -163,7 +163,7 @@ details.section > summary h2 { display: inline; }
 details.section > summary::before { content: "▸ "; color: var(--text-muted); }
 details.section[open] > summary::before { content: "▾ "; }
 .toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 6px 0 10px; }
-.from-line { margin: 14px 0 -8px 4px; }
+.from-line { margin: 14px 0 4px 4px; position: relative; z-index: 1; }
 a.ticker { text-decoration: none; font-weight: 650; }
 a.ticker:hover { text-decoration: underline; }
 a.call { text-decoration: none; }

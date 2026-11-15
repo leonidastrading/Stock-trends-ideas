@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import ResearchButton from "@/app/filings/ResearchButton";
 import { chartUrl } from "@/config/links";
 import type { FeedItem } from "@/lib/scout/newsfeed";
+import { useStoredState } from "@/components/useStoredState";
 
 const POLL_MS = 30_000;
 const when = (iso: string) => {
@@ -17,8 +18,8 @@ const when = (iso: string) => {
 export default function NewsFeed({ initial }: { initial: FeedItem[] }) {
   const [items, setItems] = useState<FeedItem[]>(initial);
   const [fresh, setFresh] = useState<Set<string>>(new Set());
-  const [view, setView] = useState<"top" | "latest">("top");
-  const [mine, setMine] = useState(false);
+  const [view, setView] = useStoredState<"top" | "latest">("news-view", "top");
+  const [mine, setMine] = useStoredState("news-mine", false);
   const [checked, setChecked] = useState<Date>(new Date());
   const [error, setError] = useState<string | null>(null);
   const [, tick] = useState(0);
@@ -63,7 +64,7 @@ export default function NewsFeed({ initial }: { initial: FeedItem[] }) {
         <span className="filter-links small">
           <button className={`chip${view === "top" ? " active" : ""}`} onClick={() => setView("top")}>Top</button>
           <button className={`chip${view === "latest" ? " active" : ""}`} onClick={() => setView("latest")}>Latest</button>
-          <button className={`chip${mine ? " active" : ""}`} onClick={() => setMine((m) => !m)}>On my cards only</button>
+          <button className={`chip${mine ? " active" : ""}`} onClick={() => setMine(!mine)}>On my cards only</button>
         </span>
         <span className="small muted">Live: checks every 30 seconds · last {checked.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}{error ? <span className="warn"> · {error}</span> : null}</span>
       </div>

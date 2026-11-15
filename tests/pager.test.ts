@@ -16,3 +16,11 @@ describe("paging", () => {
     expect(hrefWith({ days: "30", outcome: "late", lpage: "3" }, { outcome: undefined, lpage: undefined })).toBe("?days=30");
   });
 });
+
+describe("filter links when everything is back to default", () => {
+  it("still carry a marker, so a remembered filter is not put back over the user's choice", async () => {
+    const { hrefWith } = await import("@/components/Pager");
+    expect(hrefWith({ days: "30" }, { days: undefined })).toBe("?all=1");
+    expect(hrefWith({}, {}, "#cards")).toBe("?all=1#cards");
+  });
+});

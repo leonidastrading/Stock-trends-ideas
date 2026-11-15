@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { chartUrl } from "@/config/links";
 import type { MapNode } from "@/lib/scout/idea-map";
 import { MAP_SOURCES, type MapSourceKey } from "@/lib/scout/map-sources";
+import { useStoredState } from "@/components/useStoredState";
 
 const W = 1200, H = 760, CX = W / 2, CY = H / 2;
 
@@ -42,12 +43,12 @@ function layout(nodes: MapNode[]) {
 type Show = "all" | "card" | "promoted";
 
 export default function IdeaMap({ nodes: all }: { nodes: MapNode[] }) {
-  const [show, setShow] = useState<Show>("all");
+  const [show, setShow] = useStoredState<Show>("map-show", "all");
   // The map is laid out again around the stocks shown, so a filtered view is not crowded by hidden ones.
   const nodes = useMemo(() => all.filter((n) => show === "all" || (show === "card" ? !!n.cardId : n.status === "promoted")), [all, show]);
   const { src, pts } = useMemo(() => layout(nodes), [nodes]);
   const [hover, setHover] = useState<string | null>(null);
-  const [only, setOnly] = useState<MapSourceKey | null>(null);
+  const [only, setOnly] = useStoredState<MapSourceKey | null>("map-only", null);
   const shows: Array<[Show, string, number]> = [["all", "All stocks", all.length], ["card", "With a card", all.filter((n) => n.cardId).length], ["promoted", "Promoted cards only", all.filter((n) => n.status === "promoted").length]];
   const counts = new Map<string, number>();
   for (const n of nodes) for (const l of n.links) counts.set(l.source, (counts.get(l.source) ?? 0) + 1);
