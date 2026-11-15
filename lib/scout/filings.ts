@@ -13,7 +13,7 @@
  */
 import type { Signal } from "../sources";
 import { secTickerList } from "../sources/edgar";
-import { fetchSec, headerUrl, indexUrl, isRoutine, parseForm4, parseFormIndex, parseHeader, SEC_ARCHIVE, seriousItems, SERIOUS_ITEMS, WANTED_FORMS } from "../sources/filings";
+import { fetchSec, headerUrl, indexUrl, isExecutive, isRoutine, parseForm4, parseFormIndex, parseHeader, SEC_ARCHIVE, seriousItems, SERIOUS_ITEMS, WANTED_FORMS } from "../sources/filings";
 import { getJson } from "../http";
 import { addDays, daysBetween, toEt } from "../time";
 import { researchCandidate, type ResearchDeps } from "./research";
@@ -73,7 +73,7 @@ export async function processQueue(deadline: number, ua: string, fetchImpl?: typ
             const owner = b.ownerCik ? await getJson<{ filings?: { recent?: { form: string[]; filingDate: string[] } } }>(`https://data.sec.gov/submissions/CIK${b.ownerCik.padStart(10, "0")}.json`, { headers: { "user-agent": ua, "accept-encoding": "gzip, deflate" }, minIntervalMs: 130, fetchImpl, retries: 1 }).catch(() => null) : null;
             const r = owner?.filings?.recent;
             const dates = r ? r.filingDate.filter((_, i) => r.form[i] === "4") : [];
-            await store.addInsiderBuy({ accession: f.accession, filed: f.filed, issuerCik: b.issuerCik, symbol: b.symbol, issuerName: b.issuerName, owner: b.owner, ownerCik: b.ownerCik, role: b.role, txDate: b.date || null, shares: b.shares, price: b.price, value: b.value, ownedAfter: b.ownedAfter, pctIncrease: b.pctIncrease, plan10b5: b.plan10b5, routine: isRoutine(dates, b.date || f.filed) });
+            await store.addInsiderBuy({ accession: f.accession, filed: f.filed, issuerCik: b.issuerCik, symbol: b.symbol, issuerName: b.issuerName, owner: b.owner, ownerCik: b.ownerCik, role: b.role, txDate: b.date || null, shares: b.shares, price: b.price, value: b.value, ownedAfter: b.ownedAfter, pctIncrease: b.pctIncrease, plan10b5: b.plan10b5, routine: isRoutine(dates, b.date || f.filed), ownerState: b.ownerState, issuerState: b.issuerState, local: b.local });
             out.buys++;
           }
         } else {
@@ -121,7 +121,7 @@ export function smartMoneySignals(buys: store.InsiderBuyRow[], congress: store.C
     const con = recentCon.filter((t) => t.symbol === sym);
     if (!ins.length || ![...ins.map((b) => b.filed), ...con.map((t) => t.filed)].some(fresh)) continue;
     both.add(sym);
-    const insLines = ins.slice(0, 5).map((b) => `${b.owner} (${b.role}) bought ${usd(b.value ?? 0)} on ${b.txDate ?? b.filed}${b.pctIncrease !== null ? `, +${b.pctIncrease}% to their holding` : ""}${b.routine === false ? ", outside their usual trading month" : ""}`);
+    const insLines = ins.slice(0, 5).map(insiderLine);
     out.push({
       kind: "insider+congress", symbol: sym, term: `insider+congress: ${sym}`, strength: 3.5, direction: "long",
       context: `Both company insiders and members of Congress bought ${sym} within the last 45 days.\nInsiders (SEC Form 4, open-market purchases, not 10b5-1 plans):\n${insLines.map((l) => `- ${l}`).join("\n")}\nCongress (STOCK Act reports):\n${con.slice(0, 6).map((t) => `- ${line(t)}`).join("\n")}\nInsider purchases that are not routine have earned roughly 0.8% a month for about six months (Cohen, Malloy & Pomorski). ${CONGRESS_EVIDENCE} Two independent groups with an information edge buying the same stock is rarer and stronger than either alone, but check that they are not reacting to the same public news.`,
@@ -147,12 +147,31 @@ const usd = (v: number) => (v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${Math.ro
  * Pure: how strong a stock's insider buying is, below insiders + Congress (3.5). More insiders count most; a single
  * insider still ranks high when the purchase is large ($1M+, more for $5M+) or more than doubles the holding.
  */
+/**
+ * Pure: how strong a stock's insider buying is. Cluster size and dollars first; then what Cohen, Malloy & Pomorski
+ * found most informative: buys confirmed outside the insider's routine month, by non-executive insiders, who live
+ * near the company (same state as its headquarters, from their own address on the Form 4).
+ */
 export function insiderStrength(owners: number, bs: store.InsiderBuyRow[]): number {
   const base = owners >= 3 ? 2.5 : owners >= 2 ? 2 : 1;
   const total = bs.reduce((a, b) => a + (b.value ?? 0), 0);
-  const bonus = (total >= 5_000_000 ? 1.5 : total >= 1_000_000 ? 1 : 0) + (bs.some((b) => (b.pctIncrease ?? 0) >= 100) ? 0.5 : 0);
-  return Math.min(3.4, base + bonus);
+  const opp = bs.filter((b) => b.routine === false);
+  const bonus = (total >= 5_000_000 ? 1.5 : total >= 1_000_000 ? 1 : 0) + (bs.some((b) => (b.pctIncrease ?? 0) >= 100) ? 0.5 : 0)
+    + (opp.length ? 0.2 : 0) + (opp.some((b) => !isExecutive(b.role ?? "")) ? 0.3 : 0) + (opp.some((b) => b.local === true) ? 0.3 : 0);
+  return Math.round(Math.min(3.4, base + bonus) * 100) / 100;
 }
+
+/** Pure: one insider purchase as a line the research step reads. */
+export function insiderLine(b: store.InsiderBuyRow): string {
+  const tags = [
+    b.routine === false ? "outside their usual trading month (opportunistic)" : b.routine === null ? "no trading history to tell routine from opportunistic" : "",
+    !isExecutive(b.role ?? "") ? "non-executive insider" : "top executive",
+    b.local === true ? `local: lives in ${b.ownerState}, where the company is based` : b.local === false ? `not local: lives in ${b.ownerState}, company in ${b.issuerState}` : "",
+  ].filter(Boolean);
+  return `${b.owner} (${b.role}) bought ${Math.round(b.shares ?? 0).toLocaleString("en-US")} shares at $${b.price} = ${usd(b.value ?? 0)} on ${b.txDate ?? b.filed}${b.pctIncrease !== null ? `, +${b.pctIncrease}% to their holding` : ""}; ${tags.join("; ")}`;
+}
+
+const INSIDER_EVIDENCE = "The evidence: Cohen, Malloy & Pomorski (2012) split insider trades into routine (the same calendar month in prior years; over half of all trades), which earn about zero, and opportunistic, which earn about 0.82% a month (value-weighted abnormal) building for about six months with no reversal. The most informative opportunistic traders are local, non-executive insiders at poorly governed, geographically concentrated firms: check the governance (insider-controlled board, dual-class shares, a combined CEO and chair, past restatements) and whether the business is concentrated in one region. Lopez-Lira & Tang find markets underreact to insider-transaction headlines, so the drift is still there after the news. Also strongest when several insiders buy, after a decline, in small and mid caps, and when the purchase is large against the holding. Horizon about six months: set the time limit near 180 days unless a nearer catalyst decides it.";
 
 /** Pure: the day's candidate signals from stored buys and alerts, strongest first. */
 export function pickSignals(buys: store.InsiderBuyRow[], alerts: store.FilingAlert[], today: string, flags: store.OptionsFlag[] = [], congress: store.CongressTradeRow[] = []): FilingSignal[] {
@@ -199,10 +218,10 @@ export function pickSignals(buys: store.InsiderBuyRow[], alerts: store.FilingAle
     // Big: $100k+ that adds 10%+ to the holding, or $1M+ whatever the holding (often unknown for directors).
     const big = bs.some((b) => ((b.value ?? 0) >= 100_000 && (b.pctIncrease ?? 0) >= 10) || (b.value ?? 0) >= 1_000_000);
     if (owners.size < 2 && !big) continue;
-    const lines = bs.slice(0, 6).map((b) => `${b.owner} (${b.role}) bought ${Math.round(b.shares ?? 0).toLocaleString("en-US")} shares at $${b.price} = ${usd(b.value ?? 0)} on ${b.txDate ?? b.filed}${b.pctIncrease !== null ? `, +${b.pctIncrease}% to their holding` : ""}${b.routine === false ? ", outside their usual trading month (opportunistic)" : ""}`);
+    const lines = bs.slice(0, 6).map(insiderLine);
     out.push({
       kind: "insider", symbol, term: `insider: ${symbol}`, strength: insiderStrength(owners.size, bs), direction: "long",
-      context: `Insider open-market purchases (Form 4, code P, not under a 10b5-1 plan) in ${bs[0].issuerName} over the last ${FILINGS.clusterDays} days: ${owners.size} insider(s), ${usd(total)} in total.\n${lines.map((l) => `- ${l}`).join("\n")}\nThe evidence: opportunistic insider purchases (not the insider's routine calendar month) earned about 0.8% a month for about six months with no reversal (Cohen, Malloy & Pomorski); markets underreact to them. Strongest when several insiders buy, after a decline, in small and mid caps, and when the purchase is large against the insider's holding. Routine purchases earn about nothing. Horizon about six months.`,
+      context: `Insider open-market purchases (Form 4, code P, not under a 10b5-1 plan) in ${bs[0].issuerName} over the last ${FILINGS.clusterDays} days: ${owners.size} insider(s), ${usd(total)} in total.\n${lines.map((l) => `- ${l}`).join("\n")}\n${INSIDER_EVIDENCE}`,
       trigger: [{ source: "edgar", metric: `insider_buys_30d:${symbol}`, value: owners.size, baseline: null, changeVs12m: null, asOf: bs[0].filed, note: `${owners.size} insider(s) bought ${usd(total)} of ${symbol} in 30 days` }],
     });
   }

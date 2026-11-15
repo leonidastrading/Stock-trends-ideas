@@ -49,6 +49,22 @@ export function headerUrl(e: { path: string; accession: string }): string {
 export interface InsiderBuy {
   issuerCik: string; issuerName: string; symbol: string; owner: string; ownerCik: string; role: string;
   date: string; shares: number; price: number; value: number; ownedAfter: number | null; pctIncrease: number | null; plan10b5: boolean;
+  /** Top executive (CEO, CFO, COO, president, chair) vs everyone else (directors, other officers, 10% owners). */
+  executive: boolean;
+  /** Home state of the insider's own address and the company's business address; local = same state, and not just the company's address. */
+  ownerState: string | null; issuerState: string | null; local: boolean | null;
+}
+
+/** Pure: the CEO / CFO / COO / president / chair, the "executive" insiders of Cohen, Malloy & Pomorski. */
+export const isExecutive = (role: string) => /\b(chief|ceo|cfo|coo|president|chair(man|woman|person)?)\b/i.test(role);
+
+const street = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\b(c o|suite|ste|floor|fl)\b.*$/, "").trim();
+
+/** Pure: the company's business-address state and street from the SEC header of a Form 4 submission. */
+export function issuerAddress(text: string): { state: string | null; street: string | null } {
+  const block = /ISSUER:([\s\S]*?)(?:REPORTING-OWNER:|<\/SEC-HEADER>|<DOCUMENT>|$)/.exec(text)?.[1] ?? "";
+  const biz = /BUSINESS ADDRESS:([\s\S]*?)(?:MAIL ADDRESS:|FORMER COMPANY:|$)/.exec(block)?.[1] ?? "";
+  return { state: /STATE:\s*([A-Z]{2})\b/.exec(biz)?.[1] ?? null, street: /STREET 1:\s*(.+)/.exec(biz)?.[1]?.trim() ?? null };
 }
 
 const tag = (xml: string, name: string) => new RegExp(`<${name}>\\s*(?:<value>)?\\s*([^<]*)`, "i").exec(xml)?.[1]?.trim() ?? "";
@@ -72,12 +88,21 @@ export function parseForm4(text: string): InsiderBuy | null {
   if (!shares) return null;
   const roles = [/true|1/i.test(tag(xml, "isDirector")) ? "director" : "", /true|1/i.test(tag(xml, "isOfficer")) ? tag(xml, "officerTitle") || "officer" : "", /true|1/i.test(tag(xml, "isTenPercentOwner")) ? "10% owner" : ""].filter(Boolean);
   const before = ownedAfter !== null ? ownedAfter - shares : null;
+  const ownerAddr = /<reportingOwnerAddress>([\s\S]*?)<\/reportingOwnerAddress>/i.exec(xml)?.[1] ?? "";
+  const ownerState = (/<rptOwnerState>\s*([A-Za-z]{2})\s*</i.exec(ownerAddr)?.[1] ?? "").toUpperCase() || null;
+  const ownerStreet = /<rptOwnerStreet1>\s*([^<]*)</i.exec(ownerAddr)?.[1]?.trim() ?? "";
+  const issuer = issuerAddress(text);
+  // An insider who files from the company's own address tells us nothing about where they live.
+  const companyAddress = !!ownerStreet && !!issuer.street && street(ownerStreet) === street(issuer.street);
+  const roleText = roles.join(", ") || "other";
   return {
     issuerCik: tag(xml, "issuerCik").replace(/^0+/, ""), issuerName: tag(xml, "issuerName"), symbol: tag(xml, "issuerTradingSymbol").toUpperCase().replace(/[^A-Z.]/g, ""),
-    owner: tag(xml, "rptOwnerName"), ownerCik: tag(xml, "rptOwnerCik").replace(/^0+/, ""), role: roles.join(", ") || "other",
+    owner: tag(xml, "rptOwnerName"), ownerCik: tag(xml, "rptOwnerCik").replace(/^0+/, ""), role: roleText,
     date, shares, price: Math.round((value / shares) * 100) / 100, value: Math.round(value), ownedAfter,
     pctIncrease: before !== null && before > 0 ? Math.round((shares / before) * 1000) / 10 : null,
     plan10b5: /true|1/i.test(tag(xml, "aff10b5One")),
+    executive: isExecutive(roleText), ownerState, issuerState: issuer.state,
+    local: ownerState && issuer.state && !companyAddress ? ownerState === issuer.state : null,
   };
 }
 

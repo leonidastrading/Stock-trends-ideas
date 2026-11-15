@@ -281,6 +281,9 @@ CREATE TABLE IF NOT EXISTS insider_buys (
   plan10b5 boolean,
   routine boolean
 );
+ALTER TABLE insider_buys ADD COLUMN IF NOT EXISTS owner_state text;
+ALTER TABLE insider_buys ADD COLUMN IF NOT EXISTS issuer_state text;
+ALTER TABLE insider_buys ADD COLUMN IF NOT EXISTS local boolean;
 CREATE OR REPLACE TRIGGER insider_buys_ro BEFORE UPDATE OR DELETE ON insider_buys FOR EACH ROW EXECUTE FUNCTION forbid_change();
 
 -- New activist stakes (Schedule 13D) and 8-Ks with bad-news items, written once.

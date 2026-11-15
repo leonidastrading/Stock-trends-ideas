@@ -102,7 +102,7 @@ describe("SEC filing parsers", () => {
 
 describe("signals", () => {
   const buy = (p: Partial<store.InsiderBuyRow>): store.InsiderBuyRow => ({ accession: Math.random().toString(), filed: "2026-11-13", issuerCik: "1", symbol: "SMBK", issuerName: "Small Bank Corp", owner: "A", ownerCik: "1", role: "director", txDate: "2026-11-12", shares: 1000, price: 20, value: 20000, ownedAfter: 10000, pctIncrease: 11, plan10b5: false, routine: false, ...p });
-  it("restatements first, then 13Ds, then clustered or large opportunistic insider buying; routine buys ignored", () => {
+  it("restatements first; confirmed opportunistic buying by non-executives outranks a 13D; routine buys ignored", () => {
     const s = pickSignals(
       [buy({ owner: "A" }), buy({ owner: "B" }), buy({ symbol: "BIG", owner: "C", value: 500000, pctIncrease: 25 }), buy({ symbol: "RTN", owner: "D", value: 900000, pctIncrease: 50, routine: true }), buy({ symbol: "OLD", owner: "E", value: 900000, pctIncrease: 50, filed: "2026-10-30" })],
       [{ accession: "x", kind: "8-K", filed: "2026-11-13", cik: "880984", symbol: "ACFN", company: "ACORN ENERGY", items: ["4.02 non-reliance on past financial statements", "4.01 auditor change"], filer: null },
@@ -110,8 +110,8 @@ describe("signals", () => {
        { accession: "z", kind: "8-K", filed: "2026-11-13", cik: "9", symbol: "XYZ", company: "XYZ", items: ["5.02 director or officer departure"], filer: null }],
       "2026-11-14",
     );
-    expect(s.map((x) => [x.kind, x.symbol, x.direction])).toEqual([["8-K", "ACFN", "short"], ["13D", "COUR", "long"], ["insider", "SMBK", "long"], ["insider", "BIG", "long"]]);
-    expect(s[2].context).toMatch(/2 insider\(s\).*Cohen, Malloy & Pomorski/s);
+    expect(s.map((x) => [x.kind, x.symbol, x.direction])).toEqual([["8-K", "ACFN", "short"], ["insider", "SMBK", "long"], ["13D", "COUR", "long"], ["insider", "BIG", "long"]]);
+    expect(s[1].context).toMatch(/2 insider\(s\).*non-executive insider.*Cohen, Malloy & Pomorski.*local, non-executive insiders.*Lopez-Lira & Tang.*near 180 days/s);
     expect(s[0].term).toBe("filing: ACFN 8-K 4.02");
   });
 });
@@ -152,5 +152,41 @@ describe("the filings desk end to end (PGlite, fake EDGAR)", () => {
     expect(FILINGS.maxResearchPerDay).toBe(4);
     const stopped = await processQueue(Date.now() - 1, "Test test@example.com", sec);
     expect(stopped.read).toBe(0);
+  });
+});
+
+describe("who is buying (Cohen, Malloy & Pomorski: local, non-executive insiders)", async () => {
+  const { insiderLine, insiderStrength } = await import("@/lib/scout/filings");
+  const { isExecutive, issuerAddress } = await import("@/lib/sources/filings");
+  const header = (state: string, street: string) => `<SEC-HEADER>\nREPORTING-OWNER:\n\tOWNER DATA:\n\t\tCOMPANY CONFORMED NAME:\tDoe Jane\n\tMAIL ADDRESS:\n\t\tSTREET 1:\t\tC/O SMALL BANK\n\t\tSTATE:\t\t\tNY\nISSUER:\n\tCOMPANY DATA:\n\t\tCOMPANY CONFORMED NAME:\tSmall Bank Corp\n\tBUSINESS ADDRESS:\n\t\tSTREET 1:\t\t${street}\n\t\tCITY:\t\t\tAKRON\n\t\tSTATE:\t\t\t${state}\n\tMAIL ADDRESS:\n\t\tSTATE:\t\t\tDE\n</SEC-HEADER>\n`;
+  const withAddress = (xml: string, state: string, street: string) => xml.replace("</reportingOwnerId>", `</reportingOwnerId><reportingOwnerAddress><rptOwnerStreet1>${street}</rptOwnerStreet1><rptOwnerCity>X</rptOwnerCity><rptOwnerState>${state}</rptOwnerState></reportingOwnerAddress>`);
+
+  it("tells top executives from other insiders", () => {
+    expect(isExecutive("director, Chief Executive Officer")).toBe(true);
+    expect(isExecutive("CFO")).toBe(true);
+    expect(isExecutive("Chairman of the Board")).toBe(true);
+    expect(isExecutive("director")).toBe(false);
+    expect(isExecutive("10% owner")).toBe(false);
+    expect(isExecutive("SVP, General Counsel")).toBe(false);
+  });
+
+  it("reads the company's home state from the SEC header and the insider's from the Form 4", () => {
+    expect(issuerAddress(header("OH", "100 MAIN ST"))).toEqual({ state: "OH", street: "100 MAIN ST" });
+    const local = parseForm4(header("OH", "100 MAIN ST") + withAddress(form4("P"), "OH", "12 Elm Road"))!;
+    expect(local).toMatchObject({ ownerState: "OH", issuerState: "OH", local: true, executive: false });
+    expect(parseForm4(header("OH", "100 MAIN ST") + withAddress(form4("P"), "FL", "1 Ocean Dr"))!.local).toBe(false);
+    // Filed from the company's own address: says nothing about where the insider lives.
+    expect(parseForm4(header("OH", "100 MAIN ST") + withAddress(form4("P"), "OH", "100 Main St., Suite 4"))!.local).toBeNull();
+    expect(parseForm4(form4("P"))!.local).toBeNull();
+  });
+
+  it("ranks opportunistic, non-executive, local buying higher and says so to the research step", () => {
+    const b = (o: Partial<import("@/lib/scout/store").InsiderBuyRow>) => ({ accession: "a", filed: "2026-11-10", issuerCik: null, symbol: "SMBK", issuerName: "Small Bank", owner: "Doe Jane", ownerCik: null, role: "director", txDate: "2026-11-09", shares: 10000, price: 20, value: 200000, ownedAfter: 60000, pctIncrease: 20, plan10b5: false, routine: false as boolean | null, ...o });
+    const ceoUnknown = insiderStrength(1, [b({ role: "Chief Executive Officer", routine: null })]);
+    const dirOpp = insiderStrength(1, [b({})]);
+    const dirOppLocal = insiderStrength(1, [b({ local: true, ownerState: "OH", issuerState: "OH" })]);
+    expect([ceoUnknown, dirOpp, dirOppLocal]).toEqual([1, 1.5, 1.8]);
+    expect(insiderLine(b({ local: true, ownerState: "OH", issuerState: "OH" }))).toBe("Doe Jane (director) bought 10,000 shares at $20 = $200k on 2026-11-09, +20% to their holding; outside their usual trading month (opportunistic); non-executive insider; local: lives in OH, where the company is based");
+    expect(insiderLine(b({ role: "CEO", routine: null }))).toContain("no trading history to tell routine from opportunistic; top executive");
   });
 });

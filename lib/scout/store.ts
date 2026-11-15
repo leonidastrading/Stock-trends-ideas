@@ -592,17 +592,18 @@ export async function secQueueStatus(): Promise<{ pending: number; done: number;
   return { pending: Number(r.pending ?? 0), done: Number(r.done ?? 0), errors: Number(r.errors ?? 0), days };
 }
 
-export interface InsiderBuyRow { accession: string; filed: string; issuerCik: string | null; symbol: string | null; issuerName: string | null; owner: string | null; ownerCik: string | null; role: string | null; txDate: string | null; shares: number | null; price: number | null; value: number | null; ownedAfter: number | null; pctIncrease: number | null; plan10b5: boolean | null; routine: boolean | null }
+export interface InsiderBuyRow { accession: string; filed: string; issuerCik: string | null; symbol: string | null; issuerName: string | null; owner: string | null; ownerCik: string | null; role: string | null; txDate: string | null; shares: number | null; price: number | null; value: number | null; ownedAfter: number | null; pctIncrease: number | null; plan10b5: boolean | null; routine: boolean | null; ownerState?: string | null; issuerState?: string | null; local?: boolean | null }
 
 export async function addInsiderBuy(b: InsiderBuyRow): Promise<void> {
-  await q(`INSERT INTO insider_buys (accession, filed, issuer_cik, symbol, issuer_name, owner, owner_cik, role, tx_date, shares, price, value, owned_after, pct_increase, plan10b5, routine) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT (accession) DO NOTHING`,
-    [b.accession, b.filed, b.issuerCik, b.symbol, b.issuerName, b.owner, b.ownerCik, b.role, b.txDate, b.shares, b.price, b.value, b.ownedAfter, b.pctIncrease, b.plan10b5, b.routine]);
+  await q(`INSERT INTO insider_buys (accession, filed, issuer_cik, symbol, issuer_name, owner, owner_cik, role, tx_date, shares, price, value, owned_after, pct_increase, plan10b5, routine, owner_state, issuer_state, local) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) ON CONFLICT (accession) DO NOTHING`,
+    [b.accession, b.filed, b.issuerCik, b.symbol, b.issuerName, b.owner, b.ownerCik, b.role, b.txDate, b.shares, b.price, b.value, b.ownedAfter, b.pctIncrease, b.plan10b5, b.routine, b.ownerState ?? null, b.issuerState ?? null, b.local ?? null]);
 }
 
 export async function insiderBuysSince(from: string): Promise<InsiderBuyRow[]> {
   return (await q(`SELECT * FROM insider_buys WHERE filed >= $1 ORDER BY filed DESC, value DESC`, [from])).map((r) => ({
     accession: r.accession, filed: dstr(r.filed)!, issuerCik: r.issuer_cik, symbol: r.symbol, issuerName: r.issuer_name, owner: r.owner, ownerCik: r.owner_cik, role: r.role, txDate: dstr(r.tx_date),
     shares: num(r.shares), price: num(r.price), value: num(r.value), ownedAfter: num(r.owned_after), pctIncrease: num(r.pct_increase), plan10b5: r.plan10b5 ?? null, routine: r.routine ?? null,
+    ownerState: r.owner_state ?? null, issuerState: r.issuer_state ?? null, local: r.local ?? null,
   }));
 }
 
