@@ -11,7 +11,7 @@ export const TRADING_HOST = "https://api.alpaca.markets";
 export const PAPER_TRADING_HOST = "https://paper-api.alpaca.markets";
 
 const ALLOWED: Record<string, RegExp[]> = {
-  [DATA_HOST]: [/^\/v2\/stocks\/bars$/, /^\/v1beta1\/news$/, /^\/v1beta1\/options\/snapshots\/[A-Z][A-Z.]{0,9}$/],
+  [DATA_HOST]: [/^\/v2\/stocks\/bars$/, /^\/v2\/stocks\/snapshots$/, /^\/v1beta1\/news$/, /^\/v1beta1\/options\/snapshots\/[A-Z][A-Z.]{0,9}$/],
   // Calendar and asset metadata (what a symbol currently is) only: never orders, positions or the account.
   [TRADING_HOST]: [/^\/v2\/calendar$/, /^\/v2\/assets\/[A-Z][A-Z.]{0,9}$/],
   [PAPER_TRADING_HOST]: [/^\/v2\/calendar$/, /^\/v2\/assets\/[A-Z][A-Z.]{0,9}$/],
@@ -42,6 +42,8 @@ export function assertReadOnlyEndpoint(host: string, path: string): void {
   const rules = ALLOWED[host];
   if (!rules || !rules.some((re) => re.test(path))) throw new Error(`Refusing non-allowlisted Alpaca endpoint ${host}${path} (read-only)`);
 }
+
+export interface Snapshot { price: number; at: string | null; prevClose: number | null; sessionDate: string | null }
 
 export interface Asset { symbol: string; name: string; exchange: string; active: boolean; tradable: boolean }
 
@@ -172,6 +174,22 @@ export class AlpacaClient {
     return out;
   }
 
+  /** Latest trade and the last two daily bars per symbol (market data only; free accounts get the IEX feed). */
+  async getSnapshots(symbols: readonly string[]): Promise<Record<string, Snapshot>> {
+    const out: Record<string, Snapshot> = {};
+    for (let i = 0; i < symbols.length; i += 100) {
+      const resp = await this.get<Record<string, { latestTrade?: { p: number; t: string } | null; dailyBar?: { c: number; t: string } | null; prevDailyBar?: { c: number; t: string } | null } | null>>(
+        DATA_HOST, "/v2/stocks/snapshots", { symbols: symbols.slice(i, i + 100).join(","), feed: "iex" },
+      );
+      for (const [sym, s] of Object.entries(resp ?? {})) {
+        const price = s?.latestTrade?.p ?? s?.dailyBar?.c ?? null;
+        if (!s || price === null) continue;
+        out[sym] = { price, at: s.latestTrade?.t ?? s.dailyBar?.t ?? null, prevClose: s.prevDailyBar?.c ?? null, sessionDate: s.dailyBar?.t ? s.dailyBar.t.slice(0, 10) : null };
+      }
+    }
+    return out;
+  }
+
   /** What a symbol currently is: issuer name, exchange, whether it trades. Null when the symbol is unknown. */
   async getAsset(symbol: string): Promise<Asset | null> {
     try {
@@ -195,6 +213,8 @@ export interface MarketData {
   getCalendar(start: string, end: string): Promise<Session[]>;
   /** Optional: what a symbol currently is (asset metadata). */
   getAsset?(symbol: string): Promise<Asset | null>;
+  /** Optional: latest price and the previous close (market data only). */
+  getSnapshots?(symbols: readonly string[]): Promise<Record<string, Snapshot>>;
   /** Optional: option-chain implied volatility (market data only). */
   getOptionSnapshots?(underlying: string, q: { type?: "call" | "put"; strikeGte?: number; strikeLte?: number; expiryGte?: string; expiryLte?: string }): Promise<Record<string, { impliedVolatility?: number | null }>>;
 }

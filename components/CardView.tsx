@@ -3,6 +3,7 @@ import Direction from "@/components/Direction";
 import Feedback from "@/components/Feedback";
 import { after } from "next/server";
 import { marketDataFromEnv } from "@/lib/alpaca";
+import { quote, sessionLabel } from "@/lib/market/quotes";
 import { hasDatabase } from "@/lib/db";
 import { namesMatch, notCommon } from "@/lib/scout/identity";
 import * as store from "@/lib/scout/store";
@@ -26,6 +27,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
     if (done) info = (await store.symbolInfo([c.primaryTicker]).catch(() => new Map())).get(c.primaryTicker) ?? null;
     else after(() => lookup);
   }
+  const q = await quote(c.primaryTicker);
   const company = k.tickers.find((t) => t.symbol === c.primaryTicker)?.company ?? null;
   // Warn when the symbol trades as something other than the company's stock (a reused ticker).
   const wrong = !!info?.name && (info.tradable === false || !!notCommon(info.name) || (!!company && !namesMatch(company, info.name)));
@@ -43,6 +45,12 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
         </div>
         {track?.excluded && <div className="small neg" style={{ marginTop: 6 }}><b>Excluded from scoring: wrong security.</b> {track.excluded}</div>}
         <div style={{ margin: "8px 0 4px" }}><Direction direction={c.direction} ticker={c.primaryTicker} name={info?.name ?? company ?? (info ? "company name unavailable" : "company name loading — reload in a moment")} warn={wrong} />
+          {q ? (
+            <span className="quote" title={`Last trade ${q.at ? fmtEt(q.at) : ""} (IEX feed; may differ slightly from the consolidated price). Change vs the previous session's close.`}>
+              <b>${q.price.toFixed(q.price < 1 ? 4 : 2)}</b>
+              {q.changePct !== null && <span className={q.changePct >= 0 ? "pos" : "neg"}> {pct(q.changePct, 2)} {sessionLabel(q)}</span>}
+            </span>
+          ) : null}
           {opposing?.length ? <span className="tag warn" style={{ marginLeft: 8 }}>⚠ opposite call on {c.primaryTicker}: {opposing.map((id) => <a key={id} href={`/candidates?days=90#card-${id}`}>#{id} </a>)}</span> : null}</div>
         <div className="small secondary">
           {nextE ? <>Next earnings <b>~{fmtDay(nextE)}</b> <span className="muted">({info!.nextBasis})</span></>
