@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import ResearchButton from "@/app/filings/ResearchButton";
 import { chartUrl } from "@/config/links";
 import type { FeedItem } from "@/lib/scout/newsfeed";
 
@@ -76,6 +77,7 @@ export default function NewsFeed({ initial }: { initial: FeedItem[] }) {
             {i.buzz >= 3 && <span className="tag warn" title="headlines on this stock in the last 6 hours">{i.buzz} in 6h</span>}
             {i.cardIds.map((id) => <a key={id} className="tag promoted" href={`/ideas?days=30&card=${id}#card-${id}`}>card #{id}</a>)}
             <span>{when(i.at)} · {i.source}</span>
+            <span className="news-action"><ResearchButton ticker={i.symbols.length <= 3 ? i.symbols[0] : null} observation={`${i.kind === "trump" ? "Trump post on Truth Social" : `News headline (${i.source})`}, ${new Date(i.at).toISOString().slice(0, 16).replace("T", " ")} UTC: ${i.headline}.${i.summary ? ` ${i.summary.slice(0, 600)}` : ""}${i.symbols.length ? ` Tickers tagged: ${i.symbols.join(", ")}.` : ""} Link: ${i.url}`} /></span>
           </div>
           <div className="news-headline"><a href={i.url} target="_blank" rel="noreferrer">{i.headline}</a></div>
           {i.symbols.length > 0 && <div className="small">{i.symbols.map((s, j) => <span key={s}>{j ? " · " : ""}<a className="ticker accent" href={chartUrl(s)} target="_blank" rel="noreferrer">{s}</a></span>)}</div>}

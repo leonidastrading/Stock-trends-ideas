@@ -7,6 +7,9 @@ import { marketDataFromEnv, type NewsItem } from "../alpaca";
 import { eventWord } from "./stories";
 import * as store from "./store";
 
+/** Extra event words for the News tab only (operational shocks the story desk's list does not name). */
+const NEWS_EVENT = /\b(ground stop|grounded|grounding|delist\w*|cyberattack|ransomware|explosion|evacuat\w*|derail\w*|shutdown|layoffs?|job cuts|guidance raise|raises guidance|misses estimates|beats estimates)\b/i;
+
 export interface FeedItem { id: string; at: string; headline: string; summary: string; source: string; url: string; symbols: string[]; event: string | null; cardIds: number[]; buzz: number; score: number; kind: "news" | "trump" }
 
 /** Pure: score and rank. Freshness halves every 6 hours; an event word, a pile-up on one stock and a card on it each lift a story. */
@@ -15,11 +18,13 @@ export function rankFeed(items: Array<Omit<FeedItem, "score" | "buzz" | "event" 
   for (const i of items) if (now.getTime() - Date.parse(i.at) < 6 * 3600_000) for (const s of i.symbols) recentBySym.set(s, (recentBySym.get(s) ?? 0) + 1);
   return items.map((i) => {
     const ageH = Math.max(0, (now.getTime() - Date.parse(i.at)) / 3600_000);
-    const event = eventWord(`${i.headline} ${i.summary}`);
+    // "strike price" and similar options wording is not a strike; the story desk's own word list is left as it is.
+    const text = `${i.headline} ${i.summary}`.replace(/\bstrike(?: prices?| of)\b/gi, "");
+    const event = eventWord(text) ?? (NEWS_EVENT.exec(text)?.[1]?.toLowerCase() ?? null);
     const cardIds = [...new Set(i.symbols.flatMap((s) => cards.get(s) ?? []))];
     const buzz = Math.max(0, ...i.symbols.map((s) => recentBySym.get(s) ?? 0));
     const broad = i.symbols.length > 4; // round-ups tagged with many tickers are rarely the story
-    const weight = 1 + (event ? 1.5 : 0) + Math.min(2, Math.max(0, buzz - 1) * 0.5) + (cardIds.length ? 1.5 : 0) + (i.kind === "trump" ? 1.5 : 0) - (broad ? 1 : 0);
+    const weight = 1 + (event ? 1.5 : 0) + Math.min(2, Math.max(0, buzz - 1) * 0.5) + (cardIds.length ? (event || buzz >= 2 ? 1.5 : 0.5) : 0) + (i.kind === "trump" ? 1.5 : 0) - (broad ? 1 : 0);
     return { ...i, event, cardIds, buzz, score: Math.round(weight * Math.pow(0.5, ageH / 6) * 100) / 100 };
   });
 }

@@ -36,3 +36,18 @@ describe("one card per stock and direction per player", () => {
     expect(mergeSameStock([it("PRE long", ["PRE"], "long"), it("PRE short", ["PRE"], "short")])).toHaveLength(2);
   });
 });
+
+describe("repeats logged before the duplicate check", () => {
+  it("the later PRE card from the same inbox batch folds under the first and is scored once", async () => {
+    const { repeatCards } = await import("@/lib/scout/dedupe");
+    const c = (id: number, at: string, sym: string, dir: "long" | "short", origin: "scout" | "human" = "human") => ({ id, createdAt: at, origin, primaryTicker: sym, direction: dir });
+    const terms = new Map([[150, "inbox: Prenetics Q3 beat"], [151, "inbox: AXON and APP"], [152, "inbox: PRE cheap EV/sales rerating"], [160, "Prenetics again"], [170, "inbox: PRE later"], [180, "story: PRE → PRE"], [181, "story: PRE stage 2 → PRE"]]);
+    const r = repeatCards([
+      c(152, "2026-11-14T23:42:10Z", "PRE", "long"), c(150, "2026-11-14T23:42:00Z", "PRE", "long"), c(151, "2026-11-14T23:42:05Z", "AXON", "long"),
+      c(160, "2026-11-15T10:00:00Z", "PRE", "long"), // you, not your bot: its own call
+      c(170, "2026-12-10T10:00:00Z", "PRE", "long"), // more than 14 days later: a new call
+      c(180, "2026-11-15T10:00:00Z", "PRE", "long", "scout"), c(181, "2026-11-16T10:00:00Z", "PRE", "long", "scout"), // story desk is exempt
+    ], terms);
+    expect([...r.entries()]).toEqual([[152, 150]]);
+  });
+});

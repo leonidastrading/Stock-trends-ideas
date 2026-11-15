@@ -9,6 +9,7 @@ import Pager, { FilterLinks, hrefWith, paginate } from "@/components/Pager";
 import SetupNotice from "@/components/SetupNotice";
 import { hasDatabase } from "@/lib/db";
 import { opposingCalls, upcomingCatalysts } from "@/lib/scout/calendar";
+import { repeatCards } from "@/lib/scout/dedupe";
 import { PLAYER_LABEL, PLAYERS, playerOf, type Player } from "@/lib/scout/scoreboard";
 import * as store from "@/lib/scout/store";
 import { swingConfigured } from "@/lib/scout/swing";
@@ -47,13 +48,18 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   const t = new Map(tracks.map((x) => [x.cardId, x]));
   const termOf = new Map(candidates.filter((c) => c.cardId !== null).map((c) => [c.cardId!, c.term]));
   const playerFor = (c: store.StoredCard) => playerOf(c.origin, termOf.get(c.id));
+  // A later card that repeats an earlier call by the same source is folded under the first one (and scored once).
+  const repeats = repeatCards(cards, termOf);
+  const angles = new Map<number, number[]>();
+  for (const [dup, first] of repeats) angles.set(first, [...(angles.get(first) ?? []), dup]);
   const today = toEt(new Date()).date;
   const coming = upcomingCatalysts(recent, tracks, today);
   const sw = swingConfigured();
   const down = health.filter((h) => h.status === "down" || h.status === "missing");
 
   // One list of every card in the window: filtered by source and status, sorted, 10 a page.
-  const bySource = cards.filter((c) => !source || playerFor(c) === source);
+  const wantedId = Number(sp.card);
+  const bySource = cards.filter((c) => (!repeats.has(c.id) || c.id === wantedId) && (!source || playerFor(c) === source));
   const rows = bySource.filter((c) => !status || c.status === status).sort((a, b) =>
     sort === "newest" ? b.createdAt.localeCompare(a.createdAt)
       : sort === "catalyst" ? (a.catalystDate && a.catalystDate >= today ? a.catalystDate : "9999").localeCompare(b.catalystDate && b.catalystDate >= today ? b.catalystDate : "9999") || b.rankScore - a.rankScore
@@ -64,7 +70,8 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   const cardHref = (id: number) => hrefWith(params, { card: String(id), page: undefined, source: undefined, status: undefined }, `#card-${id}`);
 
   const sourceCounts = new Map<string, number>();
-  for (const c of cards) sourceCounts.set(playerFor(c), (sourceCounts.get(playerFor(c)) ?? 0) + 1);
+  const shownCards = cards.filter((c) => !repeats.has(c.id));
+  for (const c of shownCards) sourceCounts.set(playerFor(c), (sourceCounts.get(playerFor(c)) ?? 0) + 1);
   const statusCount = (v: string) => bySource.filter((c) => !v || c.status === v).length;
   const lastDaily = runs.find((r) => r.action === "daily" && r.status !== "running");
   const running = runs.find((r) => r.action === "daily" && r.status === "running");
@@ -111,14 +118,17 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
         <FilterLinks params={params} name="status" value={status} reset={["page", "card"]} options={[{ value: "", label: "Any status", count: statusCount("") }, { value: "promoted", label: "Promoted", count: statusCount("promoted") }, { value: "late", label: "Late", count: statusCount("late") }, { value: "not_promoted", label: "Not promoted", count: statusCount("not_promoted") }]} />
       </div>
       <div className="toolbar">
-        <FilterLinks params={params} name="source" value={source} reset={["page", "card"]} options={[{ value: "", label: "All sources", count: cards.length }, ...PLAYERS.filter((p) => sourceCounts.get(p)).map((p) => ({ value: p, label: PLAYER_LABEL[p].replace(/^Scout · /, ""), count: sourceCounts.get(p) }))]} />
+        <FilterLinks params={params} name="source" value={source} reset={["page", "card"]} options={[{ value: "", label: "All sources", count: shownCards.length }, ...PLAYERS.filter((p) => sourceCounts.get(p)).map((p) => ({ value: p, label: PLAYER_LABEL[p].replace(/^Scout · /, ""), count: sourceCounts.get(p) }))]} />
       </div>
       <Pager params={params} name="page" page={page.page} pages={page.pages} total={page.total} label="cards" hash="#cards" />
       {page.items.map((c) => {
         const tr = t.get(c.id) ?? null;
         return (
           <div key={c.id}>
-            <div className="small muted from-line">From: {fromLine(playerFor(c), termOf.get(c.id) ?? "")}</div>
+            <div className="small muted from-line">From: {fromLine(playerFor(c), termOf.get(c.id) ?? "")}
+              {angles.get(c.id)?.length ? <> · also {angles.get(c.id)!.map((id, j) => <span key={id}>{j ? ", " : ""}<a href={hrefWith(params, { card: String(id), page: undefined }, `#card-${id}`)}>card #{id}</a></span>)} <span title="Another angle on the same call from the same source within 14 days: kept on file, scored once">(same call, scored once)</span></> : null}
+              {repeats.has(c.id) ? <> · <span className="warn">repeat of <a href={hrefWith(params, { card: String(repeats.get(c.id)), page: undefined }, `#card-${repeats.get(c.id)}`)}>card #{repeats.get(c.id)}</a>: not scored</span></> : null}
+            </div>
             <CardView c={c} track={tr} feedback={fb.get(`card:${c.id}`) ?? null} opposing={opp.get(c.id)} review={reviews.get(c.id) ?? null} actions={<CardActions cardId={c.id} canSend={c.status !== "not_promoted"} sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} excluded={!!tr?.excluded} />} />
           </div>
         );

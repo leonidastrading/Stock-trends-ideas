@@ -199,3 +199,4 @@ button.chip.active { border-color: var(--accent); color: var(--accent); }
 .map-node-label { fill: var(--text-primary); font-weight: 700; pointer-events: none; }
 .map-svg a { cursor: pointer; }
 .map-tip { position: absolute; transform: translate(12px, 12px); background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; max-width: 340px; pointer-events: none; box-shadow: 0 6px 24px rgba(0,0,0,.35); z-index: 5; }
+.news-action { margin-left: auto; }

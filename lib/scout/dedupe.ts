@@ -47,3 +47,21 @@ export function mergeSameStock(items: ImportItem[]): ImportItem[] {
   }
   return out;
 }
+
+/**
+ * Pure: cards that repeat an earlier call (same player, stock and direction within DUPLICATE_DAYS), mapped to the
+ * card they repeat. Covers cards logged before the duplicate check existed; they stay on file but are shown under
+ * the first card and left out of scoring, so one bet counts once.
+ */
+export function repeatCards(cards: Array<{ id: number; createdAt: string; origin: "scout" | "human"; primaryTicker: string; direction: "long" | "short" }>, termOf: Map<number, string>): Map<number, number> {
+  const out = new Map<number, number>();
+  const kept: Array<{ id: number; at: number; player: Player; symbol: string; direction: string }> = [];
+  for (const c of cards.slice().sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id - b.id)) {
+    const player = playerOf(c.origin, termOf.get(c.id));
+    const at = Date.parse(c.createdAt);
+    const first = EXEMPT.includes(player) ? undefined : kept.find((k) => k.player === player && k.symbol === c.primaryTicker && k.direction === c.direction && at - k.at <= DUPLICATE_DAYS * 86400_000);
+    if (first) out.set(c.id, first.id);
+    else kept.push({ id: c.id, at, player, symbol: c.primaryTicker, direction: c.direction });
+  }
+  return out;
+}

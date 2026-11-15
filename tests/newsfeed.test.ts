@@ -31,3 +31,16 @@ describe("news feed ranking", () => {
     expect(order.at(-1)).toBe("roundup"); // a ticker round-up with no event ranks last
   });
 });
+
+describe("news feed fixes", () => {
+  it("'strike price' is not a strike; a card alone lifts a fluff headline only a little", () => {
+    const r = rankFeed([
+      item("whale", 5, "Options Whale Alert: $950K Bullish Long Call Opened on Sagimet", ["SGMT"]),
+      { ...item("fluff", 5, "Delta and Foundation complete community playground project", ["DAL"]), summary: "" },
+      item("real", 5, "Delta resumes operations after nationwide FAA ground stop", ["DAL"]),
+    ].map((x) => (x.id === "whale" ? { ...x, summary: "5,000 call options with a $10.00 strike price expiring January 15" } : x)), new Map([["DAL", [113]]]), now);
+    const by = new Map(r.map((x) => [x.id, x]));
+    expect(by.get("whale")!.event).toBeNull();
+    expect(by.get("real")!.score).toBeGreaterThan(by.get("fluff")!.score);
+  });
+});
