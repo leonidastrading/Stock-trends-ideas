@@ -43,7 +43,7 @@ function gh(cfg: InboxConfig, url: string, accept: string, fetchImpl: typeof fet
   return fetchImpl(url, { headers });
 }
 
-export async function listInbox(cfg: InboxConfig, fetchImpl: typeof fetch = fetch): Promise<InboxFile[]> {
+export async function listInbox(cfg: InboxConfig, fetchImpl: typeof fetch = fetch, readable: RegExp = READABLE): Promise<InboxFile[]> {
   const url = `https://api.github.com/repos/${cfg.repo}/contents/${encodeURI(cfg.path)}${cfg.branch ? `?ref=${encodeURIComponent(cfg.branch)}` : ""}`;
   const res = await gh(cfg, url, "application/vnd.github+json", fetchImpl);
   if (res.status === 404) {
@@ -54,7 +54,7 @@ export async function listInbox(cfg: InboxConfig, fetchImpl: typeof fetch = fetc
   }
   if (!res.ok) throw new Error(`GitHub ${res.status}: ${(await res.text()).slice(0, 160)}`);
   const list = (await res.json()) as Array<{ type: string; name: string; path: string; sha: string; size: number }>;
-  return (Array.isArray(list) ? list : []).filter((f) => f.type === "file" && READABLE.test(f.name) && f.size <= MAX_BYTES).map((f) => ({ name: f.name, path: f.path, sha: f.sha, size: f.size }));
+  return (Array.isArray(list) ? list : []).filter((f) => f.type === "file" && readable.test(f.name) && f.size <= MAX_BYTES).map((f) => ({ name: f.name, path: f.path, sha: f.sha, size: f.size }));
 }
 
 export async function downloadFile(cfg: InboxConfig, f: InboxFile, fetchImpl: typeof fetch = fetch): Promise<Uint8Array> {

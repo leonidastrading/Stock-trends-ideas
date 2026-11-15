@@ -83,3 +83,44 @@ describe("rumors: a document end to end (PGlite, fake model and news)", () => {
     expect(list[0].mainstream!.matches[0].headline).toBe("Boeing loses Air Force tanker contract");
   });
 });
+
+describe("rumors: JSON dumps", () => {
+  let pg: PGlite;
+  beforeAll(() => {
+    pg = new PGlite();
+    setQuerierForTests({ query: async (text, params) => (await pg.query(text, params as unknown[])).rows as Record<string, unknown>[] });
+  });
+  afterAll(() => setQuerierForTests(null));
+
+  it("turns a Reddit listing into posts, dropping ids, thumbnails and flair", async () => {
+    const { jsonToText } = await import("@/lib/scout/rumors");
+    const listing = { kind: "Listing", data: { after: "t3_x", children: [
+      { kind: "t3", data: { id: "abc", name: "t3_abc", subreddit_name_prefixed: "r/conspiracy", author: "truthseeker", created_utc: 1794700000, score: 812, num_comments: 233, permalink: "/r/conspiracy/comments/abc/boeing/", title: "Boeing about to lose the tanker contract?", selftext: "My cousin at the Pentagon says it&#39;s done &amp; dusted.", thumbnail: "https://b.thumbs.redditmedia.com/x.jpg", link_flair_richtext: [{ t: "Speculation" }], preview: { images: [{ source: { url: "https://preview.redd.it/x" } }] } } },
+      { kind: "t3", data: { subreddit_name_prefixed: "r/conspiracy", author: "[deleted]", title: "Removed post", selftext: "[removed]" } },
+    ] } };
+    const t = jsonToText(JSON.stringify(listing))!;
+    expect(t).toContain("where: r/conspiracy · by: truthseeker · date: 2026-11-14 23:46 UTC");
+    expect(t).toContain("score: 812 · comments: 233 · link: https://www.reddit.com/r/conspiracy/comments/abc/boeing/");
+    expect(t).toContain("# Boeing about to lose the tanker contract?\nMy cousin at the Pentagon says it's done & dusted.");
+    expect(t).toContain("# Removed post");
+    expect(t).not.toMatch(/thumbs\.redditmedia|preview\.redd\.it|Speculation|t3_abc/);
+  });
+
+  it("reads comment trees, JSON lines and unknown shapes", async () => {
+    const { jsonToText } = await import("@/lib/scout/rumors");
+    const thread = [{ data: { children: [{ data: { title: "Bank run at a regional lender", selftext: "Lines outside branches" } }] } }, { data: { children: [{ data: { author: "a", body: "Saw it too, KRE puts", replies: { data: { children: [{ data: { author: "b", body: "Source? This is from a 2023 video" } }] } } } }] } }];
+    const t = jsonToText(JSON.stringify(thread))!;
+    expect(t.split("\n\n---\n\n")).toEqual(["# Bank run at a regional lender\nLines outside branches", "by: a\nSaw it too, KRE puts", "by: b\nSource? This is from a 2023 video"]);
+    expect(jsonToText('{"text":"line one about NVDA export ban"}\n{"text":"line two about TSMC fab fire"}')).toBe("line one about NVDA export ban\n\n---\n\nline two about TSMC fab fire");
+    expect(jsonToText(JSON.stringify({ x: { y: "a long string that is clearly a sentence about Pfizer recalling a drug" }, z: "short" }))).toBe("a long string that is clearly a sentence about Pfizer recalling a drug");
+    expect(jsonToText("not json at all")).toBeNull();
+  });
+
+  it("a JSON file goes to the model as posts, not raw JSON", async () => {
+    let seen = "";
+    const callModel: CallModel = async ({ user }) => { seen = user; return { text: JSON.stringify({ rumors: [] }), stopReason: "end_turn", modelServed: "m", usage: { input_tokens: 1, output_tokens: 1 }, costUsd: 0 }; };
+    await readRumorDoc(JSON.stringify({ data: { children: [{ data: { title: "Lockheed whistleblower", selftext: "F-35 parts faked", id: "zzz999" } }] } }), "conspiracy.json", { data: null, sources: [], callModel, now: new Date("2026-11-15T15:00:00Z"), env: {} as NodeJS.ProcessEnv });
+    expect(seen).toContain("# Lockheed whistleblower\nF-35 parts faked");
+    expect(seen).not.toContain("zzz999");
+  });
+});

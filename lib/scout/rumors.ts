@@ -14,6 +14,79 @@ import { query as q } from "../db";
 
 export const RUMORS = { chunkChars: 90_000, maxChunks: 3, perDoc: 20, filesPerCall: 2 };
 
+/** File types read from the rumors/ folder. */
+export const RUMOR_FILES = /\.(pdf|json|jsonl|ndjson|md|txt|html?|csv)$/i;
+
+// ---------------------------------------------------------------- JSON dumps
+
+const TEXT_KEYS = /^(title|selftext|body|text|content|description|summary|headline|comment|message|caption|transcript|post|full_text|article|subtitle)$/i;
+const META_KEYS: Array<[string, RegExp]> = [
+  ["where", /^(subreddit_name_prefixed|subreddit|board|forum|channel|site|domain|source)$/i],
+  ["by", /^(author|username|user_name|screen_name|poster|by)$/i],
+  ["date", /^(created_utc|created|date|published|published_at|timestamp|time|pubdate)$/i],
+  ["score", /^(score|ups|likes|points)$/i],
+  ["comments", /^(num_comments|comment_count|replies_count)$/i],
+  ["link", /^(permalink|url|link|href)$/i],
+];
+
+const asDate = (v: unknown): string | null => {
+  if (typeof v === "number" && v > 1e9) return `${new Date(v < 1e12 ? v * 1000 : v).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+  return typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 16).replace("T", " ") : typeof v === "string" ? v.slice(0, 40) : null;
+};
+const decodeHtml = (s: string) => s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;|&#x27;/g, "'");
+
+/**
+ * Pure: a JSON dump (a Reddit listing or thread, a forum export, a scraper's array of posts, or JSON lines) as plain
+ * text: one block per post or comment with where, who, when, score and link, then its title and text. Ids, flair,
+ * thumbnails and other metadata are dropped. Falls back to every longer string when the shape is unknown.
+ */
+export function jsonToText(raw: string): string | null {
+  let docs: unknown[];
+  try {
+    docs = [JSON.parse(raw)];
+  } catch {
+    const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    try {
+      docs = lines.map((l) => JSON.parse(l));
+    } catch {
+      return null;
+    }
+  }
+  const blocks: string[] = [];
+  const seen = new Set<string>();
+  const walk = (x: unknown, depth: number) => {
+    if (depth > 40 || x === null || typeof x !== "object") return;
+    if (Array.isArray(x)) { for (const v of x) walk(v, depth + 1); return; }
+    const o = x as Record<string, unknown>;
+    const texts = Object.entries(o).filter(([k, v]) => TEXT_KEYS.test(k) && typeof v === "string" && v.trim().length > 1 && !/^https?:\/\/\S+$/.test(v.trim())).map(([k, v]) => [k, decodeHtml(String(v).trim())] as const).filter(([, v]) => v !== "[deleted]" && v !== "[removed]");
+    if (texts.length) {
+      const key = texts.map(([, v]) => v).join("|").slice(0, 300);
+      if (!seen.has(key)) {
+        seen.add(key);
+        const meta = META_KEYS.flatMap(([label, re]) => {
+          const hit = Object.entries(o).find(([k, v]) => re.test(k) && (typeof v === "string" || typeof v === "number") && String(v).trim() !== "");
+          if (!hit) return [];
+          const v = label === "date" ? asDate(hit[1]) : label === "link" && typeof hit[1] === "string" && hit[1].startsWith("/r/") ? `https://www.reddit.com${hit[1]}` : String(hit[1]);
+          return v ? [`${label}: ${v}`] : [];
+        });
+        blocks.push([meta.join(" · "), ...texts.map(([k, v]) => (/^title|headline|subtitle$/i.test(k) ? `# ${v}` : v))].filter(Boolean).join("\n"));
+      }
+    }
+    for (const [k, v] of Object.entries(o)) if (v && typeof v === "object" && !/^(preview|media|media_metadata|secure_media|thumbnail|all_awardings|awarders|gildings|flair|link_flair_richtext|author_flair_richtext|resolutions|images|variants)$/i.test(k)) walk(v, depth + 1);
+  };
+  for (const d of docs) walk(d, 0);
+  if (blocks.length) return blocks.join("\n\n---\n\n");
+  // Unknown shape: every longer string.
+  const strings: string[] = [];
+  const grab = (x: unknown, depth: number) => {
+    if (depth > 40) return;
+    if (typeof x === "string") { if (x.trim().length >= 30 && !/^https?:\/\/\S+$/.test(x.trim()) && !seen.has(x)) { seen.add(x); strings.push(decodeHtml(x.trim())); } return; }
+    if (x && typeof x === "object") for (const v of Object.values(x)) grab(v, depth + 1);
+  };
+  for (const d of docs) grab(d, 0);
+  return strings.length ? strings.join("\n\n") : null;
+}
+
 export const CATEGORIES = ["corporate", "executive", "regulatory", "policy", "geopolitics", "macro", "banking", "commodities", "crypto", "health", "other"] as const;
 
 export const RUMORS_PROMPT = `You read raw dumps from conspiracy subreddits, fringe and alternative news sites (for example ZeroHedge or InfoWars) for a paper-only market scout. You catalogue rumors; you never assert them.
@@ -109,6 +182,8 @@ export interface RumorDocResult { docId: number; rumors: number; error: string |
 export async function readRumorDoc(text: string, source: string, deps: ResearchDeps & { data: MarketData | null }, path: string | null = null): Promise<RumorDocResult> {
   const settings = await store.loadSettings();
   const today = toEt(deps.now).date;
+  // A JSON dump (Reddit, forum exports, scrapers): the posts and comments, not the metadata.
+  if (/^\s*[[{]/.test(text)) text = jsonToText(text) ?? text;
   // A saved web page: read its text, not its markup.
   if (/^\s*<(!doctype|html|head|body)\b/i.test(text) || (text.match(/<\/(div|p|span|a)>/gi)?.length ?? 0) > 50) text = (await import("../sources/site")).htmlText(text);
   const parts = chunks(text);
@@ -146,7 +221,7 @@ export async function pollRumors(deps: ResearchDeps & { data: MarketData | null 
   const cfg = { ...base, path: (deps.env.GITHUB_RUMORS_PATH?.trim() || "rumors").replace(/^\/|\/$/g, "") };
   if (!(await store.tryLock("lock:rumors", 10))) return "another check is reading rumors";
   try {
-    const files = await listInbox(cfg, fetchImpl);
+    const files = await listInbox(cfg, fetchImpl, RUMOR_FILES);
     const seen = new Set((await q(`SELECT path FROM rumor_docs WHERE path IS NOT NULL`)).map((r) => String(r.path)));
     const out: Array<{ file: string; rumors?: number; error?: string | null }> = [];
     for (const { use } of pickFiles(files, seen).slice(0, max)) {

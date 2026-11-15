@@ -32,7 +32,7 @@ export default function RumorDrop() {
     <form onSubmit={send} className="card section">
       <textarea value={text} onChange={(e) => setText(e.target.value)} rows={5} placeholder="Paste a thread, an article or a whole page dump here…" disabled={busy || !!file} style={{ width: "100%", boxSizing: "border-box" }} />
       <div className="toolbar" style={{ margin: "6px 0 0" }}>
-        <input id="rumor-file" type="file" accept=".txt,.md,.html,.htm,.pdf,.json,.csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} disabled={busy} />
+        <input id="rumor-file" type="file" accept=".txt,.md,.html,.htm,.pdf,.json,.jsonl,.ndjson,.csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} disabled={busy} />
         <input value={source} onChange={(e) => setSource(e.target.value)} placeholder="Where it's from (optional): r/conspiracy, ZeroHedge…" style={{ width: 280 }} disabled={busy} />
         <button className="primary" type="submit" disabled={busy || (!text.trim() && !file)}>{busy ? "Sending…" : "Read for rumors"}</button>
       </div>
