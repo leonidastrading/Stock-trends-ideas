@@ -30,7 +30,7 @@ const PROMPTS: Record<Purpose, { system: string; schema: Record<string, unknown>
 };
 
 /** Models that accept the server-side refusal fallback. */
-const FALLBACK_MODELS = new Set(["claude-fable-5-2", "claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5"]);
+export const FALLBACK_MODELS = new Set(["claude-fable-5-2", "claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5"]);
 
 export const callResearchModel: CallModel = async ({ model, effort, user, purpose = "research" }) => {
   const client = new Anthropic(); // ANTHROPIC_API_KEY from the environment

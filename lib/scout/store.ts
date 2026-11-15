@@ -744,3 +744,26 @@ export async function optionsLogStatus(): Promise<{ stocks: number; latest: stri
   const d = (await q(`SELECT count(DISTINCT date) AS days FROM options_oi_days`))[0] ?? {};
   return { stocks: Number(r.stocks ?? 0), latest: dstr(r.latest), days: Number(d.days ?? 0) };
 }
+
+// ------------------------------------------------------------ chat
+
+export interface ChatMessage { role: "user" | "assistant"; content: string; at: string }
+export interface ChatThread { id: number; createdAt: string; briefing: string; messages: ChatMessage[] }
+
+export async function createChatThread(briefing: string): Promise<number> {
+  return Number((await q(`INSERT INTO chat_threads (briefing) VALUES ($1) RETURNING id`, [briefing]))[0].id);
+}
+
+export async function getChatThread(id: number): Promise<ChatThread | null> {
+  const r = (await q(`SELECT id, created_at, briefing, messages FROM chat_threads WHERE id = $1`, [id]))[0];
+  return r ? { id: Number(r.id), createdAt: iso(r.created_at)!, briefing: r.briefing, messages: (r.messages ?? []) as ChatMessage[] } : null;
+}
+
+export async function appendChat(id: number, msgs: ChatMessage[]): Promise<void> {
+  await q(`UPDATE chat_threads SET messages = messages || $2::jsonb, updated_at = now() WHERE id = $1`, [id, JSON.stringify(msgs)]);
+}
+
+export async function recentChatThreads(limit = 15): Promise<Array<{ id: number; createdAt: string; first: string | null; turns: number }>> {
+  return (await q(`SELECT id, created_at, messages->0->>'content' AS first, jsonb_array_length(messages) AS n FROM chat_threads ORDER BY updated_at DESC LIMIT $1`, [limit]))
+    .map((r) => ({ id: Number(r.id), createdAt: iso(r.created_at)!, first: r.first ?? null, turns: Math.floor(Number(r.n ?? 0) / 2) }));
+}

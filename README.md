@@ -218,6 +218,12 @@ anything else happens. Cards, versions and track events are append-only, enforce
   append-only (`options_oi_days`, `options_flags`). The largest flags are pushed to the phone (three a day at most),
   shown on the Digest, and join the filings research desk (shared limit of three a day) with puts proposed short and
   calls long at low confidence; their cards score as their own Scoreboard player.
+- **Chat** (`/chat`, `lib/scout/chat.ts`, `app/api/chat`): a chat window with the scout's model. A new chat first builds a
+  briefing of everything the scout knows at that moment (market and breadth, earnings, cards from the last 45 days with
+  their paper results against SPY, rejected ideas, stories, filings, options flags, Congress trades, contracts, buzz,
+  inbox documents and the last 36 hours of headlines) and keeps it fixed for the thread, so later turns read it from
+  the prompt cache. Replies stream; each turn is logged against the daily cap (purpose "chat"); threads are kept in
+  `chat_threads` and reopen from "Earlier chats". "New chat" loads fresh data. Paper only.
 - **I noticed something**: the text box from section 2B.
 - **Candidates**: everything logged in the window, including rejections and why; the last scan's measurements per term;
   Google's rising queries for anything worth adding to the watch-list.

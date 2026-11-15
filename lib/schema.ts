@@ -384,6 +384,15 @@ CREATE TABLE IF NOT EXISTS options_flags (
 CREATE INDEX IF NOT EXISTS options_flags_symbol_idx ON options_flags (symbol, date);
 CREATE OR REPLACE TRIGGER options_flags_ro BEFORE UPDATE OR DELETE ON options_flags FOR EACH ROW EXECUTE FUNCTION forbid_change();
 
+-- Chat tab: each conversation with its briefing (fixed for the thread so it stays cached) and messages.
+CREATE TABLE IF NOT EXISTS chat_threads (
+  id serial PRIMARY KEY,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  briefing text NOT NULL,
+  messages jsonb NOT NULL DEFAULT '[]'::jsonb,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
 -- Dashboard panels (market quotes, earnings calendar, contracts, breadth): cached fetches, refreshed hourly.
 CREATE TABLE IF NOT EXISTS dashboard_cache (
   key text PRIMARY KEY,
