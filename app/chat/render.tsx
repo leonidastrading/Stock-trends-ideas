@@ -7,24 +7,36 @@ import type { ReactNode } from "react";
  */
 export function renderReply(text: string, tickers: ReadonlySet<string>): ReactNode {
   const blocks: ReactNode[] = [];
-  let list: { ordered: boolean; items: ReactNode[] } | null = null;
+  // A list keeps going across blank lines; bullets under a numbered item nest inside it, so numbering never restarts.
+  let list: { ordered: boolean; items: Array<{ n: number | null; body: ReactNode; sub: ReactNode[] }> } | null = null;
   let para: string[] = [];
   const flushPara = () => { if (para.length) { blocks.push(<p key={blocks.length}>{inline(para.join(" "), tickers)}</p>); para = []; } };
   const flushList = () => {
-    if (list) { const items = list.items.map((it, i) => <li key={i}>{it}</li>); blocks.push(list.ordered ? <ol key={blocks.length}>{items}</ol> : <ul key={blocks.length}>{items}</ul>); list = null; }
+    if (!list) return;
+    const items = list.items.map((it, i) => (
+      <li key={i} value={it.n ?? undefined}>{it.body}{it.sub.length ? <ul>{it.sub.map((s, j) => <li key={j}>{s}</li>)}</ul> : null}</li>
+    ));
+    blocks.push(list.ordered ? <ol key={blocks.length}>{items}</ol> : <ul key={blocks.length}>{items}</ul>);
+    list = null;
   };
   for (const raw of text.split("\n")) {
     const line = raw.trimEnd();
     const bullet = line.match(/^\s*[-*•]\s+(.*)$/);
-    const numbered = line.match(/^\s*\d+[.)]\s+(.*)$/);
+    const numbered = line.match(/^\s*(\d+)[.)]\s+(.*)$/);
     const heading = line.match(/^\s*#{1,4}\s+(.*)$/) ?? line.match(/^\s*\*\*([^*]+)\*\*:?\s*$/);
-    if (!line.trim()) { flushPara(); flushList(); continue; }
+    if (!line.trim()) { flushPara(); continue; }
     if (heading) { flushPara(); flushList(); blocks.push(<h4 key={blocks.length}>{inline(heading[1], tickers)}</h4>); continue; }
-    if (bullet || numbered) {
+    if (numbered) {
       flushPara();
-      const ordered = !!numbered && !bullet;
-      if (!list || list.ordered !== ordered) { flushList(); list = { ordered, items: [] }; }
-      list.items.push(inline((bullet ?? numbered)![1], tickers));
+      if (!list || !list.ordered) { flushList(); list = { ordered: true, items: [] }; }
+      list.items.push({ n: Number(numbered[1]), body: inline(numbered[2], tickers), sub: [] });
+      continue;
+    }
+    if (bullet) {
+      flushPara();
+      if (list?.ordered && list.items.length) { list.items[list.items.length - 1].sub.push(inline(bullet[1], tickers)); continue; }
+      if (!list) list = { ordered: false, items: [] };
+      list.items.push({ n: null, body: inline(bullet[1], tickers), sub: [] });
       continue;
     }
     flushList();

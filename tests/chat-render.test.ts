@@ -19,7 +19,9 @@ describe("chat reply formatting", () => {
     expect(out).toBe('<p>A rebound in AI names; buy <b class="accent">$A</b>?</p>');
   });
 
-  it("numbered lists and code", () => {
-    expect(html("1. First `x`\n2. Second")).toBe("<ol><li>First <code>x</code></li><li>Second</li></ol>");
+  it("numbered lists keep counting, with their bullets nested", () => {
+    expect(html("1. First `x`\n2. Second")).toBe('<ol><li value="1">First <code>x</code></li><li value="2">Second</li></ol>');
+    expect(html("1. **Long KNX**\n- Thesis: rates\n- Check: PPI\n\n2. **Short AAON**\n- Thesis: restatement")).toBe(
+      '<ol><li value="1"><b>Long <b class="accent">KNX</b></b><ul><li>Thesis: rates</li><li>Check: PPI</li></ul></li><li value="2"><b>Short <b class="accent">AAON</b></b><ul><li>Thesis: restatement</li></ul></li></ol>');
   });
 });
