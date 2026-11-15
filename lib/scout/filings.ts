@@ -17,10 +17,11 @@ import { fetchSec, headerUrl, indexUrl, isRoutine, parseForm4, parseFormIndex, p
 import { getJson } from "../http";
 import { addDays, daysBetween, toEt } from "../time";
 import { researchCandidate, type ResearchDeps } from "./research";
+import * as congressHelpers from "./congress";
 import { describeFlag } from "./options-flow";
 import * as store from "./store";
 
-export const FILINGS = { minBuyValue: 25_000, lookbackDays: 5, maxResearchPerDay: 3, clusterDays: 30 };
+export const FILINGS = { minBuyValue: 25_000, lookbackDays: 5, maxResearchPerDay: 4, clusterDays: 30 };
 
 function businessDaysBefore(today: string, n: number): string[] {
   const out: string[] = [];
@@ -103,13 +104,48 @@ export async function processQueue(deadline: number, ua: string, fetchImpl?: typ
 
 // --------------------------------------------------------------- signals
 
-export interface FilingSignal { kind: "8-K" | "13D" | "insider" | "options"; symbol: string; term: string; strength: number; direction: "long" | "short"; context: string; trigger: Signal[] }
+export interface FilingSignal { kind: "8-K" | "13D" | "insider" | "options" | "congress" | "insider+congress"; symbol: string; term: string; strength: number; direction: "long" | "short"; context: string; trigger: Signal[] }
+
+const CONGRESS_EVIDENCE = `What is known about following Congress: studies of 1990s trades found members' stock picks beat the market (Senate about 12 points a year, House about 6; Ziobrowski et al.), later work on 2004-2008 found their portfolios on average did not (Eggers & Hainmueller), and the clearest edge appears in trades tied to a member's committee or leadership role and in clusters. Reports can arrive up to 45 days after the trade, so much of any edge may be gone; judge the move since the filing, not since the trade. Ask: what would the members know (committee, home-state company, pending legislation or contracts), is there a dated catalyst, and has the stock already moved since the filing?`;
+
+/** Pure: Congress clusters and stocks bought by both company insiders and members of Congress, each with something new in the last 5 days. */
+export function smartMoneySignals(buys: store.InsiderBuyRow[], congress: store.CongressTradeRow[], today: string): FilingSignal[] {
+  const out: FilingSignal[] = [];
+  const recentIns = buys.filter((b) => b.symbol && daysBetween(b.filed, today) <= 45 && b.routine !== true && (b.value ?? 0) >= FILINGS.minBuyValue);
+  const recentCon = congress.filter((t) => daysBetween(t.filed, today) <= 45 && t.tx === "buy" && t.assetType === "stock");
+  const fresh = (d: string) => daysBetween(d, today) <= 5;
+  const line = (t: store.CongressTradeRow) => `${t.member} (${t.chamber}) bought ${t.symbol} ${t.amount} on ${t.txDate}, reported ${t.filed}`;
+  const both = new Set<string>();
+  for (const sym of new Set(recentCon.map((t) => t.symbol))) {
+    const ins = recentIns.filter((b) => b.symbol === sym);
+    const con = recentCon.filter((t) => t.symbol === sym);
+    if (!ins.length || ![...ins.map((b) => b.filed), ...con.map((t) => t.filed)].some(fresh)) continue;
+    both.add(sym);
+    const insLines = ins.slice(0, 5).map((b) => `${b.owner} (${b.role}) bought ${usd(b.value ?? 0)} on ${b.txDate ?? b.filed}${b.pctIncrease !== null ? `, +${b.pctIncrease}% to their holding` : ""}${b.routine === false ? ", outside their usual trading month" : ""}`);
+    out.push({
+      kind: "insider+congress", symbol: sym, term: `insider+congress: ${sym}`, strength: 3.5, direction: "long",
+      context: `Both company insiders and members of Congress bought ${sym} within the last 45 days.\nInsiders (SEC Form 4, open-market purchases, not 10b5-1 plans):\n${insLines.map((l) => `- ${l}`).join("\n")}\nCongress (STOCK Act reports):\n${con.slice(0, 6).map((t) => `- ${line(t)}`).join("\n")}\nInsider purchases that are not routine have earned roughly 0.8% a month for about six months (Cohen, Malloy & Pomorski). ${CONGRESS_EVIDENCE} Two independent groups with an information edge buying the same stock is rarer and stronger than either alone, but check that they are not reacting to the same public news.`,
+      trigger: [{ source: "edgar+congress", metric: `insider_and_congress_buys:${sym}`, value: ins.length + con.length, baseline: null, changeVs12m: null, asOf: [...ins.map((b) => b.filed), ...con.map((t) => t.filed)].sort().at(-1)!, note: `${new Set(ins.map((b) => b.owner)).size} insider(s) and ${new Set(con.map((t) => t.member)).size} member(s) of Congress bought ${sym} in 45 days` }],
+    });
+  }
+  // Clusters in Congress alone: three or more members buying (or two with $100k+) in 30 days, fewer selling.
+  const { bySymbol } = congressHelpers;
+  for (const a of bySymbol(congress, addDays(today, -30)).filter((x) => x.cluster && fresh(x.lastFiled) && !both.has(x.symbol))) {
+    const con = recentCon.filter((t) => t.symbol === a.symbol && daysBetween(t.filed, today) <= 30);
+    out.push({
+      kind: "congress", symbol: a.symbol, term: `congress: ${a.symbol}`, strength: a.buyers.length >= 3 ? 2.5 : 2, direction: "long",
+      context: `${a.buyers.length} members of Congress bought ${a.symbol} in reports filed over the last 30 days (about ${usd(a.buyUsd)} at range midpoints)${a.sellers.length ? `; ${a.sellers.length} sold (${a.sellers.join(", ")})` : ""}:\n${con.slice(0, 8).map((t) => `- ${line(t)}`).join("\n")}\n${CONGRESS_EVIDENCE}`,
+      trigger: [{ source: "congress", metric: `congress_buyers_30d:${a.symbol}`, value: a.buyers.length, baseline: null, changeVs12m: null, asOf: a.lastFiled, note: `${a.buyers.length} members of Congress bought ${a.symbol} in 30 days (${a.buyers.join(", ")})` }],
+    });
+  }
+  return out;
+}
 
 const usd = (v: number) => (v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${Math.round(v / 1e3)}k`);
 
 /** Pure: the day's candidate signals from stored buys and alerts, strongest first. */
-export function pickSignals(buys: store.InsiderBuyRow[], alerts: store.FilingAlert[], today: string, flags: store.OptionsFlag[] = []): FilingSignal[] {
-  const out: FilingSignal[] = [];
+export function pickSignals(buys: store.InsiderBuyRow[], alerts: store.FilingAlert[], today: string, flags: store.OptionsFlag[] = [], congress: store.CongressTradeRow[] = []): FilingSignal[] {
+  const out: FilingSignal[] = smartMoneySignals(buys, congress, today);
   // Unusual new options positions (last two days): the largest per stock and side.
   const best = new Map<string, store.OptionsFlag>();
   for (const f of flags.filter((x) => daysBetween(x.date, today) <= 2)) {
@@ -166,10 +202,10 @@ export async function runFilingResearch(deps: ResearchDeps, maxNow: number = FIL
   const today = toEt(deps.now).date;
   const settings = await store.loadSettings();
   if (!settings.enabled) return { signals: 0, researched: [], error: "scout is switched off in Settings" };
-  const [buys, alerts, flags, recent, lastDay] = await Promise.all([store.insiderBuysSince(addDays(today, -40)), store.filingAlertsSince(addDays(today, -10)), store.optionsFlagsSince(addDays(today, -3)), store.recentTerms(30), store.recentTerms(1)]);
-  const doneToday = [...lastDay].filter((t) => t.startsWith("filing: ") || t.startsWith("insider: ") || t.startsWith("options: ")).length;
+  const [buys, alerts, flags, congress, recent, lastDay] = await Promise.all([store.insiderBuysSince(addDays(today, -50)), store.filingAlertsSince(addDays(today, -10)), store.optionsFlagsSince(addDays(today, -3)), store.congressTradesSince(addDays(today, -45)), store.recentTerms(30), store.recentTerms(1)]);
+  const doneToday = [...lastDay].filter((t) => /^(filing|insider|options|congress|insider\+congress): /.test(t)).length;
   const room = Math.max(0, Math.min(maxNow, FILINGS.maxResearchPerDay - doneToday));
-  const signals = pickSignals(buys, alerts, today, flags).filter((s) => ![...recent].some((t) => t.startsWith(s.term.toLowerCase().split(" ").slice(0, 2).join(" "))));
+  const signals = pickSignals(buys, alerts, today, flags, congress).filter((s) => ![...recent].some((t) => t.startsWith(s.term.toLowerCase().split(" ").slice(0, 2).join(" "))));
   const out = { signals: signals.length, researched: [] as Array<{ term: string; outcome: string; reason?: string; cardId?: number }>, error: null as string | null };
   for (const s of signals.slice(0, room)) {
     const r = await researchCandidate({ origin: "scout", term: s.term, kindHint: "event", tickersHint: [s.symbol], observation: null, trigger: s.trigger, context: `${s.context}\nProposed direction: ${s.direction} ${s.symbol}.` }, deps);

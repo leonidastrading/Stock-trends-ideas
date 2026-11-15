@@ -149,7 +149,7 @@ describe("the filings desk end to end (PGlite, fake EDGAR)", () => {
     const alerts = await store.filingAlertsSince("2026-11-01");
     expect(alerts.map((a) => [a.kind, a.symbol])).toEqual(expect.arrayContaining([["13D", "COUR"], ["8-K", "ACFN"]]));
     expect((await store.secQueueStatus())).toMatchObject({ pending: 0, done: 4 });
-    expect(FILINGS.maxResearchPerDay).toBe(3);
+    expect(FILINGS.maxResearchPerDay).toBe(4);
     const stopped = await processQueue(Date.now() - 1, "Test test@example.com", sec);
     expect(stopped.read).toBe(0);
   });

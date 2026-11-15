@@ -2,8 +2,7 @@ import SetupNotice from "@/components/SetupNotice";
 import { marketDataFromEnv } from "@/lib/alpaca";
 import { hasDatabase } from "@/lib/db";
 import { panel } from "@/lib/market/panels";
-import { housePtrUrl } from "@/lib/sources/house";
-import { byMember, bySymbol, CONGRESS_LOOKBACK_DAYS, congressPerformance, type BuyResult } from "@/lib/scout/congress";
+import { byMember, bySymbol, CONGRESS_LOOKBACK_DAYS, congressPerformance, reportUrl, type BuyResult } from "@/lib/scout/congress";
 import * as store from "@/lib/scout/store";
 import { addDays, daysBetween, toEt } from "@/lib/time";
 
@@ -41,9 +40,9 @@ export default async function CongressPage({ searchParams }: { searchParams: Pro
     <>
       <h1>Congress trades{member ? `: ${member}` : symbol ? `: ${symbol}` : ""}</h1>
       <section className="card notice small">
-        Stock trades that members of the House report under the STOCK Act, read from the House Clerk&apos;s periodic transaction reports (official PDFs) and kept as filed. Amounts are the ranges members report; dollar figures here are range midpoints.
+        Stock trades that members of the House and the Senate report under the STOCK Act, read from the official periodic transaction reports (the House Clerk&apos;s PDFs and the Senate&apos;s disclosure site) and kept as filed. Opening a Senate report link may first ask you to accept the site&apos;s terms. Amounts are the ranges members report; dollar figures here are range midpoints.
         Members have up to 45 days to report, so the column that matters for following them is <b>since filing</b>: the move from the first close after the report became public, against SPY over the same days. Paper filings are scanned images and cannot be read.
-        Senate reports and the President&apos;s (OGE 278-T) are not read yet.
+        The President&apos;s reports (OGE 278-T) are not read: they have no machine-readable feed.
         <div style={{ marginTop: 6 }}>Reports read: {status.read} ({status.withTrades} with listed stocks, {status.scanned} scanned paper, {status.errors} missing) · latest filed {status.latest ?? "none yet"} · prices {perf.updatedAt ? `as of the last refresh` : perf.error ? <span className="warn">unavailable ({perf.error})</span> : "not loaded yet"}.</div>
         {filtered && <div style={{ marginTop: 6 }}><a href="/congress">← all members</a></div>}
       </section>
@@ -78,8 +77,8 @@ export default async function CongressPage({ searchParams }: { searchParams: Pro
               const r = perfBy.get(`${t.docId}:${t.ord}`);
               return (
                 <tr key={`${t.docId}:${t.ord}`}>
-                  <td className="small"><a href={housePtrUrl({ docId: t.docId, year: t.year ?? Number(t.filed.slice(0, 4)) })} target="_blank" rel="noreferrer">{t.filed}</a></td>
-                  <td className="small"><a href={`/congress?member=${encodeURIComponent(t.member)}`}>{t.member}</a> <span className="muted">{t.stateDst}</span></td>
+                  <td className="small"><a href={reportUrl(t)} target="_blank" rel="noreferrer">{t.filed}</a></td>
+                  <td className="small"><a href={`/congress?member=${encodeURIComponent(t.member)}`}>{t.member}</a> <span className="muted">{t.chamber === "Senate" ? "Senate" : t.stateDst}</span></td>
                   <td><a href={`/congress?symbol=${t.symbol}`}><b className="accent">{t.symbol}</b></a>{t.assetType === "option" && <span className="tag">option</span>}</td>
                   <td className={`small ${txClass(t.tx)}`}>{t.tx}</td>
                   <td className="small secondary">{t.owner}</td>

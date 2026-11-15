@@ -56,6 +56,35 @@ export async function pollHouse(deadline: number, now = new Date(), fetchImpl: t
   return { indexed: filings.length, waiting: todo.length, read, trades, scanned, errors };
 }
 
+/** Housekeeping slice: read new Senate reports (electronic ones; paper filings have no table) until the deadline. */
+export async function pollSenate(deadline: number, now = new Date(), fetchImpl: typeof fetch = fetch, max = 40) {
+  const { SenateSession, parseSenatePtr } = await import("../sources/senate");
+  const today = toEt(now).date;
+  const session = new SenateSession(fetchImpl);
+  await session.open();
+  const seen = await store.congressSeen();
+  const todo = (await session.reports(addDays(today, -CONGRESS_LOOKBACK_DAYS))).filter((r) => !seen.has(r.docId));
+  let read = 0, trades = 0, errors = 0;
+  for (const r of todo.slice(0, max)) {
+    if (Date.now() > deadline) break;
+    const base = { docId: r.docId, chamber: "Senate", member: r.member, stateDst: null, filed: r.filed, year: Number(r.filed.slice(0, 4)) };
+    try {
+      const rows = parseSenatePtr(await session.report(r.docId), r.filed).map((t): CongressTradeRow => ({ ...base, ...t }));
+      trades += rows.length;
+      await store.addCongressFiling({ ...base, status: rows.length ? "read" : "read (no listed stocks)" }, rows);
+      read++;
+    } catch (err) {
+      errors++;
+      if (/\b404\b/.test(String(err))) await store.addCongressFiling({ ...base, status: "error: report not found" }, []);
+    }
+  }
+  return { waiting: todo.length, read, trades, errors };
+}
+
+/** Link to the official report: the House Clerk's PDF or the Senate's page. */
+export const reportUrl = (t: { chamber: string; docId: string; year?: number; filed: string }) =>
+  t.chamber === "Senate" ? `https://efdsearch.senate.gov/search/view/ptr/${t.docId}/` : `https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/${t.year ?? Number(t.filed.slice(0, 4))}/${t.docId}.pdf`;
+
 // ---------------------------------------------------------------- signals
 
 export const midpoint = (t: { amountLow: number | null; amountHigh: number | null }) => (t.amountLow === null ? 0 : t.amountHigh === null ? t.amountLow : (t.amountLow + t.amountHigh) / 2);

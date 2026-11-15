@@ -15,8 +15,9 @@ export default async function FilingsPage() {
   if (!hasDatabase()) return <SetupNotice />;
   const today = toEt(new Date()).date;
   const [q, buys, alerts, candidates, flags, optStatus] = await Promise.all([store.secQueueStatus(), store.insiderBuysSince(addDays(today, -30)), store.filingAlertsSince(addDays(today, -30)), store.candidatesSince(30), store.optionsFlagsSince(addDays(today, -30)), store.optionsLogStatus()]);
-  const signals = pickSignals(buys, alerts, today, flags);
-  const researched = candidates.filter((c) => c.term.startsWith("filing: ") || c.term.startsWith("insider: ") || c.term.startsWith("options: "));
+  const congress = await store.congressTradesSince(addDays(today, -45)).catch(() => []);
+  const signals = pickSignals(buys, alerts, today, flags, congress);
+  const researched = candidates.filter((c) => /^(filing|insider|options|congress|insider\+congress): /.test(c.term));
   const eightKs = alerts.filter((a) => a.kind === "8-K");
   const d13 = alerts.filter((a) => a.kind === "13D");
   return (
@@ -24,7 +25,7 @@ export default async function FilingsPage() {
       <h1>Filings</h1>
       <section className="card notice small">
         SEC filings the news evidence singles out, read from EDGAR&apos;s daily index the day after they are filed: <b>insider open-market purchases</b> (Form 4, code P, not under a 10b5-1 plan; &quot;opportunistic&quot; when outside the insider&apos;s usual calendar month), <b>new activist stakes</b> (Schedule 13D) and <b>8-Ks with bad-news items</b> (restatement, cyber incident, auditor change, impairment, restructuring, officer departure).
-        The strongest go to research as cards, at most three a day: restatements and cyber incidents first, then new 13Ds, then clustered or opportunistic insider buying.
+        Also: stocks that <b>both insiders and members of Congress</b> bought within 45 days (strongest), and <b>Congress clusters</b> (see the Congress tab). The strongest go to research as cards, at most four a day: restatements and cyber incidents first, then new 13Ds, then clustered or opportunistic insider buying.
         <div style={{ marginTop: 6 }}>Queue: {q.pending} to read · {q.done} read · {q.errors} errors · daily indexes loaded: {q.days.join(", ") || "none yet"}.</div>
       </section>
 

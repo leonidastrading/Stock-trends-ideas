@@ -168,8 +168,9 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
   // Congress trades: new House transaction reports (at most a minute per call), then their buys priced against SPY.
   if (left() > 60_000) {
     try {
-      const { pollHouse } = await import("./congress");
-      out.congress = await pollHouse(Math.min(deadline - 45_000, Date.now() + 60_000), now, fetchImpl ?? fetch);
+      const { pollHouse, pollSenate } = await import("./congress");
+      out.congress = await pollHouse(Math.min(deadline - 45_000, Date.now() + 45_000), now, fetchImpl ?? fetch);
+      out.senate = await pollSenate(Math.min(deadline - 45_000, Date.now() + 30_000), now, fetchImpl ?? fetch).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
       if (data && left() > 35_000) {
         const [{ congressPerformance }, { panel }] = await Promise.all([import("./congress"), import("../market/panels")]);
         const p = await panel("congress-perf", 0, () => congressPerformance(data, now), 20_000);

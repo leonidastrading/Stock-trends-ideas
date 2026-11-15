@@ -94,7 +94,7 @@ export default async function MarketPanels() {
             {congress.map((a) => <a key={a.symbol} href={`/congress?symbol=${a.symbol}`} className="chip" title={`Bought by ${a.buyers.join(", ")}${a.sellers.length ? `; sold by ${a.sellers.join(", ")}` : ""}`}><b>{a.symbol}</b> <span className="muted">{a.buyers.length} {a.buyers.length === 1 ? "member" : "members"}</span></a>)}
             {!congress.length && <span className="small muted">Loads as House transaction reports are read (hourly).</span>}
           </div>
-          <p className="small muted">House members&apos; reported purchases by filing date, most buyers first. Reports can be up to 45 days after the trade.</p>
+          <p className="small muted">Members of Congress (House and Senate): reported purchases by filing date, most buyers first. Reports can be up to 45 days after the trade.</p>
         </section>
 
         <section className="card panel">
