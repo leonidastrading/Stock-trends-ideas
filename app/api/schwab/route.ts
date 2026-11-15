@@ -20,9 +20,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true });
     }
     const sym = parsed.data.symbol;
-    const [f, sd] = await Promise.all([fundamentals([sym]).then((m) => m.get(sym) ?? null).catch((err) => ({ error: err instanceof Error ? err.message : String(err) })), shortData([sym]).then((m) => m.get(sym) ?? null)]);
+    const [f, sd] = await Promise.all([fundamentals([sym]).then((m) => m.get(sym) ?? null).catch((err) => ({ error: err instanceof Error ? err.message : String(err) })), shortData([sym])]);
     const schwab = f && "error" in f ? { error: f.error } : f ? { shortFields: f.short.fields, shareFields: f.shareFields } : { error: `Schwab returned nothing for ${sym}` };
-    return NextResponse.json({ ok: true, result: { symbol: sym, line: shortText(sd), nasdaq: sd, schwab } });
+    const s = sd.get(sym) ?? null;
+    return NextResponse.json({ ok: true, result: { symbol: sym, line: shortText(s), source: s?.source ?? null, shortError: sd.errors?.get(sym) ?? null, schwab } });
   } catch (err) {
     return NextResponse.json({ ok: false, errors: [err instanceof Error ? err.message : String(err)] }, { status: 502 });
   }

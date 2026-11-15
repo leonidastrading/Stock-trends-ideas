@@ -235,14 +235,18 @@ export function readShortInterest(symbol: string, fundamental: Record<string, un
   return { symbol, pctFloat: pick(/short.*(float|pct|percent)/i), daysToCover: pick(/(day|days).*cover|cover/i), fields };
 }
 
-export interface Fundamentals { symbol: string; sharesOutstanding: number | null; short: ShortInterest; shareFields: Record<string, number> }
+export interface Fundamentals { symbol: string; sharesOutstanding: number | null; floatShares: number | null; short: ShortInterest; shareFields: Record<string, number> }
 
 /** Pure: shares outstanding (and any float figure) from the fundamental record; 0 counts as missing. */
 export function readFundamentals(symbol: string, f: Record<string, unknown> | undefined): Fundamentals {
   const shareFields: Record<string, number> = {};
   for (const [k, v] of Object.entries(f ?? {})) if (/shares|float/i.test(k) && typeof v === "number" && Number.isFinite(v)) shareFields[k] = v;
   const so = Object.entries(shareFields).find(([k]) => /sharesoutstanding/i.test(k))?.[1];
-  return { symbol, sharesOutstanding: so && so > 0 ? so : null, short: readShortInterest(symbol, f), shareFields };
+  // marketCapFloat is the float in shares (GME: 460M of 504M outstanding); kept only when it is plausible.
+  const fl = Object.entries(shareFields).find(([k]) => /marketcapfloat|floatshares|^float$/i.test(k))?.[1];
+  const sharesOutstanding = so && so > 0 ? so : null;
+  const floatShares = fl && fl > 0 && (!sharesOutstanding || fl <= sharesOutstanding * 1.2) ? fl : null;
+  return { symbol, sharesOutstanding, floatShares, short: readShortInterest(symbol, f), shareFields };
 }
 
 /** Fundamentals for up to 50 symbols per call (the instruments endpoint's fundamental projection). */

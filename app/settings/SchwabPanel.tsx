@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-type Result = { symbol: string; line: string | null; schwab: { shortFields?: Record<string, number>; shareFields?: Record<string, number>; error?: string } };
+type Result = { symbol: string; line: string | null; source?: string | null; shortError?: string | null; schwab: { shortFields?: Record<string, number>; shareFields?: Record<string, number>; error?: string } };
 
 /** Settings → Schwab: connect (weekly sign-in), test on one stock, disconnect. */
 export default function SchwabPanel({ configured, connected, hoursLeft, expiresLabel, message, mode = "own", canRefresh = true, lastError = null }: { configured: boolean; connected: boolean; hoursLeft: number | null; expiresLabel: string | null; message: string | null; mode?: "shared" | "own"; canRefresh?: boolean; lastError?: string | null }) {
@@ -50,7 +50,7 @@ export default function SchwabPanel({ configured, connected, hoursLeft, expiresL
       {typeof out === "string" && <p className="small neg">{out}</p>}
       {out && typeof out === "object" && (
         <div className="small">
-          <div><b>{out.symbol}</b>: {out.line ?? <span className="neg">no short-interest report from Nasdaq</span>}</div>
+          <div><b>{out.symbol}</b>: {out.line ? <>{out.line} <span className="muted">({out.source})</span></> : <span className="neg">no short-interest report ({out.shortError ?? "no source answered"})</span>}</div>
           <div className="muted">
             Schwab sent: {out.schwab.error ? <span className="neg">{out.schwab.error}</span> : <>
               short fields {Object.keys(out.schwab.shortFields ?? {}).length ? Object.entries(out.schwab.shortFields!).map(([k, v]) => `${k} ${v}`).join(", ") : "none"};

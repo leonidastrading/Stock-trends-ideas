@@ -18,6 +18,16 @@ const nasdaq = {
 };
 
 describe("short interest", () => {
+  it("reads FINRA's consolidated short interest (newest first, previous report for the change)", async () => {
+    const { parseFinraShort } = await import("@/lib/market/short");
+    const rows = [
+      { symbolCode: "GME", issueName: "GameStop Corp", settlementDate: "2026-10-31", currentShortPositionQuantity: 61234567, previousShortPositionQuantity: 55000000, daysToCoverQuantity: 11.95, averageDailyVolumeQuantity: 5123456 },
+      { symbolCode: "GME", settlementDate: "2026-10-15", currentShortPositionQuantity: 55000000, previousShortPositionQuantity: 50000000, daysToCoverQuantity: 11.2 },
+    ];
+    expect(parseFinraShort("GME", rows)).toEqual({ symbol: "GME", interest: 61234567, asOf: "2026-10-31", daysToCover: 11.95, changePct: 11.3, source: "FINRA" });
+    expect(parseFinraShort("GME", [])).toBeNull();
+  });
+
   it("reads Nasdaq's latest report and the change since the one before", () => {
     expect(parseNasdaqShort("GME", nasdaq)).toEqual({ symbol: "GME", interest: 61234567, asOf: "2026-10-31", daysToCover: 11.95, changePct: 11.3, source: "Nasdaq" });
     expect(parseNasdaqShort("XYZ", { data: null, status: { rCode: 400 } })).toBeNull();
@@ -27,6 +37,8 @@ describe("short interest", () => {
     const f = readFundamentals("GME", { shortIntToFloat: 0, shortIntDayToCover: 0, sharesOutstanding: 447_000_000, marketCapFloat: 0, peRatio: 40 });
     expect(f.short).toMatchObject({ pctFloat: null, daysToCover: null });
     expect(f.sharesOutstanding).toBe(447_000_000);
+    expect(f.floatShares).toBeNull(); // marketCapFloat 0 = no data
+    expect(readFundamentals("GME", { sharesOutstanding: 504_500_990, marketCapFloat: 460_411_538.582 }).floatShares).toBeCloseTo(460_411_538.582);
     expect(readShortInterest("X", { shortIntToFloat: 21.4 }).pctFloat).toBe(21.4);
   });
 
@@ -35,6 +47,7 @@ describe("short interest", () => {
     expect(squeezeFrom(12, 2)).toBe("elevated");
     expect(squeezeFrom(null, null)).toBeNull();
     expect(shortText({ interest: 61234567, asOf: "2026-10-31", changePct: 11.3, daysToCover: 11.95, pctOutstanding: 13.7, squeeze: "high" })).toBe("13.7% of shares short (61.2M), 11.95 days to cover, +11.3% vs the prior report (settled 2026-10-31); squeeze risk high");
+    expect(shortText({ interest: 61234567, asOf: "2026-10-31", changePct: null, daysToCover: 11.95, pctFloat: 13.3, pctOutstanding: 12.1, squeeze: "high" })).toBe("13.3% of float short (61.2M shares), 11.95 days to cover (settled 2026-10-31); squeeze risk high");
     expect(shortText({ interest: 850000, asOf: "2026-10-31", changePct: null, daysToCover: null, pctOutstanding: null, squeeze: null })).toBe("850k shares short (settled 2026-10-31)");
     expect(shortText(null)).toBeNull();
   });
