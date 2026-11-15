@@ -24,3 +24,15 @@ describe("idea map", () => {
     expect(n[1].links.find((l) => l.source === "congress")!.note).toBe("A bought; B bought");
   });
 });
+
+describe("map tooltips name the exact source", () => {
+  it("document and idea for your bot, the story, the watch-list term, plus the research's evidence sources", async () => {
+    const { cardNote } = await import("@/lib/scout/idea-map");
+    const card = (id: number, conf = 54) => ({ id, direction: "long", status: "promoted", card: { confidence: conf, evidence: [{ source: "news" }, { source: "Stocktwits" }, { source: "news" }, { source: "edgar" }] } });
+    expect(cardNote(card(124), "inbox", "inbox: KNX truckload rates", 'Rates up. (From the inbox document "2026-11-14-youtube"; an idea from Vadim\'s research bot.)'))
+      .toBe('card #124 long (promoted), confidence 54 · from document "2026-11-14-youtube", idea "KNX truckload rates" · evidence: news, stocktwits, edgar');
+    expect(cardNote(card(80), "story", "story: NVDA CEO exit → NVDA", null)).toMatch(/from story "NVDA CEO exit"/);
+    expect(cardNote(card(7), "trend", "transformer shortage", null)).toMatch(/from watch-list \/ discovery term "transformer shortage"/);
+    expect(cardNote(card(9), "you", "Prenetics IM8", "Seen at the gym.")).toMatch(/from your note "Seen at the gym\."/);
+  });
+});

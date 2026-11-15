@@ -16,7 +16,8 @@ function layout(nodes: MapNode[]) {
     const a = (i / MAP_SOURCES.length) * Math.PI * 2 - Math.PI / 2;
     return [s.key, { ...s, x: CX + Math.cos(a) * (W / 2 - 70), y: CY + Math.sin(a) * (H / 2 - 50) }];
   }));
-  const r = (n: MapNode) => 9 + Math.min(4, n.links.length) * 4 + (n.cardId ? 3 : 0);
+  // Cards are sized by confidence (30 or less = small, 80 and up = largest); other stocks by how many sources flag them.
+  const r = (n: MapNode) => (n.confidence !== null ? 10 + Math.max(0, Math.min(1, (n.confidence - 30) / 50)) * 20 : 8 + Math.min(4, n.links.length) * 3) + Math.min(3, n.links.length - 1) * 2;
   const pts = nodes.map((n) => {
     const ss = n.links.map((l) => src.get(l.source)!);
     const ax = ss.reduce((a, s) => a + s.x, 0) / ss.length, ay = ss.reduce((a, s) => a + s.y, 0) / ss.length;
@@ -96,7 +97,7 @@ export default function IdeaMap({ nodes: all }: { nodes: MapNode[] }) {
       </svg>
       {hovered && (
         <div className="map-tip" style={{ left: `${(hovered.x / W) * 100}%`, top: `${(hovered.y / H) * 100}%` }}>
-          <div><b>{hovered.n.symbol}</b> <span className="muted">· {hovered.n.links.length} source{hovered.n.links.length > 1 ? "s" : ""}</span>{hovered.n.cardId ? <span className={hovered.n.direction === "long" ? "pos" : "neg"}> · card #{hovered.n.cardId} {hovered.n.direction}</span> : null}</div>
+          <div><b>{hovered.n.symbol}</b> <span className="muted">· {hovered.n.links.length} source{hovered.n.links.length > 1 ? "s" : ""}</span>{hovered.n.cardId ? <span className={hovered.n.direction === "long" ? "pos" : "neg"}> · card #{hovered.n.cardId} {hovered.n.direction}{hovered.n.confidence !== null ? `, confidence ${hovered.n.confidence}` : ""}</span> : null}</div>
           {hovered.n.links.map((l) => <div key={l.source} className="small"><span style={{ color: src.get(l.source)!.color }}>●</span> {src.get(l.source)!.label}: <span className="secondary">{l.note}</span></div>)}
           <div className="small muted">{hovered.n.cardId ? "click: open the card" : "click: open on TradingView"}</div>
         </div>
