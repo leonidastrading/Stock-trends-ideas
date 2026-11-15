@@ -2,6 +2,7 @@ import CardActions from "@/components/CardActions";
 import CardView from "@/components/CardView";
 import Pager, { FilterLinks, hrefWith, paginate } from "@/components/Pager";
 import SetupNotice from "@/components/SetupNotice";
+import TickerSearch from "@/components/TickerSearch";
 import { hasDatabase } from "@/lib/db";
 import { opposingCalls } from "@/lib/scout/calendar";
 import { repeatCards } from "@/lib/scout/dedupe";
@@ -66,6 +67,7 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   return (
     <>
       <h1>Ideas</h1>
+      <TickerSearch />
       <details className="card notice small section">
         <summary><b>How this page works</b></summary>
         Every thesis card from every desk in one list: the trend desk (watch-list and discovery), the story desk (breaking news), filings, insiders and Congress, unusual options positions, Trump&apos;s posts, your bot&apos;s inbox, and what you noticed yourself.
