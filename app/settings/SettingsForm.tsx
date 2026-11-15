@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export interface FormSettings { enabled: boolean; model: string; effort: string; dailyCapUsd: number; maxCandidatesPerScan: number; discoveryPerScan: number; emailDigest: boolean; notifyPromoted: boolean; notifyStories: boolean; notifyReviews: boolean; autoApproveTerms: boolean }
+export interface FormSettings { enabled: boolean; model: string; effort: string; dailyCapUsd: number; maxCandidatesPerScan: number; discoveryPerScan: number; emailDigest: boolean; notifyPromoted: boolean; notifyStories: boolean; notifyReviews: boolean; autoApproveTerms: boolean; swingSize: number; swingSpeculativeSize: number }
 
 export default function SettingsForm({ initial }: { initial: FormSettings }) {
   const [s, setS] = useState(initial);
@@ -30,6 +30,8 @@ export default function SettingsForm({ initial }: { initial: FormSettings }) {
         <label className="field"><span className="field-label">Phone: story trades</span><span className="inline"><input type="checkbox" checked={s.notifyStories} onChange={(e) => setS({ ...s, notifyStories: e.target.checked })} /> push story-desk cards (mostly late)</span></label>
         <label className="field"><span className="field-label">Phone: after the catalyst</span><span className="inline"><input type="checkbox" checked={s.notifyReviews} onChange={(e) => setS({ ...s, notifyReviews: e.target.checked })} /> push the post-catalyst verdict</span></label>
         <label className="field"><span className="field-label">Watch-list</span><span className="inline"><input type="checkbox" checked={s.autoApproveTerms} onChange={(e) => setS({ ...s, autoApproveTerms: e.target.checked })} /> approve the scout&apos;s proposed terms automatically (its quiet ones retire after 30 days)</span></label>
+        <label className="field"><span className="field-label">Swing ideas: size per idea ($)</span><input type="number" min="100" step="100" value={s.swingSize} onChange={(e) => setS({ ...s, swingSize: Number(e.target.value) })} /><span className="field-hint">Paper money per card sent to the Swing ideas log. $2,000 fits 50 ideas in a $100k paper account.</span></label>
+        <label className="field"><span className="field-label">Swing ideas: speculative size ($)</span><input type="number" min="100" step="100" value={s.swingSpeculativeSize} onChange={(e) => setS({ ...s, swingSpeculativeSize: Number(e.target.value) })} /><span className="field-hint">For cards with confidence under 50, which Swing counts as speculative and caps in total ($5,000). $1,000 fits five.</span></label>
         <label className="field"><span className="field-label">Weekly digest email</span><span className="inline"><input type="checkbox" checked={s.emailDigest} onChange={(e) => setS({ ...s, emailDigest: e.target.checked })} /> send on Mondays (needs Resend)</span></label>
       </div>
       <div className="actions"><button className="primary" type="submit" disabled={busy}>Save</button>{msg && <span className="small secondary">{msg}</span>}</div>

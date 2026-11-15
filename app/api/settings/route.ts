@@ -19,6 +19,8 @@ const schema = z.object({
   notifyStories: z.boolean().default(true),
   notifyReviews: z.boolean().default(true),
   autoApproveTerms: z.boolean().default(true),
+  swingSize: z.number().min(100).max(100_000).default(2000),
+  swingSpeculativeSize: z.number().min(100).max(100_000).default(1000),
 });
 
 /** Changing the model or effort starts a new version; results are reported per version. */

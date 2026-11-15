@@ -27,7 +27,9 @@ export async function POST(_request: Request, ctx: { params: Promise<{ id: strin
       return NextResponse.json({ ok: true, swing: r.body });
     }
     await store.addTrackEvent(id, "send_failed", JSON.stringify(r.body).slice(0, 500));
-    const errors = (r.body as { errors?: string[] }).errors ?? [`swing log replied ${r.status}: ${JSON.stringify(r.body).slice(0, 160)}`];
+    const raw = (r.body as { errors?: string[] }).errors ?? [`swing log replied ${r.status}: ${JSON.stringify(r.body).slice(0, 160)}`];
+    // Swing's own cap on speculative ideas (confidence under 50): say what to do about it.
+    const errors = raw.map((e) => (/speculative ideas would total/i.test(e) ? `${e}. The Swing ideas app caps all open speculative ideas together; lower "speculative size" in Settings, or close a speculative idea in Swing.` : e));
     return NextResponse.json({ ok: false, errors }, { status: 422 });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

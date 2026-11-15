@@ -24,10 +24,14 @@ export interface ScoutSettings {
   notifyReviews: boolean;
   /** Approve the scout's proposed watch-list terms automatically, and retire its quiet ones after 30 days. */
   autoApproveTerms: boolean;
+  /** Paper size of an idea sent to the Swing ideas log, and of a speculative one (confidence under 50, which Swing caps in total). */
+  swingSize: number;
+  swingSpeculativeSize: number;
 }
 
 export const DEFAULT_SETTINGS: ScoutSettings = {
   enabled: true, model: SCOUT.defaultModel, effort: SCOUT.defaultEffort, dailyCapUsd: SCOUT.defaultDailyCapUsd, maxCandidatesPerScan: SCOUT.maxCandidatesPerScan, discoveryPerScan: SCOUT.discoveryPerScan, emailDigest: true, notifyPromoted: true, notifyStories: true, notifyReviews: true, autoApproveTerms: true,
+  swingSize: 2000, swingSpeculativeSize: 1000,
 };
 
 export async function loadSettings(): Promise<ScoutSettings> {
