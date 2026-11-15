@@ -23,6 +23,8 @@ export function envStatus(env: NodeJS.ProcessEnv = process.env): EnvStatus[] {
     row("SCHWAB_APP_KEY", false, "Schwab market data (short interest)"),
     row("SCHWAB_APP_SECRET", false, "Schwab market data (short interest)"),
     row("SCHWAB_CALLBACK_URL", false, "Schwab market data (sign-in return address)"),
+    row("FEC_API_KEY", false, "Investigations: campaign and PAC money (free from api.data.gov; without it a shared demo key)"),
+    row("LDA_API_KEY", false, "Investigations: lobbying filings (optional, higher rate limit)"),
     row("YOUTUBE_API_KEY", false, "YouTube"),
     row("REDDIT_CLIENT_ID", false, "Reddit (after Data API approval)"),
     row("REDDIT_CLIENT_SECRET", false, "Reddit (after Data API approval)"),

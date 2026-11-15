@@ -474,6 +474,20 @@ CREATE TABLE IF NOT EXISTS rumors (
 CREATE INDEX IF NOT EXISTS rumors_created_idx ON rumors (created_at);
 ALTER TABLE sites ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'ideas';
 
+-- Investigations: "follow the money" behind a story (plan, public records pulled, report).
+CREATE TABLE IF NOT EXISTS investigations (
+  id serial PRIMARY KEY,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  status text NOT NULL DEFAULT 'running',
+  title text,
+  input text NOT NULL,
+  plan jsonb,
+  records jsonb,
+  report jsonb,
+  cost_usd double precision,
+  error text
+);
+
 -- Dashboard panels (market quotes, earnings calendar, contracts, breadth): cached fetches, refreshed hourly.
 CREATE TABLE IF NOT EXISTS dashboard_cache (
   key text PRIMARY KEY,

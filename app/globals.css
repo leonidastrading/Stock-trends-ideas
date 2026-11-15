@@ -219,3 +219,4 @@ a.button { display: inline-block; border: 1px solid var(--border); border-radius
 a.button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .rumor-item { margin-bottom: 10px; }
 .rumor-item > div { margin-top: 3px; }
+.investigation h3 { margin: 10px 0 4px; font-size: 14px; }

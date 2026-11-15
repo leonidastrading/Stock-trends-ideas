@@ -18,6 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Link href="/news">News</Link>
           <Link href="/drift">Drift</Link>
           <Link href="/rumors">Rumors</Link>
+          <Link href="/investigate">Investigate</Link>
           <Link href="/map">Map</Link>
           <Link href="/chat">Chat</Link>
           <Link href="/notice">I noticed something</Link>
