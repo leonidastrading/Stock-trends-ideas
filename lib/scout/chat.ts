@@ -129,6 +129,11 @@ export async function buildBriefing(now = new Date()): Promise<string> {
     return m?.data?.length ? m.data.map((r) => `- ${cut(r.question, 110)}: ${r.yes}% yes (${r.dayChange ?? "?"} pts 1d, ${r.weekChange ?? "?"} pts 7d)${r.endDate ? `, ends ${r.endDate}` : ""}`).join("\n") : null;
   });
 
+  await safe("Down drift: stocks still falling days after bad news (Drift tab)", async () => {
+    const d = await store.cacheGet<{ setups: import("./drift").DriftSetup[] }>("drift");
+    return d?.data?.setups?.length ? d.data.setups.slice(0, 12).map((s) => `- ${s.symbol} ${s.stage}: ${s.dayPct}% on ${s.eventDate} (${s.eventKind}: ${cut(s.eventHeadline, 90)}), ${s.sincePct}% more over ${s.daysAfter} trading days (${s.sinceVsSpy}% vs SPY), ${s.badAfter} bad headlines since`).join("\n") : null;
+  });
+
   await safe("Federal contracts, latest large awards to listed companies", async () => {
     const c = await store.cacheGet<Array<{ ticker: string; agency: string; amount: number; date: string; description: string }>>("contracts");
     return c?.data?.length ? c.data.slice(0, 8).map((r) => `- ${r.date} ${r.ticker}: ${usd(r.amount)} from ${cut(r.agency, 50)}: ${cut(r.description, 90)}`).join("\n") : null;

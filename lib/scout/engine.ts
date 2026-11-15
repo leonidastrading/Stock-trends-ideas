@@ -62,15 +62,28 @@ export async function runStoriesJob(deps = defaultDeps()) {
     const filings = Date.now() - started < 120_000
       ? await import("./filings").then(({ runFilingResearch }) => runFilingResearch(deps, 1)).catch((err) => ({ error: err instanceof Error ? err.message : String(err) }))
       : "later: story scan ran long";
+    // The down-drift desk: research the freshest setup from the last scan (at most two a day), if there is time.
+    const drift = Date.now() - started < 150_000 ? await driftResearch(deps) : "later: story scan ran long";
     const pushed = await pushNewCards(deps.env).catch((err) => `push failed: ${err instanceof Error ? err.message : String(err)}`);
     // Housekeeping rides on the hourly call, in whatever time is left in the function.
     const upkeep = await maintenance(started + 240_000, deps.now, deps.fetchImpl);
-    await store.finishRun(run, r.error && !r.researched.length ? "skipped" : "ok", { ...r, filings, pushed, upkeep });
-    return { status: "ok" as const, ...r, filings, pushed, upkeep };
+    await store.finishRun(run, r.error && !r.researched.length ? "skipped" : "ok", { ...r, filings, drift, pushed, upkeep });
+    return { status: "ok" as const, ...r, filings, drift, pushed, upkeep };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await store.finishRun(run, "error", null, message);
     throw err;
+  }
+}
+
+/** One down-drift setup from the last hourly scan to research (never fails the job it rides on). */
+async function driftResearch(deps: ResearchDeps): Promise<unknown> {
+  try {
+    const { runDriftResearch } = await import("./drift");
+    const c = await store.cacheGet<{ setups: import("./drift").DriftSetup[] }>("drift");
+    return c?.data?.setups?.length ? await runDriftResearch(deps, c.data.setups, 1) : "no setups yet";
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
   }
 }
 
@@ -163,6 +176,13 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
   }
   // The stock list behind the search box's suggestions (refreshed daily).
   if (data && left() > 40_000) out.assets = await import("./symbol-search").then(async ({ listings }) => `${(await listings()).length} listings`).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+  // Down drift: stocks still falling after bad news (bars for ~700 stocks, headlines for the few that qualify), hourly.
+  if (data && left() > 70_000) {
+    out.drift = await Promise.all([import("./drift"), import("../market/panels")]).then(async ([{ scanDrift }, { panel }]) => {
+      const p = await panel("drift", 55, () => scanDrift(data, now), 60_000);
+      return p.error ? `failed: ${p.error}` : `${p.data?.setups.length ?? 0} setups from ${p.data?.scanned ?? 0} stocks`;
+    }).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+  } else out.drift = "later: not enough time";
   // Options positioning: each stock's option chain once per trading day (10:00-16:00 ET), up to a minute and a half per call.
   if (left() > 60_000) {
     out.options = await import("./options-flow").then(({ runOptionsLog }) => runOptionsLog(Math.min(deadline - 45_000, Date.now() + 90_000), now, fetchImpl)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);

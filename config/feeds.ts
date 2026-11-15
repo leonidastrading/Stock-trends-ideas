@@ -12,8 +12,8 @@ export const FEEDS: Feed[] = [
   { name: "Polymarket", host: "gamma-api.polymarket.com", what: "event odds and their one-week change; the Home odds panel", when: "daily scan, hourly panel", usedBy: "Trend desk, Home" },
   { name: "Stocktwits", host: "api.stocktwits.com", what: "trending stocks, message rates and bullish share; the chatter test; retail-mood gauge", when: "daily scan, hourly", usedBy: "Trend desk, chatter test, Home" },
   // News and market data
-  { name: "Alpaca / Benzinga news", host: "data.alpaca.markets", what: "headlines with tickers: the News tab, the story desk, and how late an idea is", when: "every few minutes (News), hourly (story desk)", usedBy: "Story desk, News, every card", key: "ALPACA_API_KEY_ID" },
-  { name: "Alpaca market data", host: "data.alpaca.markets", what: "daily bars, quotes, top movers and option prices (read only; no orders, positions or account)", when: "after the close, and on demand", usedBy: "Paper tracking, Home panels, cards", key: "ALPACA_API_KEY_ID" },
+  { name: "Alpaca / Benzinga news", host: "data.alpaca.markets", what: "headlines with tickers: the News tab, the story desk, and how late an idea is", when: "every few minutes (News), hourly (story desk)", usedBy: "Story desk, News, Down drift, every card", key: "ALPACA_API_KEY_ID" },
+  { name: "Alpaca market data", host: "data.alpaca.markets", what: "daily bars, quotes, top movers and option prices (read only; no orders, positions or account)", when: "after the close, and on demand", usedBy: "Paper tracking, Home panels, Down drift, cards", key: "ALPACA_API_KEY_ID" },
   { name: "Cboe delayed option chains", host: "cdn.cboe.com", what: "open interest and volume per contract: big new positions", when: "once per trading day per stock", usedBy: "Options positioning desk" },
   { name: "US Treasury", host: "home.treasury.gov", what: "daily Treasury yields", when: "hourly panel", usedBy: "Home" },
   { name: "Nasdaq earnings calendar", host: "api.nasdaq.com", what: "who reports in the next 5 days", when: "hourly panel", usedBy: "Home, cards" },

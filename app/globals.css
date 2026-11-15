@@ -213,3 +213,5 @@ button.chip.active { border-color: var(--accent); color: var(--accent); }
 .card-ask { flex-basis: 100%; }
 .card-ask textarea { width: 100%; box-sizing: border-box; }
 .card-ask-answer { border-left: 3px solid var(--accent); padding: 4px 0 4px 10px; margin-bottom: 8px; }
+.drift-item { margin-bottom: 10px; }
+.drift-item > div { margin-top: 3px; }
