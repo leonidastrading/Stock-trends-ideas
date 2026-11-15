@@ -1,0 +1,135 @@
+import CardActions from "@/components/CardActions";
+import CardView from "@/components/CardView";
+import ActivityLog, { OUTCOMES } from "@/components/desk/ActivityLog";
+import StoryDesk from "@/components/desk/StoryDesk";
+import TrendScan from "@/components/desk/TrendScan";
+import Direction from "@/components/Direction";
+import MarketPanels from "@/components/MarketPanels";
+import Pager, { FilterLinks, hrefWith, paginate } from "@/components/Pager";
+import SetupNotice from "@/components/SetupNotice";
+import { hasDatabase } from "@/lib/db";
+import { opposingCalls, upcomingCatalysts } from "@/lib/scout/calendar";
+import { PLAYER_LABEL, PLAYERS, playerOf, type Player } from "@/lib/scout/scoreboard";
+import * as store from "@/lib/scout/store";
+import { swingConfigured } from "@/lib/scout/swing";
+import { toEt } from "@/lib/time";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+const STATUS_RANK: Record<string, number> = { promoted: 0, late: 1, not_promoted: 2 };
+const SORTS = [{ value: "best", label: "Best first" }, { value: "newest", label: "Newest" }, { value: "catalyst", label: "Catalyst soonest" }];
+const PAGE = 10;
+
+/** Where a card came from, in words: the desk or person, and the story / document / signal behind it. */
+function fromLine(player: Player, term: string): string {
+  const what = term.replace(/^(story|inbox|stream host|stream agent|filing|insider|options|congress|insider\+congress|truth): /, "").replace(/ → .*$/, "");
+  return `${PLAYER_LABEL[player]}${what && what !== term || player === "scout_trend" || player === "you" ? ` · ${what}` : ""}`;
+}
+
+type SP = { days?: string; source?: string; status?: string; sort?: string; page?: string; card?: string; lo?: string; lpage?: string; spage?: string };
+
+export default async function IdeasPage({ searchParams }: { searchParams: Promise<SP> }) {
+  if (!hasDatabase()) return <SetupNotice />;
+  const sp = await searchParams;
+  const days = [7, 30, 90].includes(Number(sp.days)) ? Number(sp.days) : 7;
+  const source = (PLAYERS as readonly string[]).includes(sp.source ?? "") ? (sp.source as Player) : "";
+  const status = sp.status && sp.status in STATUS_RANK ? sp.status : "";
+  const sort = SORTS.some((s) => s.value === sp.sort) ? sp.sort! : "best";
+  const lo = OUTCOMES.some((o) => o.value === sp.lo) ? sp.lo! : "";
+  const params: Record<string, string | undefined> = { days: days === 7 ? undefined : String(days), source: source || undefined, status: status || undefined, sort: sort === "best" ? undefined : sort, page: sp.page, lo: lo || undefined, lpage: sp.lpage, spage: sp.spage };
+
+  const [cards, candidates, tracks, fb, recent, health, runs] = await Promise.all([
+    store.cardsSince(days), store.candidatesSince(days), store.allTracks(), store.latestFeedback(), store.cardsSince(120), store.allHealth(), store.recentRuns(30),
+  ]);
+  const reviews = await store.allReviews();
+  const opp = opposingCalls(recent, tracks);
+  const t = new Map(tracks.map((x) => [x.cardId, x]));
+  const termOf = new Map(candidates.filter((c) => c.cardId !== null).map((c) => [c.cardId!, c.term]));
+  const playerFor = (c: store.StoredCard) => playerOf(c.origin, termOf.get(c.id));
+  const today = toEt(new Date()).date;
+  const coming = upcomingCatalysts(recent, tracks, today);
+  const sw = swingConfigured();
+  const down = health.filter((h) => h.status === "down" || h.status === "missing");
+
+  // One list of every card in the window: filtered by source and status, sorted, 10 a page.
+  const bySource = cards.filter((c) => !source || playerFor(c) === source);
+  const rows = bySource.filter((c) => !status || c.status === status).sort((a, b) =>
+    sort === "newest" ? b.createdAt.localeCompare(a.createdAt)
+      : sort === "catalyst" ? (a.catalystDate && a.catalystDate >= today ? a.catalystDate : "9999").localeCompare(b.catalystDate && b.catalystDate >= today ? b.catalystDate : "9999") || b.rankScore - a.rankScore
+        : STATUS_RANK[a.status] - STATUS_RANK[b.status] || b.rankScore - a.rankScore || b.createdAt.localeCompare(a.createdAt));
+  const wanted = Number(sp.card);
+  const at = wanted ? rows.findIndex((c) => c.id === wanted) : -1;
+  const page = paginate(rows, at >= 0 ? Math.floor(at / PAGE) + 1 : Number(sp.page ?? 1), PAGE);
+  const cardHref = (id: number) => hrefWith(params, { card: String(id), page: undefined, source: undefined, status: undefined }, `#card-${id}`);
+
+  const sourceCounts = new Map<string, number>();
+  for (const c of cards) sourceCounts.set(playerFor(c), (sourceCounts.get(playerFor(c)) ?? 0) + 1);
+  const statusCount = (v: string) => bySource.filter((c) => !v || c.status === v).length;
+  const lastDaily = runs.find((r) => r.action === "daily" && r.status !== "running");
+  const running = runs.find((r) => r.action === "daily" && r.status === "running");
+
+  return (
+    <>
+      <h1>Ideas</h1>
+      <details className="card notice small section">
+        <summary><b>How this page works</b></summary>
+        Every thesis card from every desk in one list: the trend desk (watch-list and discovery), the story desk (breaking news), filings, insiders and Congress, unusual options positions, Trump&apos;s posts, your bot&apos;s inbox, and what you noticed yourself.
+        &quot;Best first&quot; puts promoted cards first, then late, then not promoted, each by novelty × materiality. Every promoted and late card is tracked on paper from the next open after the card to the earlier of the day after its catalyst, its time limit or the invalidation being met, whether or not you send it to the Swing ideas log.
+        Late cards (already up a lot or already everywhere in the news) are logged and tracked so the lateness gate can be checked. The activity log at the bottom has everything considered, including what was rejected and why.
+        {!sw && <div className="muted" style={{ marginTop: 6 }}>Sending to the Swing ideas log is not configured yet (SWING_API_URL / SWING_API_USER / SWING_API_PASSWORD).</div>}
+      </details>
+      {down.length > 0 && <p className="small warn">Sources not reporting: {down.map((h) => `${h.source} (${h.status})`).join(", ")}. See Settings.</p>}
+      {running && <p className="small warn">A scan started at {running.startedAt.replace("T", " ").slice(0, 16)}Z is still running; refresh in a few minutes.</p>}
+
+      <details className="section" open>
+        <summary className="small muted">Market panels</summary>
+        <MarketPanels />
+      </details>
+
+      {coming.length > 0 && (
+        <details className="card section" open>
+          <summary><h2>Coming up: dated catalysts on open paper tracks (next 3 weeks)</h2> <span className="small muted">{coming.length}</span></summary>
+          <div className="table-wrap"><table><tbody>
+            {coming.map((u) => (
+              <tr key={u.cardId}>
+                <td className="small" style={{ whiteSpace: "nowrap" }}>{u.date}</td>
+                <td><Direction direction={u.direction} ticker={u.ticker} size="small" /></td>
+                <td className="small">{u.what} <span className="muted">— <a href={`/ideas?days=90&card=${u.cardId}#card-${u.cardId}`}>#{u.cardId}</a> {u.title}</span></td>
+              </tr>
+            ))}
+          </tbody></table></div>
+        </details>
+      )}
+
+      <h2 id="cards" style={{ marginTop: 16 }}>Cards</h2>
+      <div className="toolbar">
+        <FilterLinks params={params} name="days" value={days === 7 ? "" : String(days)} reset={["page", "lpage", "card"]} options={[{ value: "", label: "7 days" }, { value: "30", label: "30 days" }, { value: "90", label: "90 days" }]} />
+        <FilterLinks params={params} name="sort" value={sort === "best" ? "" : sort} reset={["page", "card"]} options={SORTS.map((s) => ({ value: s.value === "best" ? "" : s.value, label: s.label }))} />
+      </div>
+      <div className="toolbar">
+        <FilterLinks params={params} name="status" value={status} reset={["page", "card"]} options={[{ value: "", label: "Any status", count: statusCount("") }, { value: "promoted", label: "Promoted", count: statusCount("promoted") }, { value: "late", label: "Late", count: statusCount("late") }, { value: "not_promoted", label: "Not promoted", count: statusCount("not_promoted") }]} />
+      </div>
+      <div className="toolbar">
+        <FilterLinks params={params} name="source" value={source} reset={["page", "card"]} options={[{ value: "", label: "All sources", count: cards.length }, ...PLAYERS.filter((p) => sourceCounts.get(p)).map((p) => ({ value: p, label: PLAYER_LABEL[p].replace(/^Scout · /, ""), count: sourceCounts.get(p) }))]} />
+      </div>
+      <Pager params={params} name="page" page={page.page} pages={page.pages} total={page.total} label="cards" hash="#cards" />
+      {page.items.map((c) => {
+        const tr = t.get(c.id) ?? null;
+        return (
+          <div key={c.id}>
+            <div className="small muted from-line">From: {fromLine(playerFor(c), termOf.get(c.id) ?? "")}</div>
+            <CardView c={c} track={tr} feedback={fb.get(`card:${c.id}`) ?? null} opposing={opp.get(c.id)} review={reviews.get(c.id) ?? null} actions={<CardActions cardId={c.id} canSend={c.status !== "not_promoted"} sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} excluded={!!tr?.excluded} />} />
+          </div>
+        );
+      })}
+      {page.total === 0 && <section className="card"><p className="muted">{cards.length ? "No cards match these filters." : `No cards in the last ${days} days. The scans run at midday on weekdays and hourly for stories.`}</p></section>}
+      <Pager params={params} name="page" page={page.page} pages={page.pages} total={page.total} label="cards" hash="#cards" />
+
+      <h2 style={{ marginTop: 20 }}>Desk reports</h2>
+      <ActivityLog candidates={candidates.filter((c) => !source || playerOf(c.origin, c.term) === source)} cards={cards} params={params} outcome={lo} lpage={Number(sp.lpage ?? 1)} cardHref={cardHref} />
+      <StoryDesk runs={runs} fb={fb} params={params} spage={Number(sp.spage ?? 1)} />
+      {lastDaily && <TrendScan run={lastDaily} />}
+    </>
+  );
+}

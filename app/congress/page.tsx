@@ -1,4 +1,5 @@
 import SetupNotice from "@/components/SetupNotice";
+import Ticker from "@/components/Ticker";
 import { marketDataFromEnv } from "@/lib/alpaca";
 import { hasDatabase } from "@/lib/db";
 import { panel } from "@/lib/market/panels";
@@ -79,7 +80,7 @@ export default async function CongressPage({ searchParams }: { searchParams: Pro
                 <tr key={`${t.docId}:${t.ord}`}>
                   <td className="small"><a href={reportUrl(t)} target="_blank" rel="noreferrer">{t.filed}</a></td>
                   <td className="small"><a href={`/congress?member=${encodeURIComponent(t.member)}`}>{t.member}</a> <span className="muted">{t.chamber === "Senate" ? "Senate" : t.stateDst}</span></td>
-                  <td><a href={`/congress?symbol=${t.symbol}`}><b className="accent">{t.symbol}</b></a>{t.assetType === "option" && <span className="tag">option</span>}</td>
+                  <td><Ticker symbol={t.symbol} /> <a className="small muted" href={`/congress?symbol=${t.symbol}`} title="All Congress trades in this stock">trades</a>{t.assetType === "option" && <span className="tag">option</span>}</td>
                   <td className={`small ${txClass(t.tx)}`}>{t.tx}</td>
                   <td className="small secondary">{t.owner}</td>
                   <td className="small">{t.amount}</td>

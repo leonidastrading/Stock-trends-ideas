@@ -4,6 +4,7 @@ import { OPTIONS_UNIVERSE } from "@/config/options";
 import { pickSignals } from "@/lib/scout/filings";
 import { OPTIONS_RULES } from "@/lib/scout/options-flow";
 import * as store from "@/lib/scout/store";
+import Ticker from "@/components/Ticker";
 import ResearchButton from "./ResearchButton";
 import { addDays, toEt } from "@/lib/time";
 
@@ -45,7 +46,7 @@ export default async function FilingsPage() {
                   <td><span className="tag">{s.kind}</span></td>
                   <td><b className={s.direction === "long" ? "pos" : "neg"}>{s.direction === "long" ? "▲" : "▼"} {s.symbol}</b></td>
                   <td className="small">{s.trigger[0]?.note}</td>
-                  <td className="small">{c ? (c.cardId ? <a href={`/candidates?days=30&card=${c.cardId}#card-${c.cardId}`}>card #{c.cardId}</a> : `${c.outcome}${c.reason ? `: ${c.reason}` : ""}`) : <span className="muted">queued</span>}</td>
+                  <td className="small">{c ? (c.cardId ? <a href={`/ideas?days=30&card=${c.cardId}#card-${c.cardId}`}>card #{c.cardId}</a> : `${c.outcome}${c.reason ? `: ${c.reason}` : ""}`) : <span className="muted">queued</span>}</td>
                 </tr>
               );
             })}</tbody>
@@ -61,7 +62,7 @@ export default async function FilingsPage() {
             {buys.slice(0, 60).map((b) => (
               <tr key={b.accession}>
                 <td className="small">{b.filed}</td>
-                <td><b>{b.symbol}</b> <span className="small muted">{b.issuerName}</span></td>
+                <td>{b.symbol ? <Ticker symbol={b.symbol} /> : null} <span className="small muted">{b.issuerName}</span></td>
                 <td className="small">{b.owner} <span className="muted">({b.role})</span></td>
                 <td className="num">{usd(b.value)}</td>
                 <td className="num">{b.pctIncrease === null ? "—" : `+${b.pctIncrease}%`}</td>
@@ -88,7 +89,7 @@ export default async function FilingsPage() {
             {flags.slice(0, 60).map((f) => (
               <tr key={f.date + f.contract}>
                 <td className="small">{f.date}</td>
-                <td><b className={f.type === "put" ? "neg" : "pos"}>{f.symbol}</b> <span className="small">{f.expiry} ${f.strike} {f.type}</span> <span className="small muted">(stock ${f.spot.toFixed(2)}, {Math.round(Math.abs(f.strike / f.spot - 1) * 100)}% out)</span></td>
+                <td><Ticker symbol={f.symbol} className={f.type === "put" ? "neg" : "pos"} /> <span className="small">{f.expiry} ${f.strike} {f.type}</span> <span className="small muted">(stock ${f.spot.toFixed(2)}, {Math.round(Math.abs(f.strike / f.spot - 1) * 100)}% out)</span></td>
                 <td className="num">+{(f.oi - f.prevOi).toLocaleString("en-US")}</td>
                 <td className="num small">{f.oi.toLocaleString("en-US")}</td>
                 <td className="num">{f.premiumUsd ? usd(f.premiumUsd) : "—"}</td>

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { chartUrl } from "@/config/links";
 
 /**
  * A small, safe renderer for the chat's replies (no HTML is injected): headings, bullet and numbered lists,
@@ -64,11 +65,11 @@ export function inline(text: string, tickers: ReadonlySet<string>): ReactNode[] 
     else if (m[2]) out.push(<code key={k}>{m[2].slice(1, -1)}</code>);
     else if (m[3] || m[4]) {
       const s = m[3] ?? m[4];
-      out.push(...s.split(/(#\d+)/).map((part, j) => (/^#\d+$/.test(part) ? <a key={`${k}-${j}`} href={`/candidates?days=365&card=${part.slice(1)}#card-${part.slice(1)}`}>{part}</a> : part)));
+      out.push(...s.split(/(#\d+)/).map((part, j) => (/^#\d+$/.test(part) ? <a key={`${k}-${j}`} href={`/ideas?days=365&card=${part.slice(1)}#card-${part.slice(1)}`}>{part}</a> : part)));
     } else {
       const sym = m[5].replace(/^\$/, "");
       const known = tickers.has(sym) && sym.length > 1 && !AMBIGUOUS.has(sym);
-      out.push(m[5].startsWith("$") || known ? <b key={k} className="accent">{m[5]}</b> : m[5]);
+      out.push(m[5].startsWith("$") || known ? <a key={k} className="ticker accent" href={chartUrl(sym)} target="_blank" rel="noreferrer">{m[5]}</a> : m[5]);
     }
     last = i + m[0].length;
   }

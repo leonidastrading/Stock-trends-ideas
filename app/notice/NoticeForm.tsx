@@ -46,11 +46,11 @@ export default function NoticeForm() {
       {long && !busy && !extracted && <p className="small secondary">Long text ({f.observation.length.toLocaleString("en-US")} characters): the scout will read it for tradeable ideas (up to 12), then research each one in the background. They are logged as yours.</p>}
       {extracted && (
         <div className="small">
-          <p><b>{extracted.length} idea(s) found</b>, researching now; cards appear on <a href="/candidates?days=1">Candidates</a> and in the <a href="/inbox">Inbox</a> track record in a few minutes:</p>
+          <p><b>{extracted.length} idea(s) found</b>, researching now; cards appear on <a href="/ideas?sort=newest">Ideas</a> and in the <a href="/inbox">Inbox</a> track record in a few minutes:</p>
           <ul>{extracted.map((x) => <li key={x.term}>{x.term}{x.tickers.length ? ` (${x.tickers.join(", ")})` : ""}{x.direction ? `, ${x.direction}` : ""}</li>)}</ul>
         </div>
       )}
-      {result && <p className="small"><b>Card #{result.cardId}</b> logged as <span className={`tag ${result.status}`}>{result.status.replace("_", " ")}</span> — <a href={`/candidates?days=1&card=${result.cardId}#card-${result.cardId}`}>open it</a>.</p>}
+      {result && <p className="small"><b>Card #{result.cardId}</b> logged as <span className={`tag ${result.status}`}>{result.status.replace("_", " ")}</span> — <a href={`/ideas?days=1&card=${result.cardId}#card-${result.cardId}`}>open it</a>.</p>}
     </form>
   );
 }

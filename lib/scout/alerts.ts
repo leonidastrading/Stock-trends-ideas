@@ -12,7 +12,7 @@ const VERDICT: Record<string, { label: string; tag: string }> = {
 };
 
 export function cardLink(env: NodeJS.ProcessEnv, id: number): string | undefined {
-  return env.DASHBOARD_URL ? `${env.DASHBOARD_URL.replace(/\/$/, "")}/candidates?days=30&card=${id}#card-${id}` : undefined;
+  return env.DASHBOARD_URL ? `${env.DASHBOARD_URL.replace(/\/$/, "")}/ideas?days=30&card=${id}#card-${id}` : undefined;
 }
 
 /** Pure: the pushes for a set of new cards; more than three are bundled into one. */
@@ -22,7 +22,7 @@ export function cardPushes(cards: Array<StoredCard & { story: boolean }>, env: N
       title: `Trend scout: ${cards.length} new trade cards`,
       message: cards.map((c) => `${arrow(c.direction)} ${c.primaryTicker} (${c.story ? "story" : c.status}) ${c.card.title}`).join("\n"),
       tags: ["newspaper"],
-      click: env.DASHBOARD_URL ? `${env.DASHBOARD_URL.replace(/\/$/, "")}/candidates` : undefined,
+      click: env.DASHBOARD_URL ? `${env.DASHBOARD_URL.replace(/\/$/, "")}/ideas?sort=newest` : undefined,
     }];
   }
   return cards.map((c) => ({

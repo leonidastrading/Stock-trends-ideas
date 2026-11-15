@@ -1,9 +1,11 @@
+import { chartUrl } from "@/config/links";
+
 /** The card's call as colour and arrow only: green ▲ = long, red ▼ = short. */
 export default function Direction({ direction, ticker, size = "big", name, warn = false }: { direction: "long" | "short"; ticker: string; size?: "big" | "small"; name?: string | null; warn?: boolean }) {
   const badge = (
-    <span className={`call ${direction === "long" ? "bull" : "bear"} ${size}`} title={direction === "long" ? "long (buy)" : "short (sell short)"}>
+    <a className={`call ${direction === "long" ? "bull" : "bear"} ${size}`} href={chartUrl(ticker)} target="_blank" rel="noreferrer" title={`${direction === "long" ? "long (buy)" : "short (sell short)"} · open ${ticker} on TradingView`}>
       {direction === "long" ? "▲" : "▼"} {ticker}
-    </span>
+    </a>
   );
   if (!name) return badge;
   return (

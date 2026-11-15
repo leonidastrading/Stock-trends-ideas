@@ -13,14 +13,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <nav>
           <span className="brand">Trend scout</span>
-          <Link href="/digest">Digest</Link>
+          <Link href="/ideas">Ideas</Link>
           <Link href="/chat">Chat</Link>
-          <Link href="/stories">Stories</Link>
           <Link href="/notice">I noticed something</Link>
           <Link href="/inbox">Inbox</Link>
           <Link href="/filings">Filings</Link>
           <Link href="/congress">Congress</Link>
-          <Link href="/candidates">Candidates</Link>
           <Link href="/watchlist">Watch-list</Link>
           <Link href="/scoreboard">Scoreboard</Link>
           <Link href="/scoring">Scoring</Link>

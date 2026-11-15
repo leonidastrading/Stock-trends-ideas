@@ -24,7 +24,7 @@ export function buildDigestEmail(cards: StoredCard[], weekKey: string, dashboard
 <p style="color:#555;font-size:12px;margin:0 0 8px">PAPER ONLY — the scout suggests and records; it never places an order.</p>
 <p>Top promoted cards this week, ranked by novelty × materiality. Lateness = primary ticker's 30-day move and mainstream stories in 30 days.</p>
 <table style="border-collapse:collapse;width:100%"><thead><tr><th style="text-align:left;padding:6px 8px;font-size:12px;color:#555">Card</th><th style="text-align:left;padding:6px 8px;font-size:12px;color:#555">Lateness</th></tr></thead><tbody>${rows || `<tr><td colspan="2" style="padding:8px;color:#777">No promoted cards this week.</td></tr>`}</tbody></table>
-${dashboardUrl ? `<p style="font-size:12px"><a href="${esc(dashboardUrl)}/digest">Open the digest</a> to send a card to the Swing ideas log.</p>` : ""}
+${dashboardUrl ? `<p style="font-size:12px"><a href="${esc(dashboardUrl)}/ideas">Open the digest</a> to send a card to the Swing ideas log.</p>` : ""}
 </div>`;
   const text = [`Trend scout ${weekKey} (paper only)`, ...cards.map((c) => `- ${c.direction === "long" ? "▲" : "▼"} ${c.primaryTicker}: ${c.card.title} [${c.kind}, ${c.origin}] rank ${c.rankScore}; lateness ${c.card.lateness.stock_move_30d_pct.toFixed(1)}% / ${c.card.lateness.news_stories_30d} stories`)].join("\n");
   return { subject, html, text };

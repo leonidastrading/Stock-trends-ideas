@@ -9,6 +9,7 @@ import { fmtEt, toEt } from "@/lib/time";
 import ImportForm from "../notice/ImportForm";
 import CopyBox from "./CopyBox";
 import RefreshDigest from "./RefreshDigest";
+import Ticker from "@/components/Ticker";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -70,12 +71,12 @@ export default async function InboxPage() {
                 <div key={i} className="digest-item">
                   <div>
                     {x.breaking && <span className="tag not_promoted">breaking</span>}
-                    <b className={x.direction === "long" ? "pos" : x.direction === "short" ? "neg" : ""}>{x.direction === "long" ? "▲ " : x.direction === "short" ? "▼ " : ""}{x.tickers.slice(0, 4).join(", ")}</b> <b>{x.title}</b>
+                    <b className={x.direction === "long" ? "pos" : x.direction === "short" ? "neg" : ""}>{x.direction === "long" ? "▲ " : x.direction === "short" ? "▼ " : ""}</b>{x.tickers.slice(0, 4).map((tk, j) => <span key={tk}>{j ? ", " : ""}<Ticker symbol={tk} className={x.direction === "long" ? "pos" : x.direction === "short" ? "neg" : "accent"} /></span>)} <b>{x.title}</b>
                   </div>
                   <div className="small">{x.summary}</div>
                   <div className="small muted">
                     {"●".repeat(Math.max(1, Math.min(5, x.importance)))}{"○".repeat(5 - Math.max(1, Math.min(5, x.importance)))} · {x.date} · {x.source}
-                    {c ? <> · <a href={`/candidates?days=365&card=${c.id}#card-${c.id}`}>card #{c.id} ({c.status.replace("_", " ")})</a></> : null}
+                    {c ? <> · <a href={`/ideas?days=365&card=${c.id}#card-${c.id}`}>card #{c.id} ({c.status.replace("_", " ")})</a></> : null}
                   </div>
                 </div>
               );
@@ -86,7 +87,7 @@ export default async function InboxPage() {
             {news.length === 0 && <p className="small muted">No news in these documents.</p>}
             {news.map((x, i) => (
               <div key={i} className="digest-item">
-                <div>{x.breaking && <span className="tag not_promoted">breaking</span>}<b>{x.headline}</b>{x.tickers.length ? <span className="small muted"> · {x.tickers.slice(0, 4).join(", ")}</span> : null}</div>
+                <div>{x.breaking && <span className="tag not_promoted">breaking</span>}<b>{x.headline}</b>{x.tickers.length ? <span className="small"> · {x.tickers.slice(0, 4).map((tk, j) => <span key={tk}>{j ? ", " : ""}<Ticker symbol={tk} /></span>)}</span> : null}</div>
                 <div className="small">{x.summary}</div>
                 <div className="small muted">{"●".repeat(Math.max(1, Math.min(5, x.importance)))}{"○".repeat(5 - Math.max(1, Math.min(5, x.importance)))} · {x.date} · {x.source}</div>
               </div>
@@ -125,7 +126,7 @@ export default async function InboxPage() {
                           const c = o.cardId ? cardById.get(o.cardId) : undefined;
                           return (
                             <li key={i}>
-                              {o.term.replace(/^inbox: |^stream (host|agent): /, "")}: {o.cardId ? <a href={`/candidates?days=365&card=${o.cardId}#card-${o.cardId}`}>{c ? `${c.direction === "long" ? "▲" : "▼"} ${c.primaryTicker}, ` : ""}{o.outcome.replace(/^card: /, "")}</a> : <span className="muted">{o.outcome}{o.reason ? ` (${o.reason})` : ""}</span>}
+                              {o.term.replace(/^inbox: |^stream (host|agent): /, "")}: {o.cardId ? <a href={`/ideas?days=365&card=${o.cardId}#card-${o.cardId}`}>{c ? `${c.direction === "long" ? "▲" : "▼"} ${c.primaryTicker}, ` : ""}{o.outcome.replace(/^card: /, "")}</a> : <span className="muted">{o.outcome}{o.reason ? ` (${o.reason})` : ""}</span>}
                             </li>
                           );
                         })}

@@ -51,7 +51,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
               {q.changePct !== null && <span className={q.changePct >= 0 ? "pos" : "neg"}> {pct(q.changePct, 2)} {sessionLabel(q)}</span>}
             </span>
           ) : null}
-          {opposing?.length ? <span className="tag warn" style={{ marginLeft: 8 }}>⚠ opposite call on {c.primaryTicker}: {opposing.map((id) => <a key={id} href={`/candidates?days=90&card=${id}#card-${id}`}>#{id} </a>)}</span> : null}</div>
+          {opposing?.length ? <span className="tag warn" style={{ marginLeft: 8 }}>⚠ opposite call on {c.primaryTicker}: {opposing.map((id) => <a key={id} href={`/ideas?days=90&card=${id}#card-${id}`}>#{id} </a>)}</span> : null}</div>
         <div className="small secondary">
           {nextE ? <>Next earnings <b>~{fmtDay(nextE)}</b> <span className="muted">({info!.nextBasis})</span></>
             : info?.lastEarnings ? <>Next earnings: not enough history to estimate <span className="muted">(last release {fmtDay(info.lastEarnings)})</span></>

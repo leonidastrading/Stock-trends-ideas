@@ -1,3 +1,4 @@
+import Ticker from "@/components/Ticker";
 import { bySymbol } from "@/lib/scout/congress";
 import { loadPanels } from "@/lib/scout/dashboard-warm";
 import * as store from "@/lib/scout/store";
@@ -64,7 +65,7 @@ export default async function MarketPanels() {
           <Head title={`Earnings · next 5 days${earnings.data ? ` (${earnings.data.total})` : ""}`} note="largest first" updatedAt={earnings.updatedAt} error={earnings.error} />
           <table><tbody>
             {(earnings.data?.rows ?? []).map((r) => (
-              <tr key={r.symbol + r.date}><td><b className="accent">{r.symbol}</b> <span className="small muted">{cap(r.marketCap)}</span></td><td className="small">{fmtDay(r.date)}{r.time ? <span className="muted"> · {r.time}</span> : null}</td><td className="num small">{r.eps ? `EPS est. ${r.eps}` : ""}</td></tr>
+              <tr key={r.symbol + r.date}><td><Ticker symbol={r.symbol} /> <span className="small muted">{cap(r.marketCap)}</span></td><td className="small">{fmtDay(r.date)}{r.time ? <span className="muted"> · {r.time}</span> : null}</td><td className="num small">{r.eps ? `EPS est. ${r.eps}` : ""}</td></tr>
             ))}
             {!earnings.data?.rows.length && <tr><td className="muted">Not loaded yet.</td></tr>}
           </tbody></table>
@@ -74,7 +75,7 @@ export default async function MarketPanels() {
           <Head title="Government contracts · latest" note="USAspending, listed companies" updatedAt={contracts.updatedAt} error={contracts.error} />
           <table><tbody>
             {(contracts.data ?? []).map((r, i) => (
-              <tr key={i} title={`${r.recipient}: ${r.description}`}><td><b className="accent">{r.ticker}</b></td><td className="small secondary">{r.agency}</td><td className="num">{money(r.amount)}</td><td className="num small muted">{fmtDay(r.date)}</td></tr>
+              <tr key={i} title={`${r.recipient}: ${r.description}`}><td><Ticker symbol={r.ticker} /></td><td className="small secondary">{r.agency}</td><td className="num">{money(r.amount)}</td><td className="num small muted">{fmtDay(r.date)}</td></tr>
             ))}
             {!contracts.data?.length && <tr><td className="muted">{contracts.error ? "Unavailable right now." : "No listed companies among the largest recent awards."}</td></tr>}
           </tbody></table>
