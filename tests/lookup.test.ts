@@ -25,7 +25,13 @@ describe("ticker suggestions", async () => {
     { s: "PLTR", n: "Palantir Technologies Inc. Class A Common Stock", x: "NASDAQ" },
     { s: "BRK.B", n: "Berkshire Hathaway Inc. Class B", x: "NYSE" },
     { s: "APPLX", n: "Applied Pink Sheet Co", x: "OTC" },
+    { s: "SPCX", n: "Space Exploration Technologies Corp. Class A Common Stock", x: "NASDAQ" },
+    { s: "GOOGL", n: "Alphabet Inc. Class A Common Stock", x: "NASDAQ" },
   ];
+  it("decodes HTML entities left in news text", async () => {
+    const { decodeEntities } = await import("@/lib/alpaca");
+    expect(decodeEntities("Trump&#39;s plan &amp; more &quot;now&quot;")).toBe('Trump\'s plan & more "now"');
+  });
   it("matches tickers first, then company names", () => {
     expect(suggest(list, "nv").map((s) => s.symbol)).toEqual(["NVDA", "NVDL"]);
     expect(suggest(list, "nvidia")[0]).toEqual({ symbol: "NVDA", name: "NVIDIA Corporation", exchange: "NASDAQ" });
@@ -41,7 +47,11 @@ describe("ticker suggestions", async () => {
     expect(resolveTyped(list, "aple")).toBe("APLE");
     expect(resolveTyped([], "msft")).toBe("MSFT"); // no listing (Alpaca not set up): the text as a ticker
     expect(resolveTyped([], "microsoft corp")).toBeNull();
-    expect(resolveTyped(list, "spacex")).toBeNull(); // not listed: the box offers to research it as a theme
+    expect(resolveTyped(list, "spacex")).toBe("SPCX"); // a nickname
+    expect(resolveTyped(list, "space x")).toBe("SPCX");
+    expect(suggest(list, "googl")[0].symbol).toBe("GOOGL");
+    expect(suggest(list, "google")[0].symbol).toBe("GOOGL");
+    expect(resolveTyped(list, "anthropic")).toBeNull(); // private: the box offers to research it as a theme
     expect(resolveTyped(list, "zzzz")).toBeNull();
     expect(cleanName("Alibaba Group Holding Limited American Depositary Shares each representing eight Ordinary share")).toBe("Alibaba Group Holding Limited");
   });

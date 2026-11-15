@@ -17,6 +17,12 @@ const ALLOWED: Record<string, RegExp[]> = {
   [PAPER_TRADING_HOST]: [/^\/v2\/calendar$/, /^\/v2\/assets$/, /^\/v2\/assets\/[A-Z][A-Z.]{0,9}$/],
 };
 
+/** Pure: HTML entities left in news text ("Trump&#39;s" → "Trump's"). */
+export function decodeEntities(s: string): string {
+  return s.replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
+}
+
 export interface AlpacaCreds {
   keyId: string;
   secretKey: string;
@@ -153,7 +159,7 @@ export class AlpacaClient {
         DATA_HOST, "/v1beta1/news",
         { start: start.toISOString(), end: end.toISOString(), symbols: symbols.join(","), sort: "desc", include_content: false, exclude_contentless: false, limit: 50, page_token: pageToken },
       );
-      for (const n of resp.news ?? []) out.push({ id: n.id, ts: new Date(n.created_at).toISOString(), headline: n.headline ?? "", summary: n.summary ?? "", symbols: n.symbols ?? [], source: n.source ?? "", url: n.url ?? "" });
+      for (const n of resp.news ?? []) out.push({ id: n.id, ts: new Date(n.created_at).toISOString(), headline: decodeEntities(n.headline ?? ""), summary: decodeEntities(n.summary ?? ""), symbols: n.symbols ?? [], source: n.source ?? "", url: n.url ?? "" });
       pageToken = resp.next_page_token ?? undefined;
     } while (pageToken && out.length < max);
     return out;

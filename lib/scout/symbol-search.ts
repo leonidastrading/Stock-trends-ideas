@@ -9,6 +9,15 @@ const NAME_NOISE = /\b(common stock|ordinary shares?|class [a-c]( common stock| 
 /** Pure: a company name as people say it ("NVIDIA Corporation Common Stock" → "NVIDIA Corporation"). */
 export const cleanName = (n: string) => n.replace(NAME_NOISE, "").replace(/\s*[,;]\s*$/, "").replace(/\s{2,}/g, " ").replace(/[\s,;-]+$/, "").trim();
 
+/** What people call a company when it is not in its listed name (checked against the live list: only listed symbols are offered). */
+const NICKNAMES: Record<string, string[]> = {
+  spacex: ["SPCX"], "space x": ["SPCX"], starlink: ["SPCX"], google: ["GOOGL", "GOOG"], alphabet: ["GOOGL", "GOOG"], facebook: ["META"], instagram: ["META"],
+  berkshire: ["BRK.B", "BRK.A"], "jp morgan": ["JPM"], jpmorgan: ["JPM"], chase: ["JPM"], "goldman": ["GS"], "coke": ["KO"], "coca cola": ["KO"], pepsi: ["PEP"],
+  walmart: ["WMT"], disney: ["DIS"], tsmc: ["TSM"], "taiwan semi": ["TSM"], asml: ["ASML"], tesla: ["TSLA"], amazon: ["AMZN"], microsoft: ["MSFT"], apple: ["AAPL"],
+  nvidia: ["NVDA"], netflix: ["NFLX"], "s&p": ["SPY"], "s and p": ["SPY"], "nasdaq 100": ["QQQ"], "russell": ["IWM"], gold: ["GLD"], bitcoin: ["IBIT"],
+  palantir: ["PLTR"], "super micro": ["SMCI"], supermicro: ["SMCI"], "home depot": ["HD"], "united health": ["UNH"], unitedhealth: ["UNH"],
+};
+
 const norm = (s: string) => s.toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
 const MAJOR = new Set(["NASDAQ", "NYSE", "ARCA", "AMEX", "BATS"]);
 
@@ -19,7 +28,10 @@ export function suggest(list: readonly Listing[], typed: string, limit = 8): Sug
   const sym = raw.toUpperCase().replace(/-/g, ".");
   const q = norm(raw);
   const scored: Array<[number, Listing]> = [];
+  // Nicknames first: "spacex" → SPCX (when typed far enough to be unambiguous).
+  const nick = new Set(q.length >= 3 ? Object.entries(NICKNAMES).filter(([k]) => k.startsWith(q) || q.startsWith(k)).flatMap(([, v]) => v) : []);
   for (const l of list) {
+    if (nick.has(l.s) && l.s !== sym) { scored.push([1 + [...nick].indexOf(l.s) / 10, l]); continue; }
     let score = -1;
     if (l.s === sym) score = 0;
     else if (l.s.startsWith(sym) && /^[A-Z.]+$/.test(sym)) score = 10 + l.s.length - sym.length;
@@ -27,7 +39,7 @@ export function suggest(list: readonly Listing[], typed: string, limit = 8): Sug
       const name = norm(cleanName(l.n));
       if (name.startsWith(q)) score = 20 + Math.min(name.length, 60) / 100;
       else if (name.includes(` ${q}`)) score = 30 + Math.min(name.length, 60) / 100;
-      else if (q.length >= 4 && name.includes(q)) score = 40;
+      else if (q.length >= 4 && (name.includes(q) || name.replace(/ /g, "").includes(q.replace(/ /g, "")))) score = 40;
     }
     if (score < 0) continue;
     if (!MAJOR.has(l.x)) score += 5;
