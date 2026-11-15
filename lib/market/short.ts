@@ -83,10 +83,15 @@ async function finra(symbol: string, fetchImpl?: typeof fetch): Promise<Base | n
   const f = fetchImpl ?? fetch;
   const res = await f("https://api.finra.org/data/group/otcMarket/name/consolidatedShortInterest", {
     method: "POST", headers: { accept: "application/json", "content-type": "application/json", "user-agent": BROWSER["user-agent"] },
-    body: JSON.stringify({ limit: 6, compareFilters: [{ compareType: "equal", fieldName: "symbolCode", fieldValue: symbol }], sortFields: ["-settlementDate"] }),
+    // No sortFields (FINRA refuses them on this dataset): ask for the last 60 days and sort here.
+    body: JSON.stringify({
+      limit: 20,
+      compareFilters: [{ compareType: "equal", fieldName: "symbolCode", fieldValue: symbol }],
+      dateRangeFilters: [{ fieldName: "settlementDate", startDate: new Date(Date.now() - 60 * 86400_000).toISOString().slice(0, 10), endDate: new Date().toISOString().slice(0, 10) }],
+    }),
   });
   const text = await res.text();
-  if (!res.ok) throw new Error(`FINRA ${res.status}: ${text.replace(/\s+/g, " ").slice(0, 120)}`);
+  if (!res.ok) throw new Error(`FINRA ${res.status}: ${(() => { try { return String(JSON.parse(text).message ?? text); } catch { return text; } })().replace(/\s+/g, " ").slice(0, 300)}`);
   return parseFinraShort(symbol, text.trim() ? JSON.parse(text) : []);
 }
 
@@ -115,7 +120,7 @@ export async function shortData(symbols: string[], fetchImpl?: typeof fetch): Pr
         if (base) break;
         errs.push(`${name}: no report`);
       } catch (err) {
-        errs.push(`${name}: ${err instanceof Error ? err.message.slice(0, 140) : String(err)}`);
+        errs.push(`${name}: ${err instanceof Error ? err.message.slice(0, 320) : String(err)}`);
       }
     }
     if (!base) { out.errors.set(symbol, errs.join("; ")); continue; }
