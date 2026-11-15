@@ -151,3 +151,15 @@ a.chip { color: inherit; text-decoration: none; }
 .chat-msg.assistant .chat-text li > ul { margin: 2px 0 4px; padding-left: 18px; }
 .chat-msg.assistant .chat-text code { font-size: 13px; padding: 0 4px; border-radius: 4px; background: var(--grid); }
 .chat-msg.assistant .chat-text > :last-child { margin-bottom: 0; }
+/* Paging, filters and collapsible sections */
+.pager { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+.pager-current { padding: 0 6px; border: 1px solid var(--accent); border-radius: 4px; }
+.filter-links { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.filter-links .chip { font-size: 13px; padding: 2px 8px; }
+.filter-links .chip.active { border-color: var(--accent); color: var(--accent); }
+details.section > summary { cursor: pointer; list-style: none; }
+details.section > summary::-webkit-details-marker { display: none; }
+details.section > summary h2 { display: inline; }
+details.section > summary::before { content: "▸ "; color: var(--text-muted); }
+details.section[open] > summary::before { content: "▾ "; }
+.toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 6px 0 10px; }

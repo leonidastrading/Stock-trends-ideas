@@ -50,7 +50,7 @@ export default function NoticeForm() {
           <ul>{extracted.map((x) => <li key={x.term}>{x.term}{x.tickers.length ? ` (${x.tickers.join(", ")})` : ""}{x.direction ? `, ${x.direction}` : ""}</li>)}</ul>
         </div>
       )}
-      {result && <p className="small"><b>Card #{result.cardId}</b> logged as <span className={`tag ${result.status}`}>{result.status.replace("_", " ")}</span> — <a href={`/candidates?days=1#card-${result.cardId}`}>open it</a>.</p>}
+      {result && <p className="small"><b>Card #{result.cardId}</b> logged as <span className={`tag ${result.status}`}>{result.status.replace("_", " ")}</span> — <a href={`/candidates?days=1&card=${result.cardId}#card-${result.cardId}`}>open it</a>.</p>}
     </form>
   );
 }

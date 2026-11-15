@@ -75,7 +75,7 @@ export default async function InboxPage() {
                   <div className="small">{x.summary}</div>
                   <div className="small muted">
                     {"●".repeat(Math.max(1, Math.min(5, x.importance)))}{"○".repeat(5 - Math.max(1, Math.min(5, x.importance)))} · {x.date} · {x.source}
-                    {c ? <> · <a href={`/candidates?days=365#card-${c.id}`}>card #{c.id} ({c.status.replace("_", " ")})</a></> : null}
+                    {c ? <> · <a href={`/candidates?days=365&card=${c.id}#card-${c.id}`}>card #{c.id} ({c.status.replace("_", " ")})</a></> : null}
                   </div>
                 </div>
               );
@@ -125,7 +125,7 @@ export default async function InboxPage() {
                           const c = o.cardId ? cardById.get(o.cardId) : undefined;
                           return (
                             <li key={i}>
-                              {o.term.replace(/^inbox: |^stream (host|agent): /, "")}: {o.cardId ? <a href={`/candidates?days=365#card-${o.cardId}`}>{c ? `${c.direction === "long" ? "▲" : "▼"} ${c.primaryTicker}, ` : ""}{o.outcome.replace(/^card: /, "")}</a> : <span className="muted">{o.outcome}{o.reason ? ` (${o.reason})` : ""}</span>}
+                              {o.term.replace(/^inbox: |^stream (host|agent): /, "")}: {o.cardId ? <a href={`/candidates?days=365&card=${o.cardId}#card-${o.cardId}`}>{c ? `${c.direction === "long" ? "▲" : "▼"} ${c.primaryTicker}, ` : ""}{o.outcome.replace(/^card: /, "")}</a> : <span className="muted">{o.outcome}{o.reason ? ` (${o.reason})` : ""}</span>}
                             </li>
                           );
                         })}

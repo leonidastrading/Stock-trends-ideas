@@ -45,7 +45,7 @@ export default async function FilingsPage() {
                   <td><span className="tag">{s.kind}</span></td>
                   <td><b className={s.direction === "long" ? "pos" : "neg"}>{s.direction === "long" ? "▲" : "▼"} {s.symbol}</b></td>
                   <td className="small">{s.trigger[0]?.note}</td>
-                  <td className="small">{c ? (c.cardId ? <a href={`/candidates?days=30#card-${c.cardId}`}>card #{c.cardId}</a> : `${c.outcome}${c.reason ? `: ${c.reason}` : ""}`) : <span className="muted">queued</span>}</td>
+                  <td className="small">{c ? (c.cardId ? <a href={`/candidates?days=30&card=${c.cardId}#card-${c.cardId}`}>card #{c.cardId}</a> : `${c.outcome}${c.reason ? `: ${c.reason}` : ""}`) : <span className="muted">queued</span>}</td>
                 </tr>
               );
             })}</tbody>

@@ -2,6 +2,7 @@ import CardActions from "@/components/CardActions";
 import Direction from "@/components/Direction";
 import Feedback from "@/components/Feedback";
 import CardView from "@/components/CardView";
+import Pager, { FilterLinks, paginate } from "@/components/Pager";
 import SetupNotice from "@/components/SetupNotice";
 import { hasDatabase } from "@/lib/db";
 import { opposingCalls, upcomingCatalysts } from "@/lib/scout/calendar";
@@ -17,8 +18,14 @@ interface StoriesDetail { headlinesRead: number; detected: Array<{ key: string; 
 interface GapRow { key: string; ticker: string; storyDate: string; ageDays: number; gap: boolean; loud: boolean; building?: boolean; quiet: boolean; why: string }
 interface FollowupDetail { checked: GapRow[]; researched: Array<{ term: string; outcome: string; reason?: string; cardId?: number }>; skipped: Array<{ key: string; reason: string }>; error: string | null }
 
-export default async function StoriesPage() {
+const GROUPS_PER_PAGE = 8;
+const SCAN_PER_PAGE = 15;
+
+export default async function StoriesPage({ searchParams }: { searchParams: Promise<{ page?: string; spage?: string; status?: string }> }) {
   if (!hasDatabase()) return <SetupNotice />;
+  const sp = await searchParams;
+  const status = ["promoted", "late", "not_promoted"].includes(sp.status ?? "") ? sp.status! : "";
+  const params = { page: sp.page, spage: sp.spage, status: status || undefined };
   const [runs, cards, tracks, candidates, fb, recent] = await Promise.all([store.recentRuns(30), store.cardsSince(14), store.allTracks(), store.candidatesSince(14), store.latestFeedback(), store.cardsSince(120)]);
   const opp = opposingCalls(recent, tracks);
   const reviews = await store.allReviews();
@@ -31,14 +38,20 @@ export default async function StoriesPage() {
   const t = new Map(tracks.map((x) => [x.cardId, x]));
   const sw = swingConfigured();
   const groups = new Map<string, typeof storyCards>();
-  for (const c of storyCards) {
+  for (const c of storyCards.filter((x) => !status || x.status === status)) {
     const key = termOf(c.id).replace(/^story: /, "").split(" → ")[0];
     groups.set(key, [...(groups.get(key) ?? []), c]);
   }
+  const sortedGroups = [...groups.entries()].sort((a, b) => b[1][0].createdAt.localeCompare(a[1][0].createdAt));
+  const groupPage = paginate(sortedGroups, Number(sp.page ?? 1), GROUPS_PER_PAGE);
+  const detected = d ? d.detected.slice().sort((a, b) => (b.latest ?? "").localeCompare(a.latest ?? "")) : [];
+  const scanPage = paginate(detected, Number(sp.spage ?? 1), SCAN_PER_PAGE);
+  const statusCount = (v: string) => storyCards.filter((c) => !v || c.status === v).length;
   return (
     <>
       <h1>Stories</h1>
-      <section className="card notice small">
+      <details className="card notice small section">
+        <summary><b>How the story desk works</b></summary>
         Breaking stories from the news stream (a CEO scandal, a war, a ban, a pivot, a regulator's move) and the trades they imply, direct and one step away. Every trade is a card that went through the same gates:
         most are logged as <span className="tag late">late</span> because the story is already everywhere, and they are tracked on paper anyway. The Scoring page's "promoted versus late" table is where this style gets its verdict.
         Runs with the midday scan and whenever "Scan stories now" is pressed; for breaking news during the day, point an hourly cron-job.org job at <code>/api/cron/stories</code>.
@@ -46,10 +59,10 @@ export default async function StoriesPage() {
         The desk asks of every story: what does it reveal, whose incentives just changed, is the market's reaction smaller than the story's intensity, is the company priced as one person's company, and what else is moving the stock?
         A story whose coverage grows every day is marked <span className="tag late">building</span> and read again at once, and the desk sees public attention (Wikipedia views of the people in it, against normal).
         Stories come in stages: when an institution acts on a story seen in the last 30 days (a board investigation, a congressional letter, a regulator, a resignation), it is read again at once as <span className="tag late">stage 2</span>, 3…, with the earlier stages in front of the desk.
-      </section>
+      </details>
       {fu && (
-        <section className="card">
-          <h2>Reaction gaps · checked {daily ? fmtEt(daily.startedAt) : ""}</h2>
+        <details className="card section">
+          <summary><h2>Reaction gaps · checked {daily ? fmtEt(daily.startedAt) : ""}</h2> <span className="small muted">{fu.checked.length} checked · {fu.checked.filter((g) => g.gap).length} gap(s)</span></summary>
           <p className="small secondary" style={{ marginTop: -4 }}>Stories seen 1–10 days ago, looked at again once a day: still loud in the news (recent stories a day at least twice the pre-story pace) or still growing day after day, while the stock has moved less than 5% against SPY. A gap goes back to the desk as a follow-up, once per story.</p>
           {fu.error && <p className="small warn">{fu.error}</p>}
           {fu.checked.length === 0 && !fu.error && <p className="small muted">No recent stories to check yet.</p>}
@@ -64,21 +77,21 @@ export default async function StoriesPage() {
                   <tr key={g.key + g.ticker}>
                     <td>{g.key}</td><td><b>{g.ticker}</b></td><td className="small">{g.storyDate} · {g.ageDays}d ago</td>
                     <td className="small">{g.gap ? <span className="tag ok">gap</span> : <span className="tag">{!g.loud && !g.building ? "faded" : "already moved"}</span>}{g.building ? <span className="tag late">building</span> : null} <span className="secondary">{g.why}</span></td>
-                    <td className="small">{res.length ? res.map((r) => <div key={r.term}>{r.term.split(" → ")[1]}: {r.cardId ? <a href={`#card-${r.cardId}`}>{r.outcome}</a> : `${r.outcome}${r.reason ? ` (${r.reason})` : ""}`}</div>) : sk ? <span className="muted">skipped: {sk.reason}</span> : <span className="muted">—</span>}</td>
+                    <td className="small">{res.length ? res.map((r) => <div key={r.term}>{r.term.split(" → ")[1]}: {r.cardId ? <a href={`/candidates?days=30&card=${r.cardId}#card-${r.cardId}`}>{r.outcome}</a> : `${r.outcome}${r.reason ? ` (${r.reason})` : ""}`}</div>) : sk ? <span className="muted">skipped: {sk.reason}</span> : <span className="muted">—</span>}</td>
                   </tr>
                 );
               })}</tbody>
             </table></div>
           )}
-        </section>
+        </details>
       )}
       {d && (
-        <section className="card">
-          <h2>Last story scan · {last ? fmtEt(last.startedAt) : ""} · {d.headlinesRead} headlines read</h2>
+        <details className="card section" open id="scan">
+          <summary><h2>Last story scan · {last ? fmtEt(last.startedAt) : ""} · {d.headlinesRead} headlines read</h2> <span className="small muted">{detected.length} stories · click to collapse</span></summary>
           <p className="small muted" style={{ marginTop: -4 }}>Freshest story first; headlines newest first.</p>
           {d.error && <p className="small warn">{d.error}</p>}
           {d.detected.length === 0 && !d.error && <p className="small muted">No story stood out in the last 24 hours.</p>}
-          {d.detected.slice().sort((a, b) => (b.latest ?? "").localeCompare(a.latest ?? "")).map((s) => {
+          {scanPage.items.map((s) => {
             const tr = d.triage.find((x) => x.key === s.key);
             return (
               <div key={s.key} style={{ borderTop: "1px solid var(--grid)", padding: "8px 0" }}>
@@ -94,9 +107,15 @@ export default async function StoriesPage() {
               </div>
             );
           })}
-        </section>
+          <Pager params={params} name="spage" page={scanPage.page} pages={scanPage.pages} total={scanPage.total} label="stories in the last scan" hash="#scan" />
+        </details>
       )}
-      {[...groups.entries()].sort((a, b) => b[1][0].createdAt.localeCompare(a[1][0].createdAt)).map(([key, cs]) => (
+      <h2 id="cards">Story cards, last 14 days</h2>
+      <div className="toolbar">
+        <FilterLinks params={params} name="status" value={status} reset={["page"]} options={[{ value: "", label: "All", count: statusCount("") }, { value: "promoted", label: "Promoted", count: statusCount("promoted") }, { value: "late", label: "Late", count: statusCount("late") }, { value: "not_promoted", label: "Not promoted", count: statusCount("not_promoted") }]} />
+      </div>
+      <Pager params={params} name="page" page={groupPage.page} pages={groupPage.pages} total={groupPage.total} label="stories with cards" hash="#cards" />
+      {groupPage.items.map(([key, cs]) => (
         <section key={key}>
           <h2>{key} <span className="small muted">· newest card {fmtEt(cs[0].createdAt)}</span></h2>
           {cs.map((c) => {
@@ -105,7 +124,8 @@ export default async function StoriesPage() {
           })}
         </section>
       ))}
-      {storyCards.length === 0 && <section className="card"><p className="muted">No story cards in the last 14 days yet.</p></section>}
+      {groupPage.total === 0 && <section className="card"><p className="muted">{storyCards.length ? "No story cards match this filter." : "No story cards in the last 14 days yet."}</p></section>}
+      <Pager params={params} name="page" page={groupPage.page} pages={groupPage.pages} total={groupPage.total} label="stories with cards" hash="#cards" />
     </>
   );
 }
