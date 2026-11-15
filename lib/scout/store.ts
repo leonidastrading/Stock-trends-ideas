@@ -822,3 +822,57 @@ export async function watchlistUpkeep(staleDays = 30): Promise<{ approved: numbe
 export async function cardsForSymbol(symbol: string, limit = 25): Promise<StoredCard[]> {
   return (await q(`SELECT ${CARD_COLS} FROM cards WHERE primary_ticker = $1 OR card->'tickers' @> jsonb_build_array(jsonb_build_object('symbol', $1::text)) ORDER BY created_at DESC LIMIT $2`, [symbol, limit])).map(toCard);
 }
+
+// ------------------------------------------------------------ your websites
+
+export interface Site { id: number; url: string; label: string; feedUrl: string | null; via: string | null; active: boolean; addedAt: string; checkedAt: string | null; status: string | null; detail: string | null }
+export interface SiteArticle { url: string; siteId: number; title: string; published: string | null; seenAt: string; baseline: boolean; outcome: string | null }
+
+const toSite = (r: Row): Site => ({ id: Number(r.id), url: String(r.url), label: String(r.label), feedUrl: (r.feed_url as string) ?? null, via: (r.via as string) ?? null, active: !!r.active, addedAt: iso(r.added_at)!, checkedAt: iso(r.checked_at), status: (r.status as string) ?? null, detail: (r.detail as string) ?? null });
+
+export async function listSites(activeOnly = false): Promise<Site[]> {
+  return (await q(`SELECT * FROM sites ${activeOnly ? "WHERE active" : ""} ORDER BY added_at`)).map(toSite);
+}
+
+export async function getSite(id: number): Promise<Site | null> {
+  const r = (await q(`SELECT * FROM sites WHERE id = $1`, [id]))[0];
+  return r ? toSite(r) : null;
+}
+
+export async function insertSite(s: { url: string; label: string; feedUrl: string | null; via: string; status: string; detail: string }): Promise<Site> {
+  return toSite((await q(`INSERT INTO sites (url, label, feed_url, via, checked_at, status, detail) VALUES ($1, $2, $3, $4, now(), $5, $6) RETURNING *`, [s.url, s.label, s.feedUrl, s.via, s.status, s.detail]))[0]);
+}
+
+export async function siteChecked(id: number, status: string, detail: string, feed?: { feedUrl: string | null; via: string }): Promise<void> {
+  if (feed) await q(`UPDATE sites SET checked_at = now(), status = $2, detail = $3, feed_url = $4, via = $5 WHERE id = $1`, [id, status, detail.slice(0, 500), feed.feedUrl, feed.via]);
+  else await q(`UPDATE sites SET checked_at = now(), status = $2, detail = $3 WHERE id = $1`, [id, status, detail.slice(0, 500)]);
+}
+
+export async function setSiteActive(id: number, active: boolean): Promise<void> {
+  await q(`UPDATE sites SET active = $2 WHERE id = $1`, [id, active]);
+}
+
+/** Removing a site removes its reading list; cards already written from it stay. */
+export async function deleteSite(id: number): Promise<void> {
+  await q(`DELETE FROM site_articles WHERE site_id = $1`, [id]);
+  await q(`DELETE FROM sites WHERE id = $1`, [id]);
+}
+
+/** Insert the articles not seen before; returns the new ones. */
+export async function addSiteArticles(siteId: number, articles: Array<{ url: string; title: string; published: string | null }>, baseline: boolean): Promise<string[]> {
+  if (!articles.length) return [];
+  const known = new Set((await q(`SELECT url FROM site_articles WHERE url = ANY($1)`, [articles.map((a) => a.url)])).map((r) => String(r.url)));
+  const fresh = articles.filter((a, i) => !known.has(a.url) && articles.findIndex((b) => b.url === a.url) === i);
+  for (const a of fresh) await q(`INSERT INTO site_articles (url, site_id, title, published, baseline, outcome) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (url) DO NOTHING`, [a.url, siteId, a.title.slice(0, 300), a.published, baseline, baseline ? "already there when added" : null]);
+  return fresh.map((a) => a.url);
+}
+
+export async function setArticleOutcome(urls: string[], outcome: string): Promise<void> {
+  if (urls.length) await q(`UPDATE site_articles SET outcome = $2 WHERE url = ANY($1)`, [urls, outcome.slice(0, 300)]);
+}
+
+/** The latest articles per site (newest first), for Settings. */
+export async function recentSiteArticles(perSite = 5): Promise<SiteArticle[]> {
+  return (await q(`SELECT * FROM (SELECT *, row_number() OVER (PARTITION BY site_id ORDER BY baseline, seen_at DESC, published DESC NULLS LAST) AS n FROM site_articles) x WHERE n <= $1 ORDER BY site_id, n`, [perSite]))
+    .map((r) => ({ url: String(r.url), siteId: Number(r.site_id), title: String(r.title), published: iso(r.published), seenAt: iso(r.seen_at)!, baseline: !!r.baseline, outcome: (r.outcome as string) ?? null }));
+}

@@ -9,7 +9,7 @@
 import type { IdeaResult } from "./scoring";
 
 export const STAKE = 1000;
-export const PLAYERS = ["scout_trend", "scout_story", "scout_options", "scout_filings", "scout_truth", "you", "stream_host", "stream_agent", "inbox_bot"] as const;
+export const PLAYERS = ["scout_trend", "scout_story", "scout_options", "scout_filings", "scout_truth", "scout_sites", "you", "stream_host", "stream_agent", "inbox_bot"] as const;
 export type Player = (typeof PLAYERS)[number];
 export const PLAYER_LABEL: Record<Player, string> = {
   scout_trend: "Scout · trend desk",
@@ -17,6 +17,7 @@ export const PLAYER_LABEL: Record<Player, string> = {
   scout_options: "Scout · options positioning",
   scout_filings: "Scout · insiders, filings & Congress",
   scout_truth: "Scout · Trump posts",
+  scout_sites: "Scout · your websites",
   you: "You",
   stream_host: "Stream file · host",
   stream_agent: "Stream file · agent",
@@ -26,7 +27,7 @@ export const PLAYER_LABEL: Record<Player, string> = {
 /** Who made the call: by origin, and by the candidate term the card came from. */
 export function playerOf(origin: "scout" | "human", term: string | undefined): Player {
   const t = (term ?? "").toLowerCase();
-  if (origin === "scout") return t.startsWith("story:") ? "scout_story" : t.startsWith("options:") ? "scout_options" : /^(filing|insider|congress|insider\+congress): /.test(t) ? "scout_filings" : t.startsWith("truth:") ? "scout_truth" : "scout_trend";
+  if (origin === "scout") return t.startsWith("story:") ? "scout_story" : t.startsWith("options:") ? "scout_options" : /^(filing|insider|congress|insider\+congress): /.test(t) ? "scout_filings" : t.startsWith("truth:") ? "scout_truth" : t.startsWith("site:") ? "scout_sites" : "scout_trend";
   if (t.startsWith("stream host:")) return "stream_host";
   if (t.startsWith("stream agent:")) return "stream_agent";
   if (t.startsWith("inbox:")) return "inbox_bot";

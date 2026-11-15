@@ -161,6 +161,8 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
   if (left() > 30_000) {
     out.panels = await import("./dashboard-warm").then(({ warmPanels }) => warmPanels(now)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
   }
+  // The stock list behind the search box's suggestions (refreshed daily).
+  if (data && left() > 40_000) out.assets = await import("./symbol-search").then(async ({ listings }) => `${(await listings()).length} listings`).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
   // Options positioning: each stock's option chain once per trading day (10:00-16:00 ET), up to a minute and a half per call.
   if (left() > 60_000) {
     out.options = await import("./options-flow").then(({ runOptionsLog }) => runOptionsLog(Math.min(deadline - 45_000, Date.now() + 90_000), now, fetchImpl)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -172,6 +174,10 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
     out.truth = await import("./truth").then(({ pollTruth }) => pollTruth({ ...defaultDeps(now), fetchImpl }, fetchImpl, { research: left() > 200_000 })).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
     await store.unlock("lock:truth").catch(() => undefined);
   }
+  // Your websites: each read once a day; new articles' ideas go to the import, which researches them in its own function.
+  if (left() > 60_000) {
+    out.sites = await Promise.all([import("./sites"), import("./inbox")]).then(([{ checkSites }, { sendToImport }]) => checkSites({ ...defaultDeps(now), fetchImpl }, deadline - 30_000, sendToImport(process.env, fetchImpl ?? fetch), fetchImpl)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+  } else out.sites = "later: not enough time";
   // Congress trades: new House transaction reports (at most a minute per call), then their buys priced against SPY.
   if (left() > 60_000) {
     try {

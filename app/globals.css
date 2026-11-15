@@ -201,3 +201,7 @@ button.chip.active { border-color: var(--accent); color: var(--accent); }
 .map-tip { position: absolute; transform: translate(12px, 12px); background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; max-width: 340px; pointer-events: none; box-shadow: 0 6px 24px rgba(0,0,0,.35); z-index: 5; }
 .news-action { margin-left: auto; }
 .ticker-search { margin-bottom: 12px; }
+.suggest-wrap { position: relative; display: inline-block; }
+.suggest { position: absolute; z-index: 20; top: 100%; left: 0; min-width: 100%; width: max-content; max-width: min(520px, 90vw); margin: 4px 0 0; padding: 4px 0; list-style: none; background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.18); }
+.suggest li { padding: 6px 10px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.suggest li.on { background: var(--grid); }

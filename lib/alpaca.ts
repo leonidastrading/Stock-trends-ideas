@@ -12,9 +12,9 @@ export const PAPER_TRADING_HOST = "https://paper-api.alpaca.markets";
 
 const ALLOWED: Record<string, RegExp[]> = {
   [DATA_HOST]: [/^\/v2\/stocks\/bars$/, /^\/v2\/stocks\/snapshots$/, /^\/v1beta1\/screener\/stocks\/movers$/, /^\/v1beta1\/news$/, /^\/v1beta1\/options\/snapshots\/[A-Z][A-Z.]{0,9}$/],
-  // Calendar and asset metadata (what a symbol currently is) only: never orders, positions or the account.
-  [TRADING_HOST]: [/^\/v2\/calendar$/, /^\/v2\/assets\/[A-Z][A-Z.]{0,9}$/],
-  [PAPER_TRADING_HOST]: [/^\/v2\/calendar$/, /^\/v2\/assets\/[A-Z][A-Z.]{0,9}$/],
+  // Calendar and asset metadata (what a symbol currently is; the list of stocks for the search box) only: never orders, positions or the account.
+  [TRADING_HOST]: [/^\/v2\/calendar$/, /^\/v2\/assets$/, /^\/v2\/assets\/[A-Z][A-Z.]{0,9}$/],
+  [PAPER_TRADING_HOST]: [/^\/v2\/calendar$/, /^\/v2\/assets$/, /^\/v2\/assets\/[A-Z][A-Z.]{0,9}$/],
 };
 
 export interface AlpacaCreds {
@@ -209,6 +209,12 @@ export class AlpacaClient {
     }
   }
 
+  /** Every active US stock and ETF: symbol, name, exchange (for the ticker search). */
+  async listAssets(): Promise<Array<{ symbol: string; name: string; exchange: string }>> {
+    const xs = await this.refGet<Array<{ symbol: string; name?: string; exchange?: string; tradable?: boolean }>>("/v2/assets", { status: "active", asset_class: "us_equity" });
+    return xs.filter((a) => a.tradable !== false).map((a) => ({ symbol: a.symbol, name: a.name ?? "", exchange: a.exchange ?? "" }));
+  }
+
   async getCalendar(start: string, end: string): Promise<Session[]> {
     return parseCalendar(await this.refGet("/v2/calendar", { start, end }));
   }
@@ -221,6 +227,8 @@ export interface MarketData {
   getCalendar(start: string, end: string): Promise<Session[]>;
   /** Optional: what a symbol currently is (asset metadata). */
   getAsset?(symbol: string): Promise<Asset | null>;
+  /** Optional: every active US stock and ETF (reference data only). */
+  listAssets?(): Promise<Array<{ symbol: string; name: string; exchange: string }>>;
   /** Optional: the day's biggest movers (market data only). */
   getMovers?(top?: number): Promise<{ gainers: Mover[]; losers: Mover[] }>;
   /** Optional: latest price and the previous close (market data only). */

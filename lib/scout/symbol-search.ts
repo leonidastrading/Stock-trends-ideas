@@ -1,0 +1,58 @@
+/** Ticker search suggestions: every active US stock and ETF (Alpaca's asset list, cached daily), matched on ticker or company name. */
+import { marketDataFromEnv } from "../alpaca";
+
+export interface Listing { s: string; n: string; x: string }
+export interface Suggestion { symbol: string; name: string; exchange: string }
+
+const NAME_NOISE = /\b(common stock|ordinary shares?|class [a-c]( common stock| ordinary shares?)?|american depositary shares?( each representing [^,;]*)?|depositary shares?|units?|warrants?|rights?|shares of beneficial interest|beneficial interest|new|\(the\))\b/gi;
+
+/** Pure: a company name as people say it ("NVIDIA Corporation Common Stock" → "NVIDIA Corporation"). */
+export const cleanName = (n: string) => n.replace(NAME_NOISE, "").replace(/\s*[,;]\s*$/, "").replace(/\s{2,}/g, " ").replace(/[\s,;-]+$/, "").trim();
+
+const norm = (s: string) => s.toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+const MAJOR = new Set(["NASDAQ", "NYSE", "ARCA", "AMEX", "BATS"]);
+
+/** Pure: the best matches for what was typed, best first. Ticker matches beat name matches; big exchanges beat OTC. */
+export function suggest(list: readonly Listing[], typed: string, limit = 8): Suggestion[] {
+  const raw = typed.trim().replace(/^\$/, "");
+  if (!raw) return [];
+  const sym = raw.toUpperCase().replace(/-/g, ".");
+  const q = norm(raw);
+  const scored: Array<[number, Listing]> = [];
+  for (const l of list) {
+    let score = -1;
+    if (l.s === sym) score = 0;
+    else if (l.s.startsWith(sym) && /^[A-Z.]+$/.test(sym)) score = 10 + l.s.length - sym.length;
+    else if (q.length >= 2) {
+      const name = norm(cleanName(l.n));
+      if (name.startsWith(q)) score = 20 + Math.min(name.length, 60) / 100;
+      else if (name.includes(` ${q}`)) score = 30 + Math.min(name.length, 60) / 100;
+      else if (q.length >= 4 && name.includes(q)) score = 40;
+    }
+    if (score < 0) continue;
+    if (!MAJOR.has(l.x)) score += 5;
+    if (/\b(warrant|right|unit)s?\b/i.test(l.n) || /\.(W|WS|U|R)$|W$/.test(l.s) && l.s !== sym && l.s.length > 4) score += 3;
+    scored.push([score, l]);
+  }
+  return scored.sort((a, b) => a[0] - b[0] || a[1].s.localeCompare(b[1].s)).slice(0, limit).map(([, l]) => ({ symbol: l.s, name: cleanName(l.n), exchange: l.x }));
+}
+
+/** Pure: what a search means. An exact ticker wins; otherwise the best name match; otherwise the text as a ticker. */
+export function resolveTyped(list: readonly Listing[], typed: string): string | null {
+  const sym = typed.trim().replace(/^\$/, "").toUpperCase().replace(/-/g, ".");
+  if (list.some((l) => l.s === sym)) return sym;
+  return suggest(list, typed, 1)[0]?.symbol ?? (/^[A-Z]{1,5}(\.[A-Z])?$/.test(sym) ? sym : null);
+}
+
+let memo: { at: number; list: Listing[] } | null = null;
+
+/** The listing, from memory, else the daily cache, else Alpaca. Empty when Alpaca is not set up. */
+export async function listings(): Promise<Listing[]> {
+  if (memo && Date.now() - memo.at < 6 * 3600_000) return memo.list;
+  const data = marketDataFromEnv();
+  if (!data?.listAssets) return [];
+  const { panel } = await import("../market/panels");
+  const p = await panel<Listing[]>("assets", 24 * 60, async () => (await data.listAssets!()).map((a) => ({ s: a.symbol, n: a.name, x: a.exchange })), 30_000);
+  if (p.data?.length) memo = { at: Date.now(), list: p.data };
+  return p.data ?? [];
+}

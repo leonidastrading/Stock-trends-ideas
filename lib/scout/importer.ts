@@ -18,8 +18,8 @@ export const importItemSchema = z.object({
   tickers: z.array(z.string()).max(8).default([]),
   direction: z.enum(["long", "short"]).optional(),
   catalyst_date: z.string().optional(),
-  /** host / agent: the daily stream file; bot: a document from the GitHub inbox; you: text pasted into "I noticed something". */
-  source: z.enum(["host", "agent", "bot", "you"]).catch("host"),
+  /** host / agent: the daily stream file; bot: a document from the GitHub inbox; you: text pasted into "I noticed something"; site: a new article on a website you asked the scout to follow. */
+  source: z.enum(["host", "agent", "bot", "you", "site"]).catch("host"),
   confirmed: z.string().optional(),
   stream_time: z.string().optional(),
   /** Optional extras from outside bots (see the Inbox tab's format). */
@@ -71,13 +71,13 @@ function validateItems(raw: unknown[]): { items: ImportItem[]; errors: string[] 
   return { items, errors };
 }
 
-export const importTerm = (it: ImportItem) => (it.source === "you" ? it.term : it.source === "bot" ? `inbox: ${it.term}` : `stream ${it.source}: ${it.term}`).slice(0, 80);
+export const importTerm = (it: ImportItem) => (it.source === "you" ? it.term : it.source === "bot" ? `inbox: ${it.term}` : it.source === "site" ? `site: ${it.term}` : `stream ${it.source}: ${it.term}`).slice(0, 80);
 
 export function importObservation(it: ImportItem, label: string): string {
-  const who = it.source === "host" ? "the stream host's idea" : it.source === "bot" ? "an idea from Vadim's research bot" : it.source === "you" ? "an idea in text Vadim pasted in" : "the file agent's own idea";
+  const who = it.source === "host" ? "the stream host's idea" : it.source === "bot" ? "an idea from Vadim's research bot" : it.source === "you" ? "an idea in text Vadim pasted in" : it.source === "site" ? "an idea the scout read in a new article on a website Vadim follows" : "the file agent's own idea";
   const bits = [
     it.observation,
-    it.source === "bot" ? ` (From the inbox document "${label}"; ${who}` : it.source === "you" ? ` (From ${who}` : ` (From the ${label} daily stream file; ${who}`,
+    it.source === "bot" ? ` (From the inbox document "${label}"; ${who}` : it.source === "you" ? ` (From ${who}` : it.source === "site" ? ` (From ${label}; ${who}` : ` (From the ${label} daily stream file; ${who}`,
     it.direction ? `; proposed direction: ${it.direction}` : "",
     it.catalyst_date ? `; catalyst date: ${it.catalyst_date}` : "",
     it.confirmed ? `; facts confirmed: ${it.confirmed}` : "",
@@ -105,7 +105,7 @@ export async function runImport(all: ImportItem[], deps: ResearchDeps, label: st
       const tickers = it.tickers.map(normalizeTicker).filter((t): t is string => !!t).slice(0, 5);
       let r: ResearchOutcome;
       try {
-        r = await researchCandidate({ origin: "human", term: importTerm(it), kindHint: it.kind as Kind, tickersHint: tickers, observation: importObservation(it, label) }, deps);
+        r = await researchCandidate({ origin: it.source === "site" ? "scout" : "human", term: importTerm(it), kindHint: it.kind as Kind, tickersHint: tickers, observation: importObservation(it, label) }, deps);
       } catch (err) {
         out.push({ term: importTerm(it), outcome: "error", reason: err instanceof Error ? err.message : String(err) });
         continue;

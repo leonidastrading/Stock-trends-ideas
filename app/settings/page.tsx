@@ -8,6 +8,9 @@ import * as store from "@/lib/scout/store";
 import { toEt } from "@/lib/time";
 import RunButtons from "./RunButtons";
 import SettingsForm from "./SettingsForm";
+import SitesEditor from "./SitesEditor";
+import { FEEDS } from "@/config/feeds";
+import { SITES } from "@/lib/scout/sites";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -15,7 +18,7 @@ export const runtime = "nodejs";
 export default async function SettingsPage() {
   const env = envStatus();
   if (!hasDatabase()) return <SetupNotice />;
-  const [settings, health, spend, runs, versions, feedback] = await Promise.all([store.loadSettings(), store.allHealth(), store.spendByDay(30), store.recentRuns(60), store.listVersions(), store.recentFeedback(30)]);
+  const [settings, health, spend, runs, versions, feedback, sites, articles] = await Promise.all([store.loadSettings(), store.allHealth(), store.spendByDay(30), store.recentRuns(60), store.listVersions(), store.recentFeedback(30), store.listSites(), store.recentSiteArticles(5)]);
   const h = new Map(health.map((x) => [x.source, x]));
   const sources = allSources(marketDataFromEnv());
   const today = toEt(new Date()).date;
@@ -26,8 +29,28 @@ export default async function SettingsPage() {
       <section className="card"><h2>Scout</h2><SettingsForm initial={settings} /></section>
       <section className="card"><h2>Run now</h2><RunButtons /></section>
 
+      <section className="card" id="sources">
+        <h2>Data sources</h2>
+        <p className="small secondary">Everything the scout reads. Free public sources unless a key is named; keys are set in Vercel and never shown here.</p>
+        <div className="table-wrap"><table>
+          <thead><tr><th>Source</th><th>What the scout gets</th><th>How often</th><th>Used by</th></tr></thead>
+          <tbody>{FEEDS.map((f) => (
+            <tr key={f.name}>
+              <td>{f.name}<div className="small muted">{f.host}</div>{f.key && <div className="small"><span className={process.env[f.key] ? "pos" : "neg"}>{process.env[f.key] ? "key set" : `needs ${f.key}`}</span></div>}</td>
+              <td className="small secondary">{f.what}</td><td className="small">{f.when}</td><td className="small">{f.usedBy}</td>
+            </tr>
+          ))}</tbody>
+        </table></div>
+      </section>
+
+      <section className="card" id="websites">
+        <h2>Your websites</h2>
+        <p className="small secondary">Add any site with news or analysis (a blog, a newsletter archive, a company newsroom, an industry site). The scout reads it once a day: its RSS feed if it has one, otherwise the article links on the page. Articles already there when you add it are only recorded; new ones (up to {SITES.maxArticlesPerRead} a day per site) are read for trade ideas, and up to {SITES.maxIdeasPerRead} ideas a day per site go to research. Their cards score as &quot;Scout · your websites&quot;. Sites behind a login or a bot check cannot be read.</p>
+        <SitesEditor sites={sites} articles={articles} />
+      </section>
+
       <section className="card">
-        <h2>Source health</h2>
+        <h2>Source health (trend desk)</h2>
         <p className="small secondary">Status from the last scan. "missing" means no key or no data source; "down" means the source failed and the scout said so in its output; "capped" means counts are lower bounds.</p>
         <div className="table-wrap">
           <table>

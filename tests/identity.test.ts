@@ -67,7 +67,8 @@ describe("ticker identity (the SATS lesson)", () => {
   it("asset lookups are read-only metadata; orders and positions stay forbidden", () => {
     expect(() => assertReadOnlyEndpoint(TRADING_HOST, "/v2/assets/SATS")).not.toThrow();
     expect(() => assertReadOnlyEndpoint(PAPER_TRADING_HOST, "/v2/assets/BRK.B")).not.toThrow();
-    expect(() => assertReadOnlyEndpoint(TRADING_HOST, "/v2/assets")).toThrow(/read-only/);
+    expect(() => assertReadOnlyEndpoint(TRADING_HOST, "/v2/assets")).not.toThrow(); // the stock list behind the search box: names and symbols only
+    expect(() => assertReadOnlyEndpoint(TRADING_HOST, "/v2/assets/SATS/orders")).toThrow(/read-only/);
     expect(() => assertReadOnlyEndpoint(TRADING_HOST, "/v2/orders")).toThrow(/read-only/);
   });
 });

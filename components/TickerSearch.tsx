@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { chartUrl } from "@/config/links";
 import type { Lookup } from "@/lib/scout/lookup";
 
@@ -13,12 +13,32 @@ export default function TickerSearch() {
   const [r, setR] = useState<Lookup | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [research, setResearch] = useState<"idle" | "busy" | { cardId?: number; status?: string; error?: string }>("idle");
+  const [sugs, setSugs] = useState<Array<{ symbol: string; name: string; exchange: string }>>([]);
+  const [hi, setHi] = useState(-1);
+  const [open, setOpen] = useState(false);
+  const typed = useRef("");
 
-  async function search(e?: React.FormEvent) {
+  // Suggestions as you type (ticker or company name), a beat after the last key.
+  useEffect(() => {
+    const t = q.trim();
+    typed.current = t;
+    if (!t) { setSugs([]); return; }
+    const timer = setTimeout(async () => {
+      const res = await fetch(`/api/lookup?suggest=${encodeURIComponent(t)}`).catch(() => null);
+      const j = res?.ok ? await res.json().catch(() => null) : null;
+      if (typed.current === t) { setSugs(j?.suggestions ?? []); setHi(-1); }
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [q]);
+
+  async function search(e?: React.FormEvent, pick?: string) {
     e?.preventDefault();
-    if (!q.trim()) return;
+    const what = pick ?? (hi >= 0 && sugs[hi] ? sugs[hi].symbol : q.trim());
+    if (!what) return;
+    if (pick || hi >= 0) setQ(what);
+    setOpen(false);
     setBusy(true); setError(null); setResearch("idle");
-    const res = await fetch(`/api/lookup?symbol=${encodeURIComponent(q.trim())}`);
+    const res = await fetch(`/api/lookup?symbol=${encodeURIComponent(what)}`);
     const j = await res.json().catch(() => ({ errors: [`HTTP ${res.status}`] }));
     setBusy(false);
     if (!res.ok || !j.ok) { setR(null); return setError((j.errors ?? ["failed"]).join("; ")); }
@@ -38,7 +58,24 @@ export default function TickerSearch() {
   return (
     <section className="card ticker-search">
       <form onSubmit={search} className="toolbar" style={{ margin: 0 }}>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search a ticker: NVDA, $pltr…" aria-label="Ticker" style={{ width: 240 }} />
+        <div className="suggest-wrap">
+          <input value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setHi((h) => Math.min(h + 1, sugs.length - 1)); }
+              else if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => Math.max(h - 1, -1)); }
+              else if (e.key === "Escape") setOpen(false);
+            }}
+            placeholder="Ticker or company: NVDA, nvidia, $pltr…" aria-label="Ticker or company" autoComplete="off" role="combobox" aria-expanded={open && sugs.length > 0} style={{ width: 280 }} />
+          {open && sugs.length > 0 && (
+            <ul className="suggest" role="listbox">
+              {sugs.map((s, i) => (
+                <li key={s.symbol} role="option" aria-selected={i === hi} className={i === hi ? "on" : ""} onMouseDown={(e) => { e.preventDefault(); search(undefined, s.symbol); }} onMouseEnter={() => setHi(i)}>
+                  <b className="ticker">{s.symbol}</b> <span className="secondary">{s.name}</span> <span className="small muted">{s.exchange}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
         <button className="primary" type="submit" disabled={busy || !q.trim()}>{busy ? "…" : "Search"}</button>
         {error && <span className="small neg">{error}</span>}
       </form>

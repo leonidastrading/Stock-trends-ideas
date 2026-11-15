@@ -416,6 +416,31 @@ CREATE TABLE IF NOT EXISTS truth_posts (
 CREATE INDEX IF NOT EXISTS truth_posts_at_idx ON truth_posts (at);
 CREATE OR REPLACE TRIGGER truth_posts_ro BEFORE UPDATE OR DELETE ON truth_posts FOR EACH ROW EXECUTE FUNCTION forbid_change();
 
+-- Websites Vadim asked the scout to read every day (Settings → Your websites); new articles are read for trade ideas.
+CREATE TABLE IF NOT EXISTS sites (
+  id serial PRIMARY KEY,
+  url text NOT NULL UNIQUE,
+  label text NOT NULL,
+  feed_url text,
+  via text,
+  active boolean NOT NULL DEFAULT true,
+  added_at timestamptz NOT NULL DEFAULT now(),
+  checked_at timestamptz,
+  status text,
+  detail text
+);
+-- Every article seen on those sites. baseline = already there when the site was added (not researched).
+CREATE TABLE IF NOT EXISTS site_articles (
+  url text PRIMARY KEY,
+  site_id integer NOT NULL,
+  title text NOT NULL,
+  published timestamptz,
+  seen_at timestamptz NOT NULL DEFAULT now(),
+  baseline boolean NOT NULL DEFAULT false,
+  outcome text
+);
+CREATE INDEX IF NOT EXISTS site_articles_site_idx ON site_articles (site_id, seen_at);
+
 -- Dashboard panels (market quotes, earnings calendar, contracts, breadth): cached fetches, refreshed hourly.
 CREATE TABLE IF NOT EXISTS dashboard_cache (
   key text PRIMARY KEY,
