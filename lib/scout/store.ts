@@ -785,3 +785,22 @@ export async function recentChatThreads(limit = 15): Promise<Array<{ id: number;
   return (await q(`SELECT id, created_at, messages->0->>'content' AS first, jsonb_array_length(messages) AS n FROM chat_threads ORDER BY updated_at DESC LIMIT $1`, [limit]))
     .map((r) => ({ id: Number(r.id), createdAt: iso(r.created_at)!, first: r.first ?? null, turns: Math.floor(Number(r.n ?? 0) / 2) }));
 }
+
+// ------------------------------------------------------------ Trump's posts
+
+export interface StoredTruth { id: string; at: string; url: string; text: string; repost: boolean; read: import("./truth").TruthRead | null }
+
+export async function truthSeen(ids: string[]): Promise<Set<string>> {
+  if (!ids.length) return new Set();
+  return new Set((await q(`SELECT id FROM truth_posts WHERE id = ANY($1)`, [ids])).map((r) => String(r.id)));
+}
+
+export async function addTruthPost(p: { id: string; at: string; url: string; text: string; repost: boolean }, read: unknown): Promise<void> {
+  await q(`INSERT INTO truth_posts (id, at, url, text, repost, read) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING`, [p.id, p.at, p.url, p.text, p.repost, read ? JSON.stringify(read) : null]);
+}
+
+/** Posts since `fromIso`, newest first; with `relevantOnly`, only those the model judged market-relevant. */
+export async function truthPostsSince(fromIso: string, relevantOnly = false): Promise<StoredTruth[]> {
+  return (await q(`SELECT * FROM truth_posts WHERE at >= $1 ${relevantOnly ? "AND (read->>'relevant')::boolean" : ""} ORDER BY at DESC LIMIT 200`, [fromIso]))
+    .map((r) => ({ id: String(r.id), at: iso(r.at)!, url: r.url, text: r.text, repost: !!r.repost, read: r.read ?? null }));
+}

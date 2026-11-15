@@ -403,6 +403,19 @@ CREATE TABLE IF NOT EXISTS chat_threads (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Trump's Truth Social posts (from the trumpstruth.org archive), each with the model's market read; never edited.
+CREATE TABLE IF NOT EXISTS truth_posts (
+  id text PRIMARY KEY,
+  at timestamptz NOT NULL,
+  url text NOT NULL,
+  text text NOT NULL,
+  repost boolean NOT NULL DEFAULT false,
+  read jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS truth_posts_at_idx ON truth_posts (at);
+CREATE OR REPLACE TRIGGER truth_posts_ro BEFORE UPDATE OR DELETE ON truth_posts FOR EACH ROW EXECUTE FUNCTION forbid_change();
+
 -- Dashboard panels (market quotes, earnings calendar, contracts, breadth): cached fetches, refreshed hourly.
 CREATE TABLE IF NOT EXISTS dashboard_cache (
   key text PRIMARY KEY,

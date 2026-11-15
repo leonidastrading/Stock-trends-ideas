@@ -118,6 +118,16 @@ export async function buildBriefing(now = new Date()): Promise<string> {
     return `Most bought:\n${most.join("\n")}\nLatest:\n${latest.join("\n")}`;
   });
 
+  await safe("Trump's Truth Social posts judged market-relevant, last 3 days (most urgent first)", async () => {
+    const posts = (await store.truthPostsSince(new Date(now.getTime() - 3 * 86400_000).toISOString(), true)).filter((p) => p.read);
+    return posts.length ? posts.sort((a, b) => b.read!.urgency - a.read!.urgency || b.at.localeCompare(a.at)).slice(0, 15).map((p) => `- ${fmtEt(p.at)} urgency ${p.read!.urgency}/5, ${p.read!.direction} ${p.read!.tickers.join("/") || p.read!.sectors.join("/")}: ${cut(p.read!.summary, 200)} Post: "${cut(p.text, 220)}"`).join("\n") : null;
+  });
+
+  await safe("Prediction markets (Polymarket): biggest odds moves among the busiest markets", async () => {
+    const m = await store.cacheGet<Array<{ question: string; yes: number; dayChange: number | null; weekChange: number | null; endDate: string | null }>>("polymarket");
+    return m?.data?.length ? m.data.map((r) => `- ${cut(r.question, 110)}: ${r.yes}% yes (${r.dayChange ?? "?"} pts 1d, ${r.weekChange ?? "?"} pts 7d)${r.endDate ? `, ends ${r.endDate}` : ""}`).join("\n") : null;
+  });
+
   await safe("Federal contracts, latest large awards to listed companies", async () => {
     const c = await store.cacheGet<Array<{ ticker: string; agency: string; amount: number; date: string; description: string }>>("contracts");
     return c?.data?.length ? c.data.slice(0, 8).map((r) => `- ${r.date} ${r.ticker}: ${usd(r.amount)} from ${cut(r.agency, 50)}: ${cut(r.description, 90)}`).join("\n") : null;

@@ -229,6 +229,23 @@ anything else happens. Cards, versions and track events are append-only, enforce
   Google's rising queries for anything worth adding to the watch-list.
 - **Watch-list**: term, kind, tickers, date, who added it; approve the scout's proposals, retire terms.
 - **Scoring**: per version (see below), with a CSV export of every card and track.
+- **Senate trades**: the Senate's disclosure search (efdsearch.senate.gov: accept the terms with the form's CSRF
+  token, search periodic transaction reports, read each electronic report's table; paper filings are skipped) feeds
+  the same `congress_filings` / `congress_trades` tables as the House, with chamber "Senate".
+- **Insiders + Congress → research**: `smartMoneySignals` adds two research signals to the filings desk: a stock bought
+  by both company insiders (non-routine, $25k+) and members of Congress within 45 days (strongest, 3.5), and Congress
+  clusters (3+ members buying, or 2 with $100k+, fewer selling; 2–2.5), each only with something new in the last 5
+  days. The desk now researches up to four a day; these cards (with filing and insider ones) score as "Scout ·
+  insiders, filings & Congress".
+- **Trump's posts** (`lib/sources/truth.ts`, `lib/scout/truth.ts`): truthsocial.com is behind a bot challenge, so the
+  scout reads the trumpstruth.org archive's RSS feed. `/api/cron/truth` (cron secret; call every 5 minutes, e.g. from
+  cron-job.org) and hourly housekeeping read new posts; a keyword net picks the ones that might touch markets and one
+  low-effort model call judges them (tickers, sectors, direction, one-line summary, urgency 1–5). Posts are stored
+  append-only (`truth_posts`). Urgency 4+ is pushed to the phone (6 a day at most); the most urgent with a clear stock
+  and direction (2 a day) are researched as cards, scored as "Scout · Trump posts". Shown on the Digest and in the
+  chat's briefing.
+- **Polymarket panel**: the 100 busiest open markets, biggest odds moves (1 day, 7 days) first; cached 15 minutes;
+  also in the chat's briefing. (The daily discovery scan already reads the same markets.)
 - **Inbox summary** (top of the Inbox tab, `lib/scout/inbox-digest.ts`): after new documents are read, one model call
   (low effort, logged as "inbox_digest") summarises the last 3 days' documents into two separate lists, top ideas and
   news, each item with tickers, a one-or-two-sentence summary, source, date, importance 1–5 and a breaking flag; ideas

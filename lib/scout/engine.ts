@@ -165,6 +165,11 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
   if (left() > 60_000) {
     out.options = await import("./options-flow").then(({ runOptionsLog }) => runOptionsLog(Math.min(deadline - 45_000, Date.now() + 90_000), now, fetchImpl)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
   } else out.options = "later: not enough time";
+  // Trump's posts (fallback for when the five-minute /api/cron/truth call is not set up).
+  if (left() > 70_000 && (await store.tryLock("lock:truth", 5))) {
+    out.truth = await import("./truth").then(({ pollTruth }) => pollTruth({ ...defaultDeps(now), fetchImpl }, fetchImpl, { research: left() > 200_000 })).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+    await store.unlock("lock:truth").catch(() => undefined);
+  }
   // Congress trades: new House transaction reports (at most a minute per call), then their buys priced against SPY.
   if (left() > 60_000) {
     try {

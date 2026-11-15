@@ -28,11 +28,13 @@ function Bar({ left, right, share, color = "split" }: { left: React.ReactNode; r
 /** Market panels for the top of the Digest: breadth and mood, market and rates, earnings, federal contracts, buzz. */
 export default async function MarketPanels() {
   const since = addDays(toEt(new Date()).date, -30);
-  const [{ market, earnings, contracts, buzz, breadth }, congress, optionFlags] = await Promise.all([
+  const [{ market, earnings, contracts, buzz, breadth, polymarket }, congress, optionFlags, truth] = await Promise.all([
     loadPanels(),
     store.congressTradesSince(since).then((t) => bySymbol(t, since).filter((a) => a.buyers.length > 0).slice(0, 10)).catch(() => []),
     store.optionsFlagsSince(addDays(toEt(new Date()).date, -5)).catch(() => []),
+    store.truthPostsSince(new Date(Date.now() - 3 * 86400_000).toISOString(), true).catch(() => []),
   ]);
+  const posts = truth.filter((p) => p.read).sort((a, b) => (b.read!.urgency - a.read!.urgency) || b.at.localeCompare(a.at)).slice(0, 6);
   const b = breadth.data;
   return (
     <>
@@ -104,6 +106,36 @@ export default async function MarketPanels() {
             {!optionFlags.length && <span className="small muted">None flagged. Option chains are read once each trading day; flags start from the second day.</span>}
           </div>
           <p className="small muted">New out-of-the-money positions many times the stock&apos;s normal, from Cboe open interest. The side (bought or sold) is not visible.</p>
+        </section>
+
+        <section className="card panel">
+          <div className="panel-head"><span>Trump posts · market-relevant, 3 days</span><span className="small muted">most urgent first</span></div>
+          {posts.map((p) => (
+            <div key={p.id} className="digest-item">
+              <div className="small">
+                <b className={p.read!.direction === "up" ? "pos" : p.read!.direction === "down" ? "neg" : ""}>{p.read!.direction === "up" ? "▲ " : p.read!.direction === "down" ? "▼ " : ""}{p.read!.tickers.slice(0, 4).join(", ") || p.read!.sectors.slice(0, 2).join(", ")}</b>{" "}
+                {p.read!.summary}
+              </div>
+              <div className="small muted">{"●".repeat(Math.max(1, Math.min(5, p.read!.urgency)))}{"○".repeat(5 - Math.max(1, Math.min(5, p.read!.urgency)))} · <a href={p.url} target="_blank" rel="noreferrer">{fmtEt(p.at)}</a></div>
+            </div>
+          ))}
+          {!posts.length && <p className="small muted">No market-relevant posts in the last 3 days (read every few minutes from the trumpstruth.org archive of his Truth Social posts).</p>}
+        </section>
+
+        <section className="card panel">
+          <Head title="Prediction markets · biggest odds moves" note="Polymarket" updatedAt={polymarket.updatedAt} error={polymarket.error} />
+          <table><tbody>
+            {(polymarket.data ?? []).map((r) => (
+              <tr key={r.question}>
+                <td className="small">{r.slug ? <a href={`https://polymarket.com/market/${r.slug}`} target="_blank" rel="noreferrer">{r.question}</a> : r.question}{r.endDate ? <span className="muted"> · ends {fmtDay(r.endDate)}</span> : null}</td>
+                <td className="num"><b>{r.yes}%</b></td>
+                <td className={`num small ${(r.dayChange ?? 0) >= 0 ? "pos" : "neg"}`}>{r.dayChange === null ? "—" : `${r.dayChange >= 0 ? "+" : ""}${r.dayChange} 1d`}</td>
+                <td className={`num small ${(r.weekChange ?? 0) >= 0 ? "pos" : "neg"}`}>{r.weekChange === null ? "—" : `${r.weekChange >= 0 ? "+" : ""}${r.weekChange} 7d`}</td>
+              </tr>
+            ))}
+            {!polymarket.data?.length && <tr><td className="muted">Not loaded yet.</td></tr>}
+          </tbody></table>
+          <p className="small muted">The 100 busiest open markets; changes in percentage points. Market-moving odds (Fed, tariffs, elections, wars) feed the daily discovery scan too.</p>
         </section>
       </div>
     </>

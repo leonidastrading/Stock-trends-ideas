@@ -5,7 +5,9 @@
  */
 import { UNIVERSE } from "@/config/universe";
 import { type DailyBar, type MarketData } from "../alpaca";
+import { getJson } from "../http";
 import { secTickerList } from "../sources/edgar";
+import { marketOdds } from "../sources/polymarket";
 import { addDays, toEt } from "../time";
 import { spikeScore } from "../scout/chatter";
 import * as store from "../scout/store";
@@ -176,4 +178,23 @@ export async function ensureBreadthBars(data: MarketData, now: Date): Promise<nu
   if (start > today) return 0;
   const bars = await data.getDailyBars([...BREADTH_SYMBOLS, "SPY"], start, today);
   return store.upsertBars(bars.filter((b) => b.date < today || toEt(now).minutes >= 16 * 60 + 15));
+}
+
+// ------------------------------------------------------------- polymarket
+
+export interface OddsRow { question: string; slug: string | null; yes: number; dayChange: number | null; weekChange: number | null; volume24h: number; endDate: string | null }
+
+/** Pure: the busiest open markets, biggest odds moves first (day, then week), then by trading volume. */
+export function oddsMovers(markets: Array<{ question: string; slug?: string; outcomes?: string; outcomePrices?: string; oneDayPriceChange?: number; oneWeekPriceChange?: number; volume24hr?: number; endDate?: string }>, n = 10): OddsRow[] {
+  const rows = markets.flatMap((m) => {
+    const o = marketOdds(m);
+    return o ? [{ question: m.question, slug: m.slug ?? null, yes: o.yes, dayChange: o.dayChange, weekChange: o.weekChange, volume24h: Math.round(m.volume24hr ?? 0), endDate: m.endDate?.slice(0, 10) ?? null }] : [];
+  });
+  const move = (r: OddsRow) => Math.max(Math.abs(r.dayChange ?? 0) * 1.5, Math.abs(r.weekChange ?? 0));
+  return rows.sort((a, b) => (move(b) >= 5 ? 1 : 0) - (move(a) >= 5 ? 1 : 0) || move(b) - move(a) || b.volume24h - a.volume24h).slice(0, n);
+}
+
+export async function polymarketPanel(): Promise<OddsRow[]> {
+  const ms = await getJson<Parameters<typeof oddsMovers>[0]>("https://gamma-api.polymarket.com/markets?closed=false&order=volume24hr&ascending=false&limit=100", { headers: { "user-agent": "Mozilla/5.0 (compatible; research-reader/1.0)" }, cacheMs: 10 * 60000 });
+  return oddsMovers(ms, 10);
 }
