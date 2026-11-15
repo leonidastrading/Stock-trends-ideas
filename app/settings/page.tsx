@@ -10,7 +10,7 @@ import RunButtons from "./RunButtons";
 import SettingsForm from "./SettingsForm";
 import SitesEditor from "./SitesEditor";
 import SchwabPanel from "./SchwabPanel";
-import { schwabConfig, schwabStatus } from "@/lib/sources/schwab";
+import { schwabConfig, schwabStatus, sharedConfig } from "@/lib/sources/schwab";
 import { FEEDS } from "@/config/feeds";
 import { SITES } from "@/lib/scout/sites";
 
@@ -20,7 +20,7 @@ export const runtime = "nodejs";
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ schwab?: string }> }) {
   const env = envStatus();
   if (!hasDatabase()) return <SetupNotice />;
-  const [sp, schwab] = await Promise.all([searchParams, schwabStatus().catch(() => ({ configured: !!schwabConfig(), connected: false, expiresAt: null, hoursLeft: null }))]);
+  const [sp, schwab] = await Promise.all([searchParams, schwabStatus().catch((): import("@/lib/sources/schwab").SchwabStatus => ({ configured: !!(schwabConfig() || sharedConfig()), connected: false, expiresAt: null, hoursLeft: null, mode: sharedConfig() ? "shared" : "own", lastError: "could not read the Schwab login" }))]);
   const [settings, health, spend, runs, versions, feedback, sites, articles] = await Promise.all([store.loadSettings(), store.allHealth(), store.spendByDay(30), store.recentRuns(60), store.listVersions(), store.recentFeedback(30), store.listSites(), store.recentSiteArticles(5)]);
   const h = new Map(health.map((x) => [x.source, x]));
   const sources = allSources(marketDataFromEnv());
@@ -48,14 +48,18 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
       <section className="card" id="schwab">
         <h2>Schwab (short interest)</h2>
-        <p className="small secondary">Read-only Schwab market data: the scout reads short interest (% of float short, days to cover) for the Drift tab and its research. It can only call Schwab&apos;s market-data address; your accounts, positions and orders are never reached. Schwab makes you sign in again every 7 days; you get a phone alert the day before it lapses.</p>
-        <SchwabPanel configured={schwab.configured} connected={schwab.connected} hoursLeft={schwab.hoursLeft} expiresLabel={schwab.expiresAt ? etLabel(schwab.expiresAt) : null} message={sp.schwab ?? null} />
+        <p className="small secondary">Read-only Schwab market data: the scout reads short interest (% of float short, days to cover) for the Drift tab and its research. It can only call Schwab&apos;s market-data address; your accounts, positions and orders are never reached. Schwab makes you sign in again every 7 days (in oo-trading when the login is shared); you get a phone alert the day before it lapses.</p>
+        <SchwabPanel configured={schwab.configured} connected={schwab.connected} hoursLeft={schwab.hoursLeft} expiresLabel={schwab.expiresAt ? etLabel(schwab.expiresAt) : null} message={sp.schwab ?? null} mode={schwab.mode} canRefresh={schwab.canRefresh} lastError={schwab.lastError ?? null} />
         {!schwab.configured && (
-          <ol className="small secondary">
-            <li>On developer.schwab.com, open your app and add this callback URL (keep your existing ones): <code>https://trend-scout-livid.vercel.app/api/schwab/callback</code>. Schwab may take a little while to approve the change.</li>
-            <li>In Vercel → trend-scout → Settings → Environment Variables, add <code>SCHWAB_APP_KEY</code> and <code>SCHWAB_APP_SECRET</code> (your app&apos;s key and secret) and <code>SCHWAB_CALLBACK_URL</code> = the URL above, then redeploy.</li>
-            <li>Come back here and press Connect Schwab.</li>
-          </ol>
+          <>
+            <p className="small"><b>Use oo-trading&apos;s Schwab login (recommended):</b></p>
+            <ol className="small secondary">
+              <li>In Vercel → Storage, open the Redis (Upstash) store oo-trading uses and connect it to the <b>trend-scout</b> project too. That adds <code>KV_REST_API_URL</code> and <code>KV_REST_API_TOKEN</code> here.</li>
+              <li>In trend-scout → Settings → Environment Variables, add <code>SCHWAB_CLIENT_ID</code> and <code>SCHWAB_CLIENT_SECRET</code> with the same values as oo-trading (so the scout can refresh the 30-minute token too). Redeploy.</li>
+              <li>Come back here and press Test short interest.</li>
+            </ol>
+            <p className="small secondary">Or with a separate Schwab app: add <code>https://trend-scout-livid.vercel.app/api/schwab/callback</code> as its callback, set <code>SCHWAB_APP_KEY</code>, <code>SCHWAB_APP_SECRET</code> and <code>SCHWAB_CALLBACK_URL</code>, redeploy, then Connect Schwab.</p>
+          </>
         )}
       </section>
 

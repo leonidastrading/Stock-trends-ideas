@@ -101,3 +101,65 @@ describe("Schwab: weekly sign-in and token refresh (PGlite, fake Schwab)", () =>
     expect(seen.at(-1)).toBe("https://api.schwabapi.com/marketdata/v1/instruments?symbol=GME&projection=fundamental Bearer A9");
   });
 });
+
+describe("Schwab: sharing oo-trading's login (fake Upstash Redis)", () => {
+  const shared = { KV_REST_API_URL: "https://redis.example", KV_REST_API_TOKEN: "kv-token", SCHWAB_CLIENT_ID: "oo-id", SCHWAB_CLIENT_SECRET: "oo-secret" } as unknown as NodeJS.ProcessEnv;
+  const fakeRedis = (db: Map<string, string>, log: string[]) => (async (url: string, init?: RequestInit) => {
+    if (url === "https://redis.example") {
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer kv-token");
+      const [cmd, key, ...rest] = JSON.parse(init!.body as string) as string[];
+      log.push(`${cmd} ${key}`);
+      if (cmd === "GET") return Response.json({ result: db.get(key) ?? null });
+      if (cmd === "SET") { if (rest.includes("NX") && db.has(key)) return Response.json({ result: null }); db.set(key, String(rest[0])); return Response.json({ result: "OK" }); }
+      if (cmd === "DEL") { db.delete(key); return Response.json({ result: 1 }); }
+      if (cmd === "INCR") { const n = Number(db.get(key) ?? 0) + 1; db.set(key, String(n)); return Response.json({ result: n }); }
+      if (cmd === "EXPIRE") return Response.json({ result: 1 });
+    }
+    if (url.endsWith("/oauth/token")) {
+      expect(new Headers(init?.headers).get("authorization")).toBe(`Basic ${Buffer.from("oo-id:oo-secret").toString("base64")}`);
+      log.push(`token ${init!.body}`);
+      return Response.json({ access_token: "A-NEW", expires_in: 1800 });
+    }
+    if (url.includes("/marketdata/v1/instruments")) { log.push(`schwab ${new Headers(init?.headers).get("authorization")}`); return Response.json({ instruments: [{ symbol: "GME", fundamental: { shortIntToFloat: 21.4 } }] }); }
+    return new Response("no", { status: 404 });
+  }) as typeof fetch;
+  const now = Date.parse("2026-11-16T15:00:00Z");
+  const tokens = (o: Partial<import("@/lib/sources/schwab").SharedTokens> = {}) => JSON.stringify({ accessToken: "A-OLD", refreshToken: "R-OO", accessExpiresAt: now + 20 * 60_000, refreshIssuedAt: now - 2 * 86400_000, updatedAt: now, ...o });
+
+  it("uses oo-trading's access token while it is fresh, and reports its weekly deadline", async () => {
+    const db = new Map([["schwab:tokens", tokens()]]), log: string[] = [];
+    expect(await accessToken(fakeRedis(db, log), shared, new Date(now))).toBe("A-OLD");
+    expect(log).toEqual(["GET schwab:tokens"]);
+    expect(await schwabStatus(shared, new Date(now), fakeRedis(db, log))).toMatchObject({ mode: "shared", connected: true, hoursLeft: 120, canRefresh: true });
+  });
+
+  it("refreshes under oo-trading's lock and writes the token back in its format", async () => {
+    const db = new Map([["schwab:tokens", tokens({ accessExpiresAt: now + 30_000 })]]), log: string[] = [];
+    expect(await accessToken(fakeRedis(db, log), shared, new Date(now))).toBe("A-NEW");
+    expect(log).toEqual(["GET schwab:tokens", "SET schwab:refresh-lock", "token grant_type=refresh_token&refresh_token=R-OO", "SET schwab:tokens", "DEL schwab:refresh-lock"]);
+    const saved = JSON.parse(db.get("schwab:tokens")!);
+    expect(saved).toMatchObject({ accessToken: "A-NEW", refreshToken: "R-OO", refreshIssuedAt: now - 2 * 86400_000 });
+    expect(db.has("schwab:refresh-lock")).toBe(false);
+  });
+
+  it("counts requests in oo-trading's per-minute window and respects its back-off", async () => {
+    const db = new Map([["schwab:tokens", tokens()]]), log: string[] = [];
+    process.env.KV_REST_API_URL = "https://redis.example"; process.env.KV_REST_API_TOKEN = "kv-token"; process.env.SCHWAB_CLIENT_ID = "oo-id"; process.env.SCHWAB_CLIENT_SECRET = "oo-secret";
+    try {
+      const si = await shortInterest(["GME"], fakeRedis(db, log));
+      expect(si.get("GME")?.pctFloat).toBe(21.4);
+      expect(log.filter((l) => l.startsWith("INCR schwab:rl:")).length).toBe(1);
+      expect(log.at(-1)).toBe("schwab Bearer A-OLD");
+      db.set("schwab:backoff", JSON.stringify({ n: 1, until: Date.now() + 60_000 }));
+      await expect(shortInterest(["GME"], fakeRedis(db, log))).rejects.toThrow(/backing off/);
+    } finally {
+      for (const k of ["KV_REST_API_URL", "KV_REST_API_TOKEN", "SCHWAB_CLIENT_ID", "SCHWAB_CLIENT_SECRET"]) delete process.env[k];
+    }
+  });
+
+  it("a lapsed or flagged login is not used", async () => {
+    const log: string[] = [];
+    expect(await accessToken(fakeRedis(new Map([["schwab:tokens", tokens({ needsReconnect: true })]]), log), shared, new Date(now))).toBeNull();
+    expect(await accessToken(fakeRedis(new Map([["schwab:tokens", tokens({ accessExpiresAt: now - 1, refreshIssuedAt: now - 8 * 86400_000 })]]), log), shared, new Date(now))).toBeNull();
+  });
+});

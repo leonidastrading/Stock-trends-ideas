@@ -182,7 +182,7 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
     if (!s.connected || s.hoursLeft === null) return s.configured ? "not connected" : "not set up";
     if (s.hoursLeft <= 24 && (await store.tryLock(`schwab:reminded:${s.expiresAt}`, 60 * 24 * 8))) {
       const { pushConfigured, sendPush } = await import("../notify");
-      if (pushConfigured()) await sendPush({ title: "Schwab sign-in expires soon", message: `Short interest stops in about ${s.hoursLeft} hours. Settings → Sign in again (renews 7 days).`, click: `${(process.env.DASHBOARD_URL ?? "").replace(/\/$/, "")}/settings#schwab`, tags: ["key"], priority: 4 });
+      if (pushConfigured()) await sendPush({ title: "Schwab sign-in expires soon", message: s.mode === "shared" ? `The Schwab login shared with oo-trading lapses in about ${s.hoursLeft} hours. Sign in again in oo-trading.` : `Short interest stops in about ${s.hoursLeft} hours. Settings → Sign in again (renews 7 days).`, click: `${(process.env.DASHBOARD_URL ?? "").replace(/\/$/, "")}/settings#schwab`, tags: ["key"], priority: 4 });
       return `reminder sent (${s.hoursLeft}h left)`;
     }
     return `connected, ${s.hoursLeft}h left`;
