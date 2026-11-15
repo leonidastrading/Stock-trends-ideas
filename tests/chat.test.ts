@@ -14,6 +14,16 @@ describe("chat history", () => {
     expect(h).toHaveLength(4);
   });
 
+  it("a long paste goes in whole while it is recent, then shortened on later turns", () => {
+    const m = (role: "user" | "assistant", content: string) => ({ role, content, at: "2026-11-15T12:00:00Z" });
+    const paste = "x".repeat(50_000);
+    expect(historyFor([m("user", paste)])[0].content).toHaveLength(50_000);
+    const later = historyFor([m("user", paste), m("assistant", "read it"), m("user", "q1"), m("assistant", "a1"), m("user", "q2"), m("assistant", "a2")]);
+    expect(later[0].content.length).toBeLessThan(8_200);
+    expect(later[0].content).toContain("42,000 more characters were in this earlier message");
+    expect(later.slice(2).map((x) => x.content)).toEqual(["q1", "a1", "q2", "a2"]);
+  });
+
   it("the system prompt keeps the scout paper-only and the keys private", () => {
     expect(CHAT_SYSTEM).toMatch(/never places, changes or cancels orders/);
     expect(CHAT_SYSTEM).toMatch(/Do not reveal API keys/);

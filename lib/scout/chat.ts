@@ -158,9 +158,18 @@ export async function buildBriefing(now = new Date()): Promise<string> {
 
 // ------------------------------------------------------------------- turn
 
-/** Model history for the API: the last turns as plain text, starting with a user message. */
+/** Longest message the chat takes (about 50,000 words: a long report or transcript). */
+export const CHAT_MAX_CHARS = 300_000;
+/** Older long messages are shortened to this when sent back as history, so one big paste is not paid for on every later turn. */
+const OLD_MESSAGE_CHARS = 8_000;
+
+/** Model history for the API: the last turns as plain text, starting with a user message. The last 4 messages go in whole. */
 export function historyFor(messages: store.ChatMessage[], keep = 30): Array<{ role: "user" | "assistant"; content: string }> {
-  const h = messages.slice(-keep).map((m) => ({ role: m.role, content: m.content }));
+  const last = messages.slice(-keep);
+  const h = last.map((m, i) => ({
+    role: m.role,
+    content: i < last.length - 4 && m.content.length > OLD_MESSAGE_CHARS ? `${m.content.slice(0, OLD_MESSAGE_CHARS)}\n[… ${(m.content.length - OLD_MESSAGE_CHARS).toLocaleString("en-US")} more characters were in this earlier message; shortened here]` : m.content,
+  }));
   while (h.length && h[0].role !== "user") h.shift();
   return h;
 }
