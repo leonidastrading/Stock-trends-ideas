@@ -1,3 +1,5 @@
+import Gauge from "@/components/Gauge";
+import { MoversTable, SocialTable } from "@/components/SocialTables";
 import Ticker from "@/components/Ticker";
 import { bySymbol } from "@/lib/scout/congress";
 import { loadPanels } from "@/lib/scout/dashboard-warm";
@@ -29,7 +31,7 @@ function Bar({ left, right, share, color = "split" }: { left: React.ReactNode; r
 /** Market panels for the top of the Digest: breadth and mood, market and rates, earnings, federal contracts, buzz. */
 export default async function MarketPanels() {
   const since = addDays(toEt(new Date()).date, -30);
-  const [{ market, earnings, contracts, buzz, breadth, polymarket }, congress, optionFlags, truth] = await Promise.all([
+  const [{ market, earnings, contracts, buzz, breadth, polymarket, movers, social }, congress, optionFlags, truth] = await Promise.all([
     loadPanels(),
     store.congressTradesSince(since).then((t) => bySymbol(t, since).filter((a) => a.buyers.length > 0).slice(0, 10)).catch(() => []),
     store.optionsFlagsSince(addDays(toEt(new Date()).date, -5)).catch(() => []),
@@ -39,16 +41,22 @@ export default async function MarketPanels() {
   const b = breadth.data;
   return (
     <>
-      {b ? (
-        <section className="statbars">
-          <Bar left={<>Advancing <b>{Math.round((b.advancing / Math.max(b.advancing + b.declining, 1)) * 100)}%</b> ({b.advancing})</>} right={<>Declining ({b.declining})</>} share={(b.advancing / Math.max(b.advancing + b.declining, 1)) * 100} />
-          <Bar left={<>New 52-week highs <b>{b.highs}</b></>} right={<>New lows <b>{b.lows}</b></>} share={b.highs + b.lows ? (b.highs / (b.highs + b.lows)) * 100 : 50} />
-          <Bar left={<>Market mood <b>{b.moodLabel}</b></>} right={<>Score <b>{b.mood}</b></>} share={b.mood} color="mood" />
-        </section>
-      ) : null}
-      {b && <p className="small muted" style={{ margin: "-6px 0 12px" }}>Breadth across the scout&apos;s {b.stocks} large and mid caps on {fmtDay(b.asOf)}, not the whole market. Mood: {b.parts}.</p>}
+      <div className="gauges-row">
+        <Gauge value={b?.mood ?? null} title="Fear & greed" note={b ? `Market mood from breadth, highs vs lows, S&P vs its 125-day average and VIX: ${b.parts}` : "loads with the after-close job"} />
+        <Gauge value={social.data?.retailGreed ?? null} title="Retail greed" note={social.data ? `Bullish share of ${social.data.tagged} sentiment-tagged Stocktwits posts on the 20 trending stocks (50 = balanced)` : "Stocktwits not loaded yet"} />
+        {b ? (
+          <section className="statbars">
+            <Bar left={<>Advancing <b>{Math.round((b.advancing / Math.max(b.advancing + b.declining, 1)) * 100)}%</b> ({b.advancing})</>} right={<>Declining ({b.declining})</>} share={(b.advancing / Math.max(b.advancing + b.declining, 1)) * 100} />
+            <Bar left={<>New 52-week highs <b>{b.highs}</b></>} right={<>New lows <b>{b.lows}</b></>} share={b.highs + b.lows ? (b.highs / (b.highs + b.lows)) * 100 : 50} />
+            <Bar left={<>Market mood <b>{b.moodLabel}</b></>} right={<>Score <b>{b.mood}</b></>} share={b.mood} color="mood" />
+          </section>
+        ) : null}
+      </div>
+      {b && <p className="small muted" style={{ margin: "-4px 0 12px" }}>Breadth across the scout&apos;s {b.stocks} large and mid caps on {fmtDay(b.asOf)}, not the whole market. Mood: {b.parts}.</p>}
 
       <div className="panels-grid">
+        <MoversTable gainers={movers.data?.gainers ?? []} losers={movers.data?.losers ?? []} scope={movers.data?.scope ?? "all US stocks"} />
+        <SocialTable rows={social.data?.rows ?? []} />
         <section className="card panel">
           <Head title="Market & rates" note="vs previous close" updatedAt={market.updatedAt} error={market.error} />
           <table><tbody>

@@ -11,7 +11,7 @@ export const TRADING_HOST = "https://api.alpaca.markets";
 export const PAPER_TRADING_HOST = "https://paper-api.alpaca.markets";
 
 const ALLOWED: Record<string, RegExp[]> = {
-  [DATA_HOST]: [/^\/v2\/stocks\/bars$/, /^\/v2\/stocks\/snapshots$/, /^\/v1beta1\/news$/, /^\/v1beta1\/options\/snapshots\/[A-Z][A-Z.]{0,9}$/],
+  [DATA_HOST]: [/^\/v2\/stocks\/bars$/, /^\/v2\/stocks\/snapshots$/, /^\/v1beta1\/screener\/stocks\/movers$/, /^\/v1beta1\/news$/, /^\/v1beta1\/options\/snapshots\/[A-Z][A-Z.]{0,9}$/],
   // Calendar and asset metadata (what a symbol currently is) only: never orders, positions or the account.
   [TRADING_HOST]: [/^\/v2\/calendar$/, /^\/v2\/assets\/[A-Z][A-Z.]{0,9}$/],
   [PAPER_TRADING_HOST]: [/^\/v2\/calendar$/, /^\/v2\/assets\/[A-Z][A-Z.]{0,9}$/],
@@ -43,7 +43,8 @@ export function assertReadOnlyEndpoint(host: string, path: string): void {
   if (!rules || !rules.some((re) => re.test(path))) throw new Error(`Refusing non-allowlisted Alpaca endpoint ${host}${path} (read-only)`);
 }
 
-export interface Snapshot { price: number; at: string | null; prevClose: number | null; sessionDate: string | null }
+export interface Snapshot { price: number; at: string | null; prevClose: number | null; sessionDate: string | null; volume?: number | null }
+export interface Mover { symbol: string; price: number; changePct: number }
 
 export interface Asset { symbol: string; name: string; exchange: string; active: boolean; tradable: boolean }
 
@@ -178,16 +179,23 @@ export class AlpacaClient {
   async getSnapshots(symbols: readonly string[]): Promise<Record<string, Snapshot>> {
     const out: Record<string, Snapshot> = {};
     for (let i = 0; i < symbols.length; i += 100) {
-      const resp = await this.get<Record<string, { latestTrade?: { p: number; t: string } | null; dailyBar?: { c: number; t: string } | null; prevDailyBar?: { c: number; t: string } | null } | null>>(
+      const resp = await this.get<Record<string, { latestTrade?: { p: number; t: string } | null; dailyBar?: { c: number; t: string; v?: number } | null; prevDailyBar?: { c: number; t: string } | null } | null>>(
         DATA_HOST, "/v2/stocks/snapshots", { symbols: symbols.slice(i, i + 100).join(","), feed: "iex" },
       );
       for (const [sym, s] of Object.entries(resp ?? {})) {
         const price = s?.latestTrade?.p ?? s?.dailyBar?.c ?? null;
         if (!s || price === null) continue;
-        out[sym] = { price, at: s.latestTrade?.t ?? s.dailyBar?.t ?? null, prevClose: s.prevDailyBar?.c ?? null, sessionDate: s.dailyBar?.t ? s.dailyBar.t.slice(0, 10) : null };
+        out[sym] = { price, at: s.latestTrade?.t ?? s.dailyBar?.t ?? null, prevClose: s.prevDailyBar?.c ?? null, sessionDate: s.dailyBar?.t ? s.dailyBar.t.slice(0, 10) : null, volume: s.dailyBar?.v ?? null };
       }
     }
     return out;
+  }
+
+  /** The day's biggest gainers and losers across US stocks (market data screener). */
+  async getMovers(top = 20): Promise<{ gainers: Mover[]; losers: Mover[] }> {
+    const r = await this.get<{ gainers?: Array<{ symbol: string; price: number; percent_change: number }>; losers?: Array<{ symbol: string; price: number; percent_change: number }> }>(DATA_HOST, "/v1beta1/screener/stocks/movers", { top });
+    const map = (xs?: Array<{ symbol: string; price: number; percent_change: number }>) => (xs ?? []).map((x) => ({ symbol: x.symbol, price: x.price, changePct: x.percent_change }));
+    return { gainers: map(r.gainers), losers: map(r.losers) };
   }
 
   /** What a symbol currently is: issuer name, exchange, whether it trades. Null when the symbol is unknown. */
@@ -213,6 +221,8 @@ export interface MarketData {
   getCalendar(start: string, end: string): Promise<Session[]>;
   /** Optional: what a symbol currently is (asset metadata). */
   getAsset?(symbol: string): Promise<Asset | null>;
+  /** Optional: the day's biggest movers (market data only). */
+  getMovers?(top?: number): Promise<{ gainers: Mover[]; losers: Mover[] }>;
   /** Optional: latest price and the previous close (market data only). */
   getSnapshots?(symbols: readonly string[]): Promise<Record<string, Snapshot>>;
   /** Optional: option-chain implied volatility (market data only). */
