@@ -22,10 +22,12 @@ export interface ScoutSettings {
   notifyPromoted: boolean;
   notifyStories: boolean;
   notifyReviews: boolean;
+  /** Approve the scout's proposed watch-list terms automatically, and retire its quiet ones after 30 days. */
+  autoApproveTerms: boolean;
 }
 
 export const DEFAULT_SETTINGS: ScoutSettings = {
-  enabled: true, model: SCOUT.defaultModel, effort: SCOUT.defaultEffort, dailyCapUsd: SCOUT.defaultDailyCapUsd, maxCandidatesPerScan: SCOUT.maxCandidatesPerScan, discoveryPerScan: SCOUT.discoveryPerScan, emailDigest: true, notifyPromoted: true, notifyStories: true, notifyReviews: true,
+  enabled: true, model: SCOUT.defaultModel, effort: SCOUT.defaultEffort, dailyCapUsd: SCOUT.defaultDailyCapUsd, maxCandidatesPerScan: SCOUT.maxCandidatesPerScan, discoveryPerScan: SCOUT.discoveryPerScan, emailDigest: true, notifyPromoted: true, notifyStories: true, notifyReviews: true, autoApproveTerms: true,
 };
 
 export async function loadSettings(): Promise<ScoutSettings> {
@@ -803,4 +805,13 @@ export async function addTruthPost(p: { id: string; at: string; url: string; tex
 export async function truthPostsSince(fromIso: string, relevantOnly = false): Promise<StoredTruth[]> {
   return (await q(`SELECT * FROM truth_posts WHERE at >= $1 ${relevantOnly ? "AND (read->>'relevant')::boolean" : ""} ORDER BY at DESC LIMIT 200`, [fromIso]))
     .map((r) => ({ id: String(r.id), at: iso(r.at)!, url: r.url, text: r.text, repost: !!r.repost, read: r.read ?? null }));
+}
+
+
+/** Watch-list upkeep when auto-approve is on: the scout's waiting proposals go live, and its terms with no card in 30 days are retired. Terms you added are never touched. */
+export async function watchlistUpkeep(staleDays = 30): Promise<{ approved: number; retired: number }> {
+  const approved = (await q(`UPDATE watchlist SET status = 'active' WHERE status = 'proposed' AND added_by = 'scout' RETURNING id`)).length;
+  const retired = (await q(`UPDATE watchlist w SET status = 'retired' WHERE w.status = 'active' AND w.added_by = 'scout' AND w.added_at < now() - make_interval(days => $1)
+    AND NOT EXISTS (SELECT 1 FROM candidates c WHERE lower(c.term) = lower(w.term) AND c.outcome = 'card' AND c.created_at > now() - make_interval(days => $1)) RETURNING id`, [staleDays])).length;
+  return { approved, retired };
 }

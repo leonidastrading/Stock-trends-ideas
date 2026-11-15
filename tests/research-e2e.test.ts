@@ -97,7 +97,7 @@ describe("research → card → track", () => {
     const r = await researchCandidate({ origin: "human", term: "course gadget", kindHint: "consumer", tickersHint: [], observation: "Everyone at the course has Y." }, deps);
     expect(r.outcome === "card" && r.card.origin).toBe("human");
     expect(r.outcome === "card" && r.card.card.origin).toBe("human");
-    expect((await store.watchlist("proposed")).map((w) => w.term)).toContain("Everyone at the course has it");
+    expect((await store.watchlist("active")).map((w) => w.term)).toContain("Everyone at the course has it"); // auto-approved by default
 
     await store.saveSettings({ ...(await store.loadSettings()), dailyCapUsd: 0.01 });
     const capped = await researchCandidate({ origin: "scout", term: "late one", kindHint: null, tickersHint: [], observation: null }, deps);
@@ -149,5 +149,25 @@ describe("research → card → track", () => {
     const idea = toSwingIdea(top[0], 5000);
     expect(idea).toMatchObject({ ticker: "HUBB", side: "long", catalyst: "earnings", exitRule: "time", exitParam: 90, notional: 5000, speculative: false });
     expect(idea.thesis.length).toBeLessThanOrEqual(1000);
+  });
+});
+
+describe("watch-list upkeep", () => {
+  it("approves the scout's waiting proposals, retires its quiet terms after 30 days, never touches yours", async () => {
+    await store.addWatch({ term: "waiting idea", kind: "consumer", tickers: ["TTWO"], addedBy: "scout", status: "proposed" });
+    await store.addWatch({ term: "old quiet idea", kind: "consumer", tickers: ["XYZ"], addedBy: "scout", status: "active" });
+    await store.addWatch({ term: "my old term", kind: "consumer", tickers: ["ABC"], addedBy: "vadim", status: "active" });
+    await query(`UPDATE watchlist SET added_at = now() - interval '40 days' WHERE term IN ('old quiet idea', 'my old term')`);
+    expect(await store.watchlistUpkeep()).toEqual({ approved: 1, retired: 1 });
+    const by = new Map((await store.watchlist()).map((w) => [w.term, w.status]));
+    expect([by.get("waiting idea"), by.get("old quiet idea"), by.get("my old term")]).toEqual(["active", "retired", "active"]);
+  });
+
+  it("with auto-approve off, new terms wait for you", async () => {
+    await store.saveSettings({ ...(await store.loadSettings()), autoApproveTerms: false, dailyCapUsd: 5 });
+    replies.push(JSON.stringify(sampleCard({ title: "Manual approval please", origin: "scout", tickers: [{ ...sampleCard().tickers[0], symbol: "GE" }] })));
+    await researchCandidate({ origin: "human", term: "manual gadget", kindHint: "consumer", tickersHint: [], observation: "Seen at the mall." }, deps);
+    expect((await store.watchlist("proposed")).map((w) => w.term)).toContain("Manual approval please");
+    await store.saveSettings({ ...(await store.loadSettings()), autoApproveTerms: true });
   });
 });

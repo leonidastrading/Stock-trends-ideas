@@ -160,7 +160,7 @@ export async function researchCandidate(input: ResearchInput, deps: ResearchDeps
 
   // What Vadim noticed stays on the watch-list as a proposal he can approve.
   if (input.origin === "human") {
-    await store.addWatch({ term: gated.card.title, kind: gated.card.kind, tickers: gated.card.tickers.map((t) => t.symbol), addedBy: "scout", status: "proposed", note: `from human-originated card #${stored.id}` });
+    await store.addWatch({ term: gated.card.title, kind: gated.card.kind, tickers: gated.card.tickers.map((t) => t.symbol), addedBy: "scout", status: settings.autoApproveTerms === false ? "proposed" : "active", note: `from human-originated card #${stored.id}` });
   }
   return { outcome: "card", card: stored, candidate };
 }

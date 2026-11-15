@@ -18,6 +18,7 @@ const schema = z.object({
   notifyPromoted: z.boolean().default(true),
   notifyStories: z.boolean().default(true),
   notifyReviews: z.boolean().default(true),
+  autoApproveTerms: z.boolean().default(true),
 });
 
 /** Changing the model or effort starts a new version; results are reported per version. */

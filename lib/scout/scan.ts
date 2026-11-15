@@ -168,7 +168,7 @@ async function runDiscovery(deps: ResearchDeps, max: number, cooldown: Set<strin
     const r = await researchCandidate({ origin: "scout", term: c.term, kindHint: c.kind as Kind, tickersHint: c.tickers, observation: null, trigger: triggerFor(c, et.date) }, deps);
     report.researched.push(r.outcome === "card" ? { term: c.term, outcome: `card: ${r.card.status}`, cardId: r.card.id } : { term: c.term, outcome: r.outcome, reason: r.reason });
     if (r.outcome === "card" && r.card.status !== "not_promoted") {
-      await store.addWatch({ term: c.term, kind: c.kind, tickers: c.tickers, addedBy: "scout", status: "proposed", note: `discovered ${et.date}: ${c.why.slice(0, 200)}` });
+      await store.addWatch({ term: c.term, kind: c.kind, tickers: c.tickers, addedBy: "scout", status: (await store.loadSettings()).autoApproveTerms === false ? "proposed" : "active", note: `discovered ${et.date}: ${c.why.slice(0, 200)}` });
     }
     if (r.outcome === "capped") {
       report.stoppedEarly = r.reason;

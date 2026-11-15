@@ -70,7 +70,7 @@ describe("discovery inside the scan", () => {
     expect(report.discovery?.problems.join()).toMatch(/stocktwits/);
     expect(report.researched).toEqual([{ term: "transformer supply agreements", outcome: "card: promoted", cardId: 1 }]);
     expect(purposes).toEqual(["triage", "research"]);
-    expect((await store.watchlist("proposed")).map((w) => w.term)).toContain("transformer supply agreements");
+    expect((await store.watchlist("active")).map((w) => w.term)).toContain("transformer supply agreements"); // auto-approved by default
     expect((await store.candidatesSince(1))[0].trigger?.[0]).toMatchObject({ source: "discovery" });
   });
 });

@@ -11,11 +11,11 @@ export default async function WatchlistPage() {
   if (!hasDatabase()) return <SetupNotice />;
   await store.seedWatchlist();
   const items = await store.watchlist();
-  const groups: Array<[string, typeof items]> = [["Proposed by the scout (approve to start measuring)", items.filter((i) => i.status === "proposed")], ["Active", items.filter((i) => i.status === "active")], ["Retired", items.filter((i) => i.status === "retired")]];
+  const groups: Array<[string, typeof items]> = [["Proposed by the scout (waiting for you: auto-approve is off in Settings)", items.filter((i) => i.status === "proposed")], ["Active", items.filter((i) => i.status === "active")], ["Retired", items.filter((i) => i.status === "retired")]];
   return (
     <>
       <h1>Watch-list</h1>
-      <section className="card notice small">Terms the daily scan measures on every source: brands, products, apps and themes, each with a kind and the tickers it points at. The scout may propose additions; you approve them.</section>
+      <section className="card notice small">Terms the daily scan measures on every source: brands, products, apps and themes, each with a kind and the tickers it points at. The scout adds terms it discovers and retires its own after 30 quiet days (switch to approving them yourself in Settings). Terms you add stay until you retire them. Nothing here needs your attention unless you want to add a term.</section>
       <section className="card"><h2>Add a term</h2><AddForm /></section>
       {groups.map(([title, rows]) => rows.length > 0 && (
         <section className="card" key={title}>
