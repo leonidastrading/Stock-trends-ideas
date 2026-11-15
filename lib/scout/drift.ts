@@ -19,6 +19,7 @@ import type { Signal } from "../sources";
 import { addDays, toEt } from "../time";
 import { researchCandidate, type ResearchDeps } from "./research";
 import * as store from "./store";
+import { shortText } from "../market/short";
 
 export const DRIFT = {
   /** Trading days back to look for the event day. */
@@ -82,7 +83,7 @@ export interface DriftSetup {
   daysAfter: number; downDays: number; bouncePct: number; volRatio: number | null; price: number; asOf: string;
   badAfter: number; lawsuitAds: number; stage: "building" | "established"; score: number;
   /** Schwab short interest when connected: % of float short, days to cover, squeeze risk. */
-  short?: { pctFloat: number | null; daysToCover: number | null; squeeze: "high" | "elevated" | "normal" | null } | null;
+  short?: import("../market/short").ShortData | null;
   headlines: Array<{ date: string; headline: string; url: string; kind: string | null }>;
 }
 
@@ -199,29 +200,17 @@ export async function scanDrift(data: MarketData, now = new Date()): Promise<{ a
     for (const n of items) for (const s of n.symbols) if (chunk.includes(s)) news.set(s, [...(news.get(s) ?? []), n]);
   }
   const setups = findDrifts(new Map(candidates.map((s) => [s, by.get(s)!])), spy, news, bad8k.map((a) => ({ symbol: a.symbol, filed: a.filed, items: a.items })));
-  // Short interest from Schwab (when connected), for the squeeze check.
+  // Short interest (Nasdaq; % of shares when Schwab is connected), for the squeeze check.
   if (setups.length) {
-    try {
-      const { shortInterest, squeezeRisk, accessToken } = await import("../sources/schwab");
-      if (await accessToken()) {
-        const si = await shortInterest(setups.map((s) => s.symbol));
-        for (const s of setups) {
-          const x = si.get(s.symbol);
-          s.short = x ? { pctFloat: x.pctFloat, daysToCover: x.daysToCover, squeeze: squeezeRisk(x) } : null;
-        }
-      }
-    } catch {
-      /* short interest is optional; the list stands without it */
-    }
+    const sd = await import("../market/short").then(({ shortData }) => shortData(setups.slice(0, 25).map((s) => s.symbol))).catch(() => new Map());
+    for (const s of setups) s.short = sd.get(s.symbol) ?? null;
   }
   return { asOf: spy.at(-1)?.date ?? today, scanned: by.size, setups };
 }
 
 /** Pure: a setup's short-interest line for people and the research step. */
 export function shortLine(s: DriftSetup): string | null {
-  if (!s.short) return null;
-  const parts = [s.short.pctFloat !== null ? `${s.short.pctFloat}% of float short` : null, s.short.daysToCover !== null ? `${s.short.daysToCover} days to cover` : null].filter(Boolean);
-  return parts.length ? `${parts.join(", ")}${s.short.squeeze ? ` (squeeze risk ${s.short.squeeze})` : ""}` : null;
+  return shortText(s.short);
 }
 
 // ---------------------------------------------------------------- research
@@ -234,7 +223,7 @@ export function driftContext(s: DriftSetup): string {
     `A down-drift setup in ${s.symbol}: on ${s.eventDate} it fell ${s.dayPct}% (${s.dayVsSpy}% against SPY) on ${s.eventKind} news: "${s.eventHeadline}".`,
     `Since then: ${s.sincePct}% more (${s.sinceVsSpy}% against SPY) over ${s.daysAfter} trading days, down on ${s.downDays} of them, ${s.bouncePct}% off its low; ${s.totalPct}% in total from the close before the news; last $${s.price} on ${s.asOf}.${s.volRatio ? ` The event day traded ${s.volRatio}x its usual volume.` : ""}`,
     `Negative headlines after the event: ${s.badAfter}${s.lawsuitAds ? `, plus ${s.lawsuitAds} law-firm lawsuit ads` : ""}.`,
-    shortLine(s) ? `Short interest (Schwab): ${shortLine(s)}. A crowded short can squeeze hard on any good news; weigh that against the drift.` : "Short interest: not available.",
+    shortLine(s) ? `Short interest: ${shortLine(s)}. A crowded short can squeeze hard on any good news; weigh that against the drift.` : "Short interest: not available.",
     s.headlines.length ? `Recent bad headlines:\n${s.headlines.map((h) => `- ${h.date}${h.kind ? ` [${h.kind}]` : ""} ${h.headline}`).join("\n")}` : "",
     EVIDENCE,
     `Questions: is the bad news still unfolding (more to come: a dated hearing, an FDA or court date, the next earnings date, a financing that has to close, an index deletion, a credit downgrade)? Is the business actually worse, or is it a one-off the market has fully priced? Who still has to sell (funds that cannot hold it, index deletions, margin calls, insiders)? Is there a reason it reverses (a buyback, a takeover, insider buying, heavy short interest that can squeeze)? If it is dangerous or impractical to short (hard to borrow, a squeeze, under $5, a tiny float), say so; puts or simply avoiding the stock may be the expression.`,

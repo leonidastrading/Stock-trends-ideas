@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-type Result = { symbol: string; pctFloat: number | null; daysToCover: number | null; fields: Record<string, number>; squeeze: string | null };
+type Result = { symbol: string; line: string | null; schwab: { shortFields?: Record<string, number>; shareFields?: Record<string, number>; error?: string } };
 
 /** Settings → Schwab: connect (weekly sign-in), test on one stock, disconnect. */
 export default function SchwabPanel({ configured, connected, hoursLeft, expiresLabel, message, mode = "own", canRefresh = true, lastError = null }: { configured: boolean; connected: boolean; hoursLeft: number | null; expiresLabel: string | null; message: string | null; mode?: "shared" | "own"; canRefresh?: boolean; lastError?: string | null }) {
@@ -49,10 +49,15 @@ export default function SchwabPanel({ configured, connected, hoursLeft, expiresL
       )}
       {typeof out === "string" && <p className="small neg">{out}</p>}
       {out && typeof out === "object" && (
-        <p className="small">
-          <b>{out.symbol}</b>: {out.pctFloat !== null ? `${out.pctFloat}% of float short` : "no % of float"} · {out.daysToCover !== null ? `${out.daysToCover} days to cover` : "no days to cover"}{out.squeeze ? ` · squeeze risk ${out.squeeze}` : ""}
-          <span className="muted"> · fields Schwab sent: {Object.keys(out.fields).length ? Object.entries(out.fields).map(([k, v]) => `${k} ${v}`).join(", ") : "none with 'short' in the name"}</span>
-        </p>
+        <div className="small">
+          <div><b>{out.symbol}</b>: {out.line ?? <span className="neg">no short-interest report from Nasdaq</span>}</div>
+          <div className="muted">
+            Schwab sent: {out.schwab.error ? <span className="neg">{out.schwab.error}</span> : <>
+              short fields {Object.keys(out.schwab.shortFields ?? {}).length ? Object.entries(out.schwab.shortFields!).map(([k, v]) => `${k} ${v}`).join(", ") : "none"};
+              share fields {Object.keys(out.schwab.shareFields ?? {}).length ? Object.entries(out.schwab.shareFields!).map(([k, v]) => `${k} ${v.toLocaleString("en-US")}`).join(", ") : "none"}
+            </>}
+          </div>
+        </div>
       )}
     </>
   );

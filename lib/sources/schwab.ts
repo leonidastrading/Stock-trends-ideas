@@ -223,30 +223,45 @@ export async function schwabGet<T>(path: string, params: Record<string, string>,
   return (await res.json()) as T;
 }
 
-// ------------------------------------------------------------ short interest
+// ------------------------------------------------------------ fundamentals (shares outstanding; short interest when filled)
 
 export interface ShortInterest { symbol: string; pctFloat: number | null; daysToCover: number | null; fields: Record<string, number> }
 
-/** Pure: short-interest numbers from Schwab's fundamental record, whatever the exact field names (anything with "short" in it is kept). */
+/** Pure: Schwab's short-interest fields, whatever their exact names. Schwab sends them as 0, so 0 counts as "no data". */
 export function readShortInterest(symbol: string, fundamental: Record<string, unknown> | undefined): ShortInterest {
   const fields: Record<string, number> = {};
   for (const [k, v] of Object.entries(fundamental ?? {})) if (/short/i.test(k) && typeof v === "number" && Number.isFinite(v)) fields[k] = v;
-  const pick = (re: RegExp) => Object.entries(fields).find(([k]) => re.test(k))?.[1] ?? null;
+  const pick = (re: RegExp) => { const v = Object.entries(fields).find(([k]) => re.test(k))?.[1]; return v ? v : null; };
   return { symbol, pctFloat: pick(/short.*(float|pct|percent)/i), daysToCover: pick(/(day|days).*cover|cover/i), fields };
 }
 
-/** Short interest for up to ~50 symbols per call, from the instruments endpoint's fundamental projection. */
-export async function shortInterest(symbols: string[], fetchImpl: typeof fetch = fetch): Promise<Map<string, ShortInterest>> {
-  const out = new Map<string, ShortInterest>();
+export interface Fundamentals { symbol: string; sharesOutstanding: number | null; short: ShortInterest; shareFields: Record<string, number> }
+
+/** Pure: shares outstanding (and any float figure) from the fundamental record; 0 counts as missing. */
+export function readFundamentals(symbol: string, f: Record<string, unknown> | undefined): Fundamentals {
+  const shareFields: Record<string, number> = {};
+  for (const [k, v] of Object.entries(f ?? {})) if (/shares|float/i.test(k) && typeof v === "number" && Number.isFinite(v)) shareFields[k] = v;
+  const so = Object.entries(shareFields).find(([k]) => /sharesoutstanding/i.test(k))?.[1];
+  return { symbol, sharesOutstanding: so && so > 0 ? so : null, short: readShortInterest(symbol, f), shareFields };
+}
+
+/** Fundamentals for up to 50 symbols per call (the instruments endpoint's fundamental projection). */
+export async function fundamentals(symbols: string[], fetchImpl: typeof fetch = fetch): Promise<Map<string, Fundamentals>> {
+  const out = new Map<string, Fundamentals>();
   for (let i = 0; i < symbols.length; i += 50) {
     const chunk = symbols.slice(i, i + 50);
     const r = await schwabGet<{ instruments?: Array<{ symbol: string; fundamental?: Record<string, unknown> }> }>("/instruments", { symbol: chunk.join(","), projection: "fundamental" }, fetchImpl);
-    for (const ins of r.instruments ?? []) out.set(ins.symbol, readShortInterest(ins.symbol, ins.fundamental));
+    for (const ins of r.instruments ?? []) out.set(ins.symbol, readFundamentals(ins.symbol, ins.fundamental));
   }
   return out;
 }
 
-/** Pure: squeeze risk from short interest (common rules of thumb: a fifth of the float short, or five-plus days to cover). */
+/** Schwab's own short-interest numbers (zeros dropped). */
+export async function shortInterest(symbols: string[], fetchImpl: typeof fetch = fetch): Promise<Map<string, ShortInterest>> {
+  return new Map([...(await fundamentals(symbols, fetchImpl))].map(([k, v]) => [k, v.short]));
+}
+
+/** Pure: squeeze risk from Schwab's numbers (see lib/market/short.ts squeezeFrom). */
 export function squeezeRisk(s: ShortInterest | undefined): "high" | "elevated" | "normal" | null {
   if (!s || (s.pctFloat === null && s.daysToCover === null)) return null;
   const p = s.pctFloat ?? 0, d = s.daysToCover ?? 0;
