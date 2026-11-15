@@ -10,7 +10,7 @@ export default function Gauge({ value, title, note }: { value: number | null; ti
   const tone = v === null ? "muted" : v < 45 ? "neg" : v <= 55 ? "warn" : "pos";
   const id = `g-${title.replace(/\W+/g, "")}`;
   return (
-    <div className="gauge card" title={note}>
+    <div className="gauge card">
       <svg viewBox="0 0 120 70" width="132" height="77" aria-hidden="true">
         <defs>
           <linearGradient id={id} x1="0" x2="1" y1="0" y2="0">
@@ -24,6 +24,7 @@ export default function Gauge({ value, title, note }: { value: number | null; ti
       <div className="gauge-value">{v ?? "—"}</div>
       <div className="gauge-title">{title}</div>
       <div className={`gauge-label ${tone}`}>{label}</div>
+      {note && <div className="gauge-note">{note}</div>}
     </div>
   );
 }

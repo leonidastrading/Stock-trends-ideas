@@ -3,8 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Site, SiteArticle } from "@/lib/scout/store";
+import { etLabel } from "@/lib/time";
 
-const when = (iso: string | null) => (iso ? iso.replace("T", " ").slice(0, 16) + "Z" : "never");
+const when = (iso: string | null) => (iso ? etLabel(iso) : "never");
 
 /** Settings → Your websites. */
 export default function SitesEditor({ sites, articles }: { sites: Site[]; articles: SiteArticle[] }) {

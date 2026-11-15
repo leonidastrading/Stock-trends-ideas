@@ -205,3 +205,5 @@ button.chip.active { border-color: var(--accent); color: var(--accent); }
 .suggest { position: absolute; z-index: 20; top: 100%; left: 0; min-width: 100%; width: max-content; max-width: min(520px, 90vw); margin: 4px 0 0; padding: 4px 0; list-style: none; background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.18); }
 .suggest li { padding: 6px 10px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .suggest li.on { background: var(--grid); }
+.gauge { max-width: 240px; }
+.gauge-note { font-size: 11px; line-height: 1.35; color: var(--text-muted); text-align: center; margin-top: 4px; }

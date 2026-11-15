@@ -5,7 +5,7 @@ import { envStatus } from "@/lib/env-status";
 import { marketDataFromEnv } from "@/lib/alpaca";
 import { allSources } from "@/lib/sources";
 import * as store from "@/lib/scout/store";
-import { toEt } from "@/lib/time";
+import { etLabel, toEt } from "@/lib/time";
 import RunButtons from "./RunButtons";
 import SettingsForm from "./SettingsForm";
 import SitesEditor from "./SitesEditor";
@@ -101,7 +101,7 @@ export default async function SettingsPage() {
       <section className="card">
         <h2>Recent runs</h2>
         <div className="table-wrap"><table><thead><tr><th>Started</th><th>Job</th><th>Status</th><th>Detail</th></tr></thead>
-          <tbody>{collapseRuns(runs).map(({ r, n, from }) => <tr key={r.id}><td className="small">{r.startedAt.replace("T", " ").slice(0, 16)}Z{n > 1 ? <div className="muted">back to {from.slice(11, 16)}Z</div> : null}</td><td>{r.action}{n > 1 ? <span className="small muted"> ×{n}</span> : null}</td><td><span className={`tag ${r.status === "ok" ? "ok" : r.status === "error" ? "error" : "capped"}`}>{r.status}</span></td><td className="small muted">{r.error ?? summarize(r.detail)}</td></tr>)}{runs.length === 0 && <tr><td colSpan={4} className="muted">No runs yet. Vercel cron calls /api/cron/daily at midday on weekdays and /api/cron/track after the close.</td></tr>}</tbody></table></div>
+          <tbody>{collapseRuns(runs).map(({ r, n, from }) => <tr key={r.id}><td className="small">{etLabel(r.startedAt)}{n > 1 ? <div className="muted">back to {etLabel(from, true)}</div> : null}</td><td>{r.action}{n > 1 ? <span className="small muted"> ×{n}</span> : null}</td><td><span className={`tag ${r.status === "ok" ? "ok" : r.status === "error" ? "error" : "capped"}`}>{r.status}</span></td><td className="small muted">{r.error ?? summarize(r.detail)}</td></tr>)}{runs.length === 0 && <tr><td colSpan={4} className="muted">No runs yet. Vercel cron calls /api/cron/daily at midday on weekdays and /api/cron/track after the close.</td></tr>}</tbody></table></div>
       </section>
     </>
   );

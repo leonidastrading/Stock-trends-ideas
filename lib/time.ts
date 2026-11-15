@@ -6,6 +6,15 @@ const etFormatter = new Intl.DateTimeFormat("en-US", {
   timeZone: ET_TZ, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", weekday: "short",
 });
 
+const etShort = new Intl.DateTimeFormat("en-US", { timeZone: ET_TZ, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+const etClock = new Intl.DateTimeFormat("en-US", { timeZone: ET_TZ, hour: "numeric", minute: "2-digit" });
+
+/** A timestamp as people read it, in New York time: "Nov 14, 3:50 PM ET" (clockOnly: "3:50 PM ET"). */
+export function etLabel(iso: string | Date, clockOnly = false): string {
+  const d = typeof iso === "string" ? new Date(iso) : iso;
+  return `${(clockOnly ? etClock : etShort).format(d)} ET`;
+}
+
 export interface EtParts {
   date: string;
   hhmm: string;

@@ -9,7 +9,7 @@ import TickerSearch from "@/components/TickerSearch";
 import { hasDatabase } from "@/lib/db";
 import { upcomingCatalysts } from "@/lib/scout/calendar";
 import * as store from "@/lib/scout/store";
-import { toEt } from "@/lib/time";
+import { etLabel, toEt } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -35,7 +35,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
       <h1>Home</h1>
       <TickerSearch />
       {down.length > 0 && <p className="small warn">Sources not reporting: {down.map((h) => `${h.source} (${h.status})`).join(", ")}. See Settings.</p>}
-      {running && <p className="small warn">A scan started at {running.startedAt.replace("T", " ").slice(0, 16)}Z is still running; refresh in a few minutes.</p>}
+      {running && <p className="small warn">A scan started at {etLabel(running.startedAt, true)} is still running; refresh in a few minutes.</p>}
 
       <MarketPanels />
 

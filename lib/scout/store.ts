@@ -414,7 +414,13 @@ export async function finishRun(id: number, status: "ok" | "skipped" | "error", 
   await q(`UPDATE runs SET finished_at = now(), status = $2, detail = $3, error = $4 WHERE id = $1`, [id, status, JSON.stringify(detail ?? null), error ?? null]);
 }
 
+/** A function is stopped at its time limit (5 minutes) without a chance to record it: close those runs so nothing says "still running" forever. */
+export async function closeStaleRuns(): Promise<void> {
+  await q(`UPDATE runs SET status = 'error', finished_at = now(), error = 'did not finish: stopped at the time limit before it could record a result' WHERE status = 'running' AND started_at < now() - interval '15 minutes'`);
+}
+
 export async function recentRuns(limit = 20): Promise<Array<{ id: number; action: string; startedAt: string; finishedAt: string | null; status: string; detail: unknown; error: string | null }>> {
+  await closeStaleRuns().catch(() => undefined);
   return (await q(`SELECT * FROM runs ORDER BY id DESC LIMIT $1`, [limit])).map((r) => ({ id: Number(r.id), action: r.action, startedAt: iso(r.started_at)!, finishedAt: iso(r.finished_at), status: r.status, detail: r.detail, error: r.error }));
 }
 

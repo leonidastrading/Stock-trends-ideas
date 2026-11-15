@@ -42,8 +42,8 @@ export default async function MarketPanels() {
   return (
     <>
       <div className="gauges-row">
-        <Gauge value={b?.mood ?? null} title="Fear & greed" note={b ? `Market mood from breadth, highs vs lows, S&P vs its 125-day average and VIX: ${b.parts}` : "loads with the after-close job"} />
-        <Gauge value={social.data?.retailGreed ?? null} title="Retail greed" note={social.data ? `Bullish share of ${social.data.tagged} sentiment-tagged Stocktwits posts on the 20 trending stocks (50 = balanced)` : "Stocktwits not loaded yet"} />
+        <Gauge value={b?.mood ?? null} title="Fear & greed" note={b ? `Our own reading (not CNN's), the average of: ${b.parts}. From ${b.stocks} large US stocks' daily closes, SPY and Cboe's VIX; as of ${b.asOf}.` : "loads with the after-close job"} />
+        <Gauge value={social.data?.retailGreed ?? null} title="Retail greed" note={social.data ? `Share of bullish posts among the ${social.data.tagged} Stocktwits posts tagged bullish or bearish on today's 20 trending stocks (50 = even; X has no free data)` : "Stocktwits not loaded yet"} />
         {b ? (
           <section className="statbars">
             <Bar left={<>Advancing <b>{Math.round((b.advancing / Math.max(b.advancing + b.declining, 1)) * 100)}%</b> ({b.advancing})</>} right={<>Declining ({b.declining})</>} share={(b.advancing / Math.max(b.advancing + b.declining, 1)) * 100} />
