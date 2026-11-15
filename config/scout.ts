@@ -40,6 +40,11 @@ export const SCOUT = {
   /** Lateness: either of these marks the idea already obvious. */
   lateStockMove30dPct: 30,
   lateNewsStories30d: 20,
+  /** Shorts: never promoted under this price (often hard to borrow, costly, squeeze-prone)... */
+  minShortPrice: 5,
+  /** ...or after a run-up this large (30 days / 5 days): squeeze risk. */
+  maxShortRunUp30dPct: 50,
+  maxShortRunUp5dPct: 25,
 
   // ----- paper tracking
   /** Entry is the next regular-session open after the card. */

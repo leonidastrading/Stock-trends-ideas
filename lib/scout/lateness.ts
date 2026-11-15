@@ -23,6 +23,8 @@ export async function measureLateness(data: MarketData | null, symbol: string, n
     out.hasPrices = bars.length > 0;
     out.stockMove30dPct = moveSince(bars, addDays(today, -30));
     out.stockMove90dPct = moveSince(bars, addDays(today, -90));
+    out.stockMove5dPct = moveSince(bars, addDays(today, -7));
+    out.lastClose = bars.slice().sort((a, b) => a.date.localeCompare(b.date)).at(-1)?.c ?? null;
   } catch {
     /* unmeasured: the gate notes say so */
   }

@@ -1,4 +1,4 @@
-import { KIND_LABEL, type Kind } from "@/config/scout";
+import { KIND_LABEL, SCOUT, type Kind } from "@/config/scout";
 import Direction from "@/components/Direction";
 import Feedback from "@/components/Feedback";
 import { after } from "next/server";
@@ -51,7 +51,12 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
               {q.changePct !== null && <span className={q.changePct >= 0 ? "pos" : "neg"}> {pct(q.changePct, 2)} {sessionLabel(q)}</span>}
             </span>
           ) : null}
-          {opposing?.length ? <span className="tag warn" style={{ marginLeft: 8 }}>⚠ opposite call on {c.primaryTicker}: {opposing.map((id) => <a key={id} href={`/ideas?days=90&card=${id}#card-${id}`}>#{id} </a>)}</span> : null}</div>
+          {c.direction === "short" && q && (q.price < SCOUT.minShortPrice || (q.changePct ?? 0) >= 15) ? (
+            <span className="tag not_promoted" style={{ marginLeft: 8 }} title="Cheap or fast-rising stocks are often hard and costly to borrow and can squeeze far past a stop; losses on a short are open-ended.">
+              ⚠ dangerous to short: {q.price < SCOUT.minShortPrice ? `under $${SCOUT.minShortPrice}` : `up ${q.changePct}% ${sessionLabel(q)}`}; defined-risk puts or no trade
+            </span>
+          ) : null}
+          {opposing?.length ?<span className="tag warn" style={{ marginLeft: 8 }}>⚠ opposite call on {c.primaryTicker}: {opposing.map((id) => <a key={id} href={`/ideas?days=90&card=${id}#card-${id}`}>#{id} </a>)}</span> : null}</div>
         <div className="small secondary">
           {nextE ? <>Next earnings <b>~{fmtDay(nextE)}</b> <span className="muted">({info!.nextBasis})</span></>
             : info?.lastEarnings ? <>Next earnings: not enough history to estimate <span className="muted">(last release {fmtDay(info.lastEarnings)})</span></>

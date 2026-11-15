@@ -129,6 +129,9 @@ export interface MeasuredLateness {
   stockMove90dPct: number | null;
   /** false = the price feed returned no bars for the primary ticker (a foreign or unlisted symbol); undefined = not checked. */
   hasPrices?: boolean;
+  /** Latest close and the move over the last 5 sessions (short-squeeze checks). */
+  lastClose?: number | null;
+  stockMove5dPct?: number | null;
 }
 
 export type CardStatus = "promoted" | "late" | "not_promoted";
@@ -192,6 +195,17 @@ export function applyGates(input: Card, measured: MeasuredLateness, opts: GateOp
     notes.push(`materiality: line is ${primary.revenue_share_pct}% of ${primary.symbol} revenue (gate: ${SCOUT.minRevenueSharePct}%)`);
   } else if (lateness.already_obvious) {
     status = "late";
+  }
+  // Shorts that are impractical or dangerous to hold: cheap stocks and fresh run-ups (borrow cost, squeezes).
+  if (input.direction === "short" && status !== "not_promoted") {
+    const px = measured.lastClose ?? null, up30 = lateness.stock_move_30d_pct, up5 = measured.stockMove5dPct ?? null;
+    const why = px !== null && px < SCOUT.minShortPrice ? `$${px.toFixed(2)} is under $${SCOUT.minShortPrice}: often hard and costly to borrow, and prone to squeezes`
+      : up30 > SCOUT.maxShortRunUp30dPct ? `up ${up30.toFixed(1)}% in 30 days (limit ${SCOUT.maxShortRunUp30dPct}%): squeeze risk`
+        : up5 !== null && up5 > SCOUT.maxShortRunUp5dPct ? `up ${up5.toFixed(1)}% in 5 days (limit ${SCOUT.maxShortRunUp5dPct}%): squeeze risk` : null;
+    if (why) {
+      status = "not_promoted";
+      notes.push(`short not promoted: ${why}; defined-risk puts or no trade`);
+    }
   }
   if (primary.revenue_share_pct !== null && primary.share_is_estimate) notes.push(`revenue share for ${primary.symbol} is the model's estimate`);
 

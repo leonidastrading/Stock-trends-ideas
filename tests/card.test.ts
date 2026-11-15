@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyGates, CARD_JSON_SCHEMA, catalystDate, NoEvidenceError, parseCard, rankScore, type Card } from "@/lib/scout/card";
+import { applyGates, CARD_JSON_SCHEMA, catalystDate, NoEvidenceError, parseCard, rankScore, type Card, type MeasuredLateness } from "@/lib/scout/card";
 
 export const sampleCard = (p: Partial<Card> = {}): Card => ({
   title: "Transformer backlog pulls forward grid capex",
@@ -109,5 +109,19 @@ describe("tickers without US prices", () => {
     expect(g.status).toBe("not_promoted");
     expect(g.notes.join()).toMatch(/no US price data for BESI/);
     expect(applyGates(card, { newsStories30d: 2, stockMove30dPct: 1, stockMove90dPct: 2, hasPrices: true }).status).toBe("promoted");
+  });
+});
+
+describe("short-squeeze gate", () => {
+  const m = (o: Partial<MeasuredLateness>): MeasuredLateness => ({ newsStories30d: 3, stockMove30dPct: 2, stockMove90dPct: 5, hasPrices: true, lastClose: 40, stockMove5dPct: 1, ...o });
+  it("a short on a cheap stock or right after a run-up is not promoted; a long is unaffected", () => {
+    const short = sampleCard({ direction: "short" });
+    expect(applyGates(short, m({})).status).toBe("promoted");
+    const cheap = applyGates(short, m({ lastClose: 2.6 }));
+    expect(cheap.status).toBe("not_promoted");
+    expect(cheap.notes.join(" ")).toMatch(/short not promoted: \$2\.60 is under \$5/);
+    expect(applyGates(short, m({ stockMove5dPct: 26 })).notes.join(" ")).toMatch(/up 26\.0% in 5 days \(limit 25%\): squeeze risk/);
+    expect(applyGates(short, m({ stockMove30dPct: 60 })).status).toBe("not_promoted");
+    expect(applyGates(sampleCard({ direction: "long" }), m({ lastClose: 2.6, stockMove5dPct: 40 })).status).not.toBe("not_promoted");
   });
 });
