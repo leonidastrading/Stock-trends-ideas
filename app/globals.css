@@ -230,3 +230,6 @@ a.button.primary { background: var(--accent); border-color: var(--accent); color
 .card-chip { font-size: 11px; margin-left: 3px; padding: 0 5px; border: 1px solid var(--border); border-radius: 8px; text-decoration: none; color: var(--text-secondary); vertical-align: 1px; white-space: nowrap; }
 .card-chip:hover { border-color: var(--accent); color: var(--accent); }
 .investigation p, .investigation li, .rumor-item > div, .digest-item > div { max-width: 92ch; }
+.investigation-follow { display: flex; flex-direction: column; gap: 10px; margin: 10px 0 6px; padding-top: 10px; border-top: 1px solid var(--border); }
+.investigation-follow > button { align-self: flex-start; }
+.dig-deeper .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }

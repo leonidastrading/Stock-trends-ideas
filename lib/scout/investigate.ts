@@ -248,3 +248,18 @@ export async function researchExposure(deps: ResearchDeps, inv: Investigation, t
   const res = await researchCandidate({ origin: "scout", term, kindHint: "event", tickersHint: [ticker], observation: null, context: investigationContext(inv, x) }, deps);
   return res.outcome === "card" ? { outcome: "card", cardId: res.card.id, status: res.card.status } : { outcome: res.outcome, reason: res.reason };
 }
+
+/** Pure: a finished report written out, for a question about it or a follow-up investigation. */
+export function reportText(inv: Investigation): string {
+  const r = inv.report;
+  if (!r) return inv.input.slice(0, 4000);
+  return [
+    `Investigation #${inv.id} (${inv.createdAt.slice(0, 10)}): ${r.headline || inv.title}`,
+    r.what_happened,
+    `Money trail:\n${r.money_trail.map((m) => `- [${m.status}] ${m.finding} (${m.source})`).join("\n")}`,
+    r.listed.length ? `Listed companies exposed:\n${r.listed.map((x) => `- ${x.direction} ${x.ticker} (confidence ${x.confidence}): ${x.why}${x.catalyst ? ` Catalyst: ${x.catalyst}${x.catalyst_date ? ` ${x.catalyst_date}` : ""}` : ""}`).join("\n")}` : "Listed companies exposed: none found.",
+    r.open_questions.length ? `Open questions:\n${r.open_questions.map((q) => `- ${q}`).join("\n")}` : "",
+    `Bottom line: ${r.bottom_line}`,
+    `Original story (start): ${inv.input.slice(0, 1500)}`,
+  ].filter(Boolean).join("\n\n");
+}

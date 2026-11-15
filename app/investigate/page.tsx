@@ -1,7 +1,9 @@
 import SetupNotice from "@/components/SetupNotice";
 import Ticker from "@/components/Ticker";
 import { hasDatabase } from "@/lib/db";
-import { listInvestigations, type Investigation } from "@/lib/scout/investigate";
+import { listInvestigations, reportText, type Investigation } from "@/lib/scout/investigate";
+import CardAsk from "@/components/CardAsk";
+import DigDeeper from "./DigDeeper";
 import * as store from "@/lib/scout/store";
 import { etLabel } from "@/lib/time";
 import ExposureResearch from "./ExposureResearch";
@@ -92,6 +94,10 @@ function InvestigationView({ inv, open, researched, t }: { inv: Investigation; o
           )}
           {r.open_questions.length > 0 && <><h3>Open questions</h3><ul className="small secondary">{r.open_questions.map((x, k) => <li key={k}>{t(x)}</li>)}</ul></>}
           <p><b>Bottom line:</b> {t(r.bottom_line)}</p>
+          <div className="investigation-follow">
+            <CardAsk symbol={r.listed[0]?.ticker ?? ""} tickers={r.listed.map((x) => x.ticker)} noun="investigation" subject={`investigation #${inv.id} (${(r.headline || inv.title).slice(0, 120)})`} context={reportText(inv)} />
+            <DigDeeper id={inv.id} previous={reportText(inv)} suggestions={r.open_questions} />
+          </div>
         </>
       )}
       {rec && (

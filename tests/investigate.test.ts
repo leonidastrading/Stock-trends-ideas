@@ -69,5 +69,10 @@ describe("investigations: end to end (PGlite, fake model and records)", () => {
     const ctx = investigationContext(inv, inv.report!.listed[0]);
     expect(ctx).toContain("[confirmed] ASI PAC gave $5,000 to Alfonso for Congress");
     expect(ctx).toContain("The exposure to check: long LHX");
+    const { reportText } = await import("@/lib/scout/investigate");
+    const rt = reportText(inv);
+    expect(rt).toMatch(/^Investigation #\d+ \(\d{4}-\d{2}-\d{2}\): The router, the AI vendor and the \$50B ask/);
+    expect(rt).toContain("- long LHX (confidence 45): prime FAA telecom contractor");
+    expect(rt).toContain("Open questions:\n- Who wins the integrator role?");
   });
 });
