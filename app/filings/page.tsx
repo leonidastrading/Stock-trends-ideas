@@ -4,6 +4,7 @@ import { OPTIONS_UNIVERSE } from "@/config/options";
 import { pickSignals } from "@/lib/scout/filings";
 import { OPTIONS_RULES } from "@/lib/scout/options-flow";
 import * as store from "@/lib/scout/store";
+import ResearchButton from "./ResearchButton";
 import { addDays, toEt } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,9 @@ export default async function FilingsPage() {
   const congress = await store.congressTradesSince(addDays(today, -45)).catch(() => []);
   const signals = pickSignals(buys, alerts, today, flags, congress);
   const researched = candidates.filter((c) => /^(filing|insider|options|congress|insider\+congress): /.test(c.term));
+  // Stocks with a card in the last 30 days (by any route), so the button is not offered twice.
+  const researchedSyms = new Set((await store.cardsSince(30).catch(() => [])).map((c) => c.primaryTicker));
+  const buyNote = (b: store.InsiderBuyRow) => `Insider open-market purchase (SEC Form 4, filed ${b.filed}): ${b.owner ?? "an insider"} (${b.role ?? "insider"}) of ${b.issuerName ?? b.symbol} bought ${Math.round(b.shares ?? 0).toLocaleString("en-US")} shares at ${b.price === null ? "an unreported price" : `$${b.price}`} = ${usd(b.value)} on ${b.txDate ?? b.filed}${b.pctIncrease !== null ? `, adding ${b.pctIncrease}% to their holding` : ""}${b.routine === false ? ", outside their usual trading month (opportunistic)" : b.routine === true ? " (a routine purchase)" : ""}. Not under a 10b5-1 plan.`;
   const eightKs = alerts.filter((a) => a.kind === "8-K");
   const d13 = alerts.filter((a) => a.kind === "13D");
   return (
@@ -52,7 +56,7 @@ export default async function FilingsPage() {
       <section className="card">
         <h2>Insider purchases, last 30 days</h2>
         <div className="table-wrap"><table>
-          <thead><tr><th>Filed</th><th>Stock</th><th>Insider</th><th className="num">Value</th><th className="num">+ holding</th><th>Pattern</th></tr></thead>
+          <thead><tr><th>Filed</th><th>Stock</th><th>Insider</th><th className="num">Value</th><th className="num">+ holding</th><th>Pattern</th><th>Research</th></tr></thead>
           <tbody>
             {buys.slice(0, 60).map((b) => (
               <tr key={b.accession}>
@@ -62,6 +66,7 @@ export default async function FilingsPage() {
                 <td className="num">{usd(b.value)}</td>
                 <td className="num">{b.pctIncrease === null ? "—" : `+${b.pctIncrease}%`}</td>
                 <td className="small">{b.routine === true ? <span className="muted">routine</span> : b.routine === false ? <span className="pos">opportunistic</span> : <span className="muted">no history</span>}</td>
+                <td>{b.symbol ? (researchedSyms.has(b.symbol) ? <span className="small muted">researched</span> : <ResearchButton ticker={b.symbol} observation={buyNote(b)} />) : null}</td>
               </tr>
             ))}
             {buys.length === 0 && <tr><td colSpan={6} className="muted">None read yet. The queue is worked through on each hourly story call and after the close.</td></tr>}

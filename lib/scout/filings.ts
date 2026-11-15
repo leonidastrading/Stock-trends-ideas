@@ -143,6 +143,17 @@ export function smartMoneySignals(buys: store.InsiderBuyRow[], congress: store.C
 
 const usd = (v: number) => (v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${Math.round(v / 1e3)}k`);
 
+/**
+ * Pure: how strong a stock's insider buying is, below insiders + Congress (3.5). More insiders count most; a single
+ * insider still ranks high when the purchase is large ($1M+, more for $5M+) or more than doubles the holding.
+ */
+export function insiderStrength(owners: number, bs: store.InsiderBuyRow[]): number {
+  const base = owners >= 3 ? 2.5 : owners >= 2 ? 2 : 1;
+  const total = bs.reduce((a, b) => a + (b.value ?? 0), 0);
+  const bonus = (total >= 5_000_000 ? 1.5 : total >= 1_000_000 ? 1 : 0) + (bs.some((b) => (b.pctIncrease ?? 0) >= 100) ? 0.5 : 0);
+  return Math.min(3.4, base + bonus);
+}
+
 /** Pure: the day's candidate signals from stored buys and alerts, strongest first. */
 export function pickSignals(buys: store.InsiderBuyRow[], alerts: store.FilingAlert[], today: string, flags: store.OptionsFlag[] = [], congress: store.CongressTradeRow[] = []): FilingSignal[] {
   const out: FilingSignal[] = smartMoneySignals(buys, congress, today);
@@ -185,11 +196,12 @@ export function pickSignals(buys: store.InsiderBuyRow[], alerts: store.FilingAle
     if (!bs.some((b) => daysBetween(b.filed, today) <= 5)) continue; // something new this week
     const owners = new Set(bs.map((b) => b.owner));
     const total = bs.reduce((a, b) => a + (b.value ?? 0), 0);
-    const big = bs.some((b) => (b.value ?? 0) >= 100_000 && (b.pctIncrease ?? 0) >= 10);
+    // Big: $100k+ that adds 10%+ to the holding, or $1M+ whatever the holding (often unknown for directors).
+    const big = bs.some((b) => ((b.value ?? 0) >= 100_000 && (b.pctIncrease ?? 0) >= 10) || (b.value ?? 0) >= 1_000_000);
     if (owners.size < 2 && !big) continue;
     const lines = bs.slice(0, 6).map((b) => `${b.owner} (${b.role}) bought ${Math.round(b.shares ?? 0).toLocaleString("en-US")} shares at $${b.price} = ${usd(b.value ?? 0)} on ${b.txDate ?? b.filed}${b.pctIncrease !== null ? `, +${b.pctIncrease}% to their holding` : ""}${b.routine === false ? ", outside their usual trading month (opportunistic)" : ""}`);
     out.push({
-      kind: "insider", symbol, term: `insider: ${symbol}`, strength: owners.size >= 3 ? 2.5 : owners.size >= 2 ? 2 : 1, direction: "long",
+      kind: "insider", symbol, term: `insider: ${symbol}`, strength: insiderStrength(owners.size, bs), direction: "long",
       context: `Insider open-market purchases (Form 4, code P, not under a 10b5-1 plan) in ${bs[0].issuerName} over the last ${FILINGS.clusterDays} days: ${owners.size} insider(s), ${usd(total)} in total.\n${lines.map((l) => `- ${l}`).join("\n")}\nThe evidence: opportunistic insider purchases (not the insider's routine calendar month) earned about 0.8% a month for about six months with no reversal (Cohen, Malloy & Pomorski); markets underreact to them. Strongest when several insiders buy, after a decline, in small and mid caps, and when the purchase is large against the insider's holding. Routine purchases earn about nothing. Horizon about six months.`,
       trigger: [{ source: "edgar", metric: `insider_buys_30d:${symbol}`, value: owners.size, baseline: null, changeVs12m: null, asOf: bs[0].filed, note: `${owners.size} insider(s) bought ${usd(total)} of ${symbol} in 30 days` }],
     });

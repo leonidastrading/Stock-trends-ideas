@@ -94,3 +94,17 @@ describe("insiders + Congress signals for research", () => {
     expect(playerOf("scout", "story: NVDA")).toBe("scout_story");
   });
 });
+
+describe("insider buy strength", () => {
+  it("a single huge purchase ranks with clustered buying, not last", async () => {
+    const { insiderStrength, pickSignals } = await import("@/lib/scout/filings");
+    expect(insiderStrength(1, [B({ value: 14_700_000, pctIncrease: 491, routine: false })])).toBe(3); // STWD: ahead of new 13Ds (2)
+    expect(insiderStrength(1, [B({ value: 9_200_000, pctIncrease: null, routine: null })])).toBe(2.5);
+    expect(insiderStrength(1, [B({ value: 1_000_000, pctIncrease: 4, routine: false })])).toBe(2);
+    expect(insiderStrength(1, [B({ value: 60_000, pctIncrease: 5, routine: true })])).toBe(1);
+    expect(insiderStrength(3, [B({ value: 5_000_000, pctIncrease: 80, routine: false })])).toBe(3.4);
+    // A $9.2M director purchase with an unknown holding now qualifies on size alone.
+    const s = pickSignals([B({ symbol: "FUN", value: 9_200_000, pctIncrease: null, routine: null, filed: "2026-11-13" })], [], "2026-11-15");
+    expect(s.map((x) => [x.symbol, x.strength])).toEqual([["FUN", 2.5]]);
+  });
+});
