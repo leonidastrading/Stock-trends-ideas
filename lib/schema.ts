@@ -444,6 +444,36 @@ CREATE TABLE IF NOT EXISTS site_articles (
 );
 CREATE INDEX IF NOT EXISTS site_articles_site_idx ON site_articles (site_id, seen_at);
 
+-- Rumors: documents dropped in (rumors/ folder, pasted, uploaded, or a website marked for rumors), and the
+-- market-relevant claims the model found in them, each checked against the week's mainstream headlines.
+CREATE TABLE IF NOT EXISTS rumor_docs (
+  id serial PRIMARY KEY,
+  source text NOT NULL,
+  path text UNIQUE,
+  received_at timestamptz NOT NULL DEFAULT now(),
+  chars integer NOT NULL DEFAULT 0,
+  rumors integer NOT NULL DEFAULT 0,
+  cost_usd double precision,
+  error text
+);
+CREATE TABLE IF NOT EXISTS rumors (
+  id serial PRIMARY KEY,
+  doc_id integer NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  claim text NOT NULL,
+  tickers text[] NOT NULL DEFAULT '{}',
+  direction text NOT NULL DEFAULT 'none',
+  category text NOT NULL DEFAULT 'other',
+  specificity integer NOT NULL DEFAULT 2,
+  timeframe text,
+  confirm text,
+  source text,
+  quote text,
+  mainstream jsonb
+);
+CREATE INDEX IF NOT EXISTS rumors_created_idx ON rumors (created_at);
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'ideas';
+
 -- Dashboard panels (market quotes, earnings calendar, contracts, breadth): cached fetches, refreshed hourly.
 CREATE TABLE IF NOT EXISTS dashboard_cache (
   key text PRIMARY KEY,

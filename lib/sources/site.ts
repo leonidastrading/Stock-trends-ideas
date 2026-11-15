@@ -104,6 +104,7 @@ export function articleLinks(html: string, base: string, max = 40): Article[] {
     const title = htmlText(m[2]).replace(/\s+/g, " ").trim();
     if (!slugLike || title.length < 25 || title.length > 300) continue;
     if (/^(read more|continue reading|subscribe|sign up|log in)/i.test(title) || /\/(tag|tags|category|author|page|login|signup|subscribe|about|contact|privacy|terms)(\/|$)/i.test(path)) continue;
+    if (/\b(privacy|cookie|terms of (use|service)|disclosure|comment (policy|guidelines)|offensive comments|advertise|careers|newsletter sign|support us|donate)\b/i.test(title) || /(privacy|cookie|terms|disclosure|policy|guidelines|faq|help|advertis|careers|donate|store|shop)/i.test(path.split("/").filter(Boolean)[0] ?? "")) continue;
     seen.add(url);
     out.push({ url, title, published: null, summary: "" });
     if (out.length >= max) break;

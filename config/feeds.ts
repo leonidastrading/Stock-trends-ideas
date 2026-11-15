@@ -26,5 +26,6 @@ export const FEEDS: Feed[] = [
   // People and your own inputs
   { name: "Trump's Truth Social posts", host: "trumpstruth.org", what: "every post (via the public archive's feed), read for market impact", when: "every 5 minutes, or hourly", usedBy: "Trump posts desk" },
   { name: "GitHub inbox", host: "api.github.com", what: "documents your bot drops in the inbox repo, read for ideas", when: "on each new file (webhook) or hourly", usedBy: "Your bot", key: "GITHUB_INBOX_REPO" },
+  { name: "Rumors", host: "(your files and sites)", what: "dumps from conspiracy forums and fringe sites (rumors/ folder, Rumors tab, or websites marked for rumors), filtered for market-relevant claims", when: "on each file, or daily per site", usedBy: "Rumors tab (checked only on request)" },
   { name: "Your websites", host: "(the list below)", what: "new articles on sites you add here, read for trade ideas", when: "once a day per site", usedBy: "Scout · your websites" },
 ];

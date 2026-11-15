@@ -12,7 +12,8 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 const body = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("add"), url: z.string().trim().min(3).max(500), label: z.string().trim().max(60).optional() }),
+  z.object({ action: z.literal("add"), url: z.string().trim().min(3).max(500), label: z.string().trim().max(60).optional(), kind: z.enum(["ideas", "rumors"]).optional() }),
+  z.object({ action: z.literal("kind"), id: z.number().int(), kind: z.enum(["ideas", "rumors"]) }),
   z.object({ action: z.literal("pause"), id: z.number().int(), active: z.boolean() }),
   z.object({ action: z.literal("remove"), id: z.number().int() }),
   z.object({ action: z.literal("check"), id: z.number().int() }),
@@ -27,8 +28,12 @@ export async function POST(request: Request) {
   const b = parsed.data;
   try {
     if (b.action === "add") {
-      const { site, found } = await addSite(b.url, b.label);
+      const { site, found } = await addSite(b.url, b.label, undefined, b.kind ?? "ideas");
       return NextResponse.json({ ok: true, message: `Added ${site.label}: ${site.detail}`, found });
+    }
+    if (b.action === "kind") {
+      await store.setSiteKind(b.id, b.kind);
+      return NextResponse.json({ ok: true });
     }
     if (b.action === "pause") {
       await store.setSiteActive(b.id, b.active);

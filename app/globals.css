@@ -217,3 +217,5 @@ button.chip.active { border-color: var(--accent); color: var(--accent); }
 .drift-item > div { margin-top: 3px; }
 a.button { display: inline-block; border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; text-decoration: none; background: var(--surface-1); color: inherit; }
 a.button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.rumor-item { margin-bottom: 10px; }
+.rumor-item > div { margin-top: 3px; }

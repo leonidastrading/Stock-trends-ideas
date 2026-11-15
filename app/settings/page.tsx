@@ -61,7 +61,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
       <section className="card" id="websites">
         <h2>Your websites</h2>
-        <p className="small secondary">Add any site with news or analysis (a blog, a newsletter archive, a company newsroom, an industry site). The scout reads it once a day: its RSS feed if it has one, otherwise the article links on the page. Articles already there when you add it are only recorded; new ones (up to {SITES.maxArticlesPerRead} a day per site) are read for trade ideas, and up to {SITES.maxIdeasPerRead} ideas a day per site go to research. Their cards score as &quot;Scout · your websites&quot;. Sites behind a login or a bot check cannot be read.</p>
+        <p className="small secondary">Add any site with news or analysis (a blog, a newsletter archive, a company newsroom, an industry site). The scout reads it once a day: its RSS feed if it has one, otherwise the article links on the page. Articles already there when you add it are only recorded; new ones (up to {SITES.maxArticlesPerRead} a day per site) are read for trade ideas, and up to {SITES.maxIdeasPerRead} ideas a day per site go to research. Their cards score as &quot;Scout · your websites&quot;. Sites behind a login or a bot check cannot be read. A site marked &quot;for the Rumors tab&quot; (conspiracy forums, fringe news) is read the same way, but its articles go to the Rumors tab as unverified claims instead of to research.</p>
         <SitesEditor sites={sites} articles={articles} />
       </section>
 

@@ -134,6 +134,12 @@ export async function buildBriefing(now = new Date()): Promise<string> {
     return d?.data?.setups?.length ? d.data.setups.slice(0, 12).map((s) => `- ${s.symbol} ${s.stage}: ${s.dayPct}% on ${s.eventDate} (${s.eventKind}: ${cut(s.eventHeadline, 90)}), ${s.sincePct}% more over ${s.daysAfter} trading days (${s.sinceVsSpy}% vs SPY), ${s.badAfter} bad headlines since`).join("\n") : null;
   });
 
+  await safe("Rumors from fringe and conspiracy sources (UNVERIFIED claims, Rumors tab; never treat as fact)", async () => {
+    const { rumorsSince } = await import("./rumors");
+    const rs = (await rumorsSince(7, 200)).filter((r) => r.specificity >= 3).slice(0, 15);
+    return rs.length ? rs.map((r) => `- [${r.category}${r.tickers.length ? ` ${r.tickers.join(",")}` : ""}] ${cut(r.claim, 160)}${r.mainstream ? ` (mainstream: ${r.mainstream.headlines7d} headlines, ${r.mainstream.matches.length ? "similar reported" : "nothing similar"})` : ""}`).join("\n") : null;
+  });
+
   await safe("Federal contracts, latest large awards to listed companies", async () => {
     const c = await store.cacheGet<Array<{ ticker: string; agency: string; amount: number; date: string; description: string }>>("contracts");
     return c?.data?.length ? c.data.slice(0, 8).map((r) => `- ${r.date} ${r.ticker}: ${usd(r.amount)} from ${cut(r.agency, 50)}: ${cut(r.description, 90)}`).join("\n") : null;

@@ -22,7 +22,7 @@ export const SITES = {
 const host = (url: string) => new URL(url).hostname.replace(/^www\./, "");
 
 /** Add a site: read it once now so you see what the scout found, and record what is already there as the starting point. */
-export async function addSite(raw: string, label: string | undefined, fetchImpl?: typeof fetch): Promise<{ site: store.Site; found: number }> {
+export async function addSite(raw: string, label: string | undefined, fetchImpl?: typeof fetch, kind: "ideas" | "rumors" = "ideas"): Promise<{ site: store.Site; found: number }> {
   const url = cleanSiteUrl(raw);
   if (!url) throw new Error("that is not a public web address (try https://example.com/news)");
   const existing = await store.listSites();
@@ -30,7 +30,7 @@ export async function addSite(raw: string, label: string | undefined, fetchImpl?
   if (existing.length >= SITES.maxSites) throw new Error(`at most ${SITES.maxSites} sites`);
   const read = await readSite(url, null, fetchImpl);
   const detail = `${read.articles.length} articles via ${read.via === "feed" ? `its feed (${read.feedUrl})` : "the links on the page"}; new ones are read from the next daily check`;
-  const site = await store.insertSite({ url, label: label?.trim().slice(0, 60) || host(url), feedUrl: read.feedUrl, via: read.via, status: "ok", detail });
+  const site = await store.insertSite({ url, label: label?.trim().slice(0, 60) || host(url), kind, feedUrl: read.feedUrl, via: read.via, status: "ok", detail });
   await store.addSiteArticles(site.id, read.articles, true);
   return { site, found: read.articles.length };
 }
@@ -65,6 +65,22 @@ export async function checkSite(site: store.Site, deps: ResearchDeps, deliver: (
   const now = newOnes.slice(0, SITES.maxArticlesPerRead);
   await store.setArticleOutcome(newOnes.slice(SITES.maxArticlesPerRead).map((a) => a.url), `skipped: more than ${SITES.maxArticlesPerRead} new in one day`);
   const withText = await Promise.all(now.map(async (a) => ({ ...a, text: read.via === "feed" && a.summary.length > 600 ? a.summary : await articleText(a.url, 3000, fetchImpl) })));
+  // A site marked for rumors: its new articles go to the Rumors tab (claims catalogued, nothing researched).
+  if (site.kind === "rumors") {
+    try {
+      const { readRumorDoc } = await import("./rumors");
+      const doc = withText.map((a) => `--- ${a.title}\nURL: ${a.url}${a.published ? `\nPublished: ${a.published.slice(0, 10)}` : ""}\n${a.text || a.summary}`).join("\n\n");
+      const r = await readRumorDoc(doc, `${site.label} (${now.length} new article${now.length === 1 ? "" : "s"})`, { ...deps, data: deps.data ?? null });
+      await store.setArticleOutcome(now.map((a) => a.url), r.error ? `not read: ${r.error}` : `rumors: ${r.rumors} found`);
+      await store.siteChecked(site.id, "ok", `${newOnes.length} new, ${now.length} read, ${r.rumors} rumor(s) to the Rumors tab${r.error ? `; ${r.error}` : ""}`, feed);
+      return { site: site.label, status: "ok", newArticles: newOnes.length, read: now.length, ideas: 0, sent: `${r.rumors} rumor(s)` };
+    } catch (err) {
+      const error = err instanceof Error ? err.message.slice(0, 200) : String(err);
+      await store.setArticleOutcome(now.map((a) => a.url), `not read: ${error}`);
+      await store.siteChecked(site.id, "ok", `${newOnes.length} new; reading failed: ${error}`, feed);
+      return { site: site.label, status: "ok", newArticles: newOnes.length, error };
+    }
+  }
   try {
     const { ideasFrom } = await import("./inbox");
     const { items } = await ideasFrom(articlesDocument(site.label, withText), `new articles on ${site.label}`, deps);

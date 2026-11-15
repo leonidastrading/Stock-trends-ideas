@@ -16,7 +16,10 @@ export async function POST(request: Request) {
   if (request.headers.get("x-github-event") === "ping") return NextResponse.json({ ok: true, pong: true });
   after(async () => {
     const [{ inboxConfig, pollInbox }, { defaultDeps }] = await Promise.all([import("@/lib/scout/inbox"), import("@/lib/scout/engine")]);
-    if (inboxConfig()) await pollInbox(defaultDeps(), 50, fetch, undefined, Date.now() + 240_000).catch(() => undefined);
+    if (inboxConfig()) await pollInbox(defaultDeps(), 50, fetch, undefined, Date.now() + 180_000).catch(() => undefined);
+    // The same push may have added files to rumors/.
+    const { pollRumors } = await import("@/lib/scout/rumors");
+    if (inboxConfig()) await pollRumors(defaultDeps(), 3, fetch, Date.now() + 100_000).catch(() => undefined);
   });
   return NextResponse.json({ ok: true, reading: true }, { status: 202 });
 }

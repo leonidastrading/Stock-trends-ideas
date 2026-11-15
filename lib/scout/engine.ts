@@ -209,6 +209,10 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
   if (left() > 60_000) {
     out.sites = await Promise.all([import("./sites"), import("./inbox")]).then(([{ checkSites }, { sendToImport }]) => checkSites({ ...defaultDeps(now), fetchImpl }, deadline - 30_000, sendToImport(process.env, fetchImpl ?? fetch), fetchImpl)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
   } else out.sites = "later: not enough time";
+  // Rumors: new files in the inbox repo's rumors/ folder (read for market-relevant claims; nothing researched).
+  if (left() > 90_000) {
+    out.rumors = await import("./rumors").then(({ pollRumors }) => pollRumors({ ...defaultDeps(now), fetchImpl }, 2, fetchImpl ?? fetch, deadline - 30_000)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+  } else out.rumors = "later: not enough time";
   // Congress trades: new House transaction reports (at most a minute per call), then their buys priced against SPY.
   if (left() > 60_000) {
     try {

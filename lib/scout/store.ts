@@ -832,10 +832,10 @@ export async function cardsForSymbol(symbol: string, limit = 25): Promise<Stored
 
 // ------------------------------------------------------------ your websites
 
-export interface Site { id: number; url: string; label: string; feedUrl: string | null; via: string | null; active: boolean; addedAt: string; checkedAt: string | null; status: string | null; detail: string | null }
+export interface Site { id: number; url: string; label: string; kind: "ideas" | "rumors"; feedUrl: string | null; via: string | null; active: boolean; addedAt: string; checkedAt: string | null; status: string | null; detail: string | null }
 export interface SiteArticle { url: string; siteId: number; title: string; published: string | null; seenAt: string; baseline: boolean; outcome: string | null }
 
-const toSite = (r: Row): Site => ({ id: Number(r.id), url: String(r.url), label: String(r.label), feedUrl: (r.feed_url as string) ?? null, via: (r.via as string) ?? null, active: !!r.active, addedAt: iso(r.added_at)!, checkedAt: iso(r.checked_at), status: (r.status as string) ?? null, detail: (r.detail as string) ?? null });
+const toSite = (r: Row): Site => ({ id: Number(r.id), url: String(r.url), label: String(r.label), kind: r.kind === "rumors" ? "rumors" : "ideas", feedUrl: (r.feed_url as string) ?? null, via: (r.via as string) ?? null, active: !!r.active, addedAt: iso(r.added_at)!, checkedAt: iso(r.checked_at), status: (r.status as string) ?? null, detail: (r.detail as string) ?? null });
 
 export async function listSites(activeOnly = false): Promise<Site[]> {
   return (await q(`SELECT * FROM sites ${activeOnly ? "WHERE active" : ""} ORDER BY added_at`)).map(toSite);
@@ -846,8 +846,12 @@ export async function getSite(id: number): Promise<Site | null> {
   return r ? toSite(r) : null;
 }
 
-export async function insertSite(s: { url: string; label: string; feedUrl: string | null; via: string; status: string; detail: string }): Promise<Site> {
-  return toSite((await q(`INSERT INTO sites (url, label, feed_url, via, checked_at, status, detail) VALUES ($1, $2, $3, $4, now(), $5, $6) RETURNING *`, [s.url, s.label, s.feedUrl, s.via, s.status, s.detail]))[0]);
+export async function insertSite(s: { url: string; label: string; kind?: "ideas" | "rumors"; feedUrl: string | null; via: string; status: string; detail: string }): Promise<Site> {
+  return toSite((await q(`INSERT INTO sites (url, label, kind, feed_url, via, checked_at, status, detail) VALUES ($1, $2, $3, $4, $5, now(), $6, $7) RETURNING *`, [s.url, s.label, s.kind ?? "ideas", s.feedUrl, s.via, s.status, s.detail]))[0]);
+}
+
+export async function setSiteKind(id: number, kind: "ideas" | "rumors"): Promise<void> {
+  await q(`UPDATE sites SET kind = $2 WHERE id = $1`, [id, kind]);
 }
 
 export async function siteChecked(id: number, status: string, detail: string, feed?: { feedUrl: string | null; via: string }): Promise<void> {

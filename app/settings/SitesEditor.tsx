@@ -11,6 +11,7 @@ const when = (iso: string | null) => (iso ? etLabel(iso) : "never");
 export default function SitesEditor({ sites, articles }: { sites: Site[]; articles: SiteArticle[] }) {
   const [url, setUrl] = useState("");
   const [label, setLabel] = useState("");
+  const [kind, setKind] = useState<"ideas" | "rumors">("ideas");
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   /** Result of the last action on one site, shown in that site's row. */
@@ -29,6 +30,7 @@ export default function SitesEditor({ sites, articles }: { sites: Site[]; articl
     setBusy(null);
     if (!res.ok || !j.ok) return say((j.errors ?? ["failed"]).join("; "), true);
     if (j.message) say(j.message);
+    else if (id !== null) setRowMsg((m) => { const n = { ...m }; delete n[id]; return n; });
     if (payload.action === "add") { setUrl(""); setLabel(""); }
     // Re-read the table (last check, latest articles) without losing the messages.
     router.refresh();
@@ -40,9 +42,13 @@ export default function SitesEditor({ sites, articles }: { sites: Site[]; articl
 
   return (
     <>
-      <form className="toolbar" onSubmit={(e) => { e.preventDefault(); if (url.trim()) act("add", { action: "add", url, label: label || undefined }); }}>
+      <form className="toolbar" onSubmit={(e) => { e.preventDefault(); if (url.trim()) act("add", { action: "add", url, label: label || undefined, kind }); }}>
         <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/news" aria-label="Website address" style={{ width: 320 }} />
         <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Name (optional)" aria-label="Name" style={{ width: 180 }} />
+        <select value={kind} onChange={(e) => setKind(e.target.value as "ideas" | "rumors")} aria-label="Use for">
+          <option value="ideas">for trade ideas</option>
+          <option value="rumors">for the Rumors tab</option>
+        </select>
         <button className="primary" type="submit" disabled={!!busy || !url.trim()}>{busy === "add" ? "Reading the site…" : "Add website"}</button>
         {sites.some((s) => s.active) && <button type="button" disabled={!!busy} onClick={checkAll} title="Reads each active site in turn; results show in each row">Check all sites now</button>}
       </form>
@@ -54,9 +60,10 @@ export default function SitesEditor({ sites, articles }: { sites: Site[]; articl
             {sites.map((s) => (
               <tr key={s.id} style={s.active ? undefined : { opacity: 0.55 }}>
                 <td style={{ minWidth: 220 }}>
-                  <a href={s.url} target="_blank" rel="noreferrer">{s.label}</a>{!s.active && <span className="tag">paused</span>}<div className="small muted">{s.url}</div>
+                  <a href={s.url} target="_blank" rel="noreferrer">{s.label}</a> <span className={`tag ${s.kind === "rumors" ? "late" : ""}`}>{s.kind === "rumors" ? "rumors" : "ideas"}</span>{!s.active && <span className="tag">paused</span>}<div className="small muted">{s.url}</div>
                   <div className="small" style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <button className="small" disabled={busy === `check${s.id}` || !s.active} title={`Read ${s.label} now for new articles (this site only)`} onClick={() => act(`check${s.id}`, { action: "check", id: s.id })}>{busy === `check${s.id}` ? "Reading…" : "Check this site"}</button>
+                    <button className="small" disabled={busy === `kind${s.id}`} title={s.kind === "rumors" ? "New articles will be read for trade ideas" : "New articles will go to the Rumors tab instead of research"} onClick={() => act(`kind${s.id}`, { action: "kind", id: s.id, kind: s.kind === "rumors" ? "ideas" : "rumors" })}>{s.kind === "rumors" ? "Use for ideas" : "Use for rumors"}</button>
                     <button className="small" disabled={busy === `pause${s.id}`} onClick={() => act(`pause${s.id}`, { action: "pause", id: s.id, active: !s.active })}>{s.active ? "Pause" : "Resume"}</button>
                     <button className="small" disabled={busy === `remove${s.id}`} onClick={() => act(`remove${s.id}`, { action: "remove", id: s.id }, `Stop following ${s.label}? Cards already written from it stay.`)}>Remove</button>
                   </div>
