@@ -176,6 +176,17 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
   }
   // The stock list behind the search box's suggestions (refreshed daily).
   if (data && left() > 40_000) out.assets = await import("./symbol-search").then(async ({ listings }) => `${(await listings()).length} listings`).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+  // Schwab's weekly sign-in: a phone alert once, the day before it lapses.
+  out.schwab = await import("../sources/schwab").then(async ({ schwabStatus }) => {
+    const s = await schwabStatus(process.env, now);
+    if (!s.connected || s.hoursLeft === null) return s.configured ? "not connected" : "not set up";
+    if (s.hoursLeft <= 24 && (await store.tryLock(`schwab:reminded:${s.expiresAt}`, 60 * 24 * 8))) {
+      const { pushConfigured, sendPush } = await import("../notify");
+      if (pushConfigured()) await sendPush({ title: "Schwab sign-in expires soon", message: `Short interest stops in about ${s.hoursLeft} hours. Settings → Sign in again (renews 7 days).`, click: `${(process.env.DASHBOARD_URL ?? "").replace(/\/$/, "")}/settings#schwab`, tags: ["key"], priority: 4 });
+      return `reminder sent (${s.hoursLeft}h left)`;
+    }
+    return `connected, ${s.hoursLeft}h left`;
+  }).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
   // Down drift: stocks still falling after bad news (bars for ~700 stocks, headlines for the few that qualify), hourly.
   if (data && left() > 70_000) {
     out.drift = await Promise.all([import("./drift"), import("../market/panels")]).then(async ([{ scanDrift }, { panel }]) => {

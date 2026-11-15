@@ -3,7 +3,7 @@ import Ticker from "@/components/Ticker";
 import { marketDataFromEnv } from "@/lib/alpaca";
 import { hasDatabase } from "@/lib/db";
 import { panel } from "@/lib/market/panels";
-import { DRIFT, scanDrift, type DriftSetup } from "@/lib/scout/drift";
+import { DRIFT, scanDrift, shortLine, type DriftSetup } from "@/lib/scout/drift";
 import * as store from "@/lib/scout/store";
 import { etLabel } from "@/lib/time";
 import DriftResearch from "./DriftResearch";
@@ -46,7 +46,7 @@ export default async function DriftPage() {
             <li>and it kept falling: at least {DRIFT.minFurtherPct}% more against SPY over the next {DRIFT.minDaysAfter} to {DRIFT.maxDaysAfter} trading days, no more than {DRIFT.maxBouncePct}% off its low, last price ${DRIFT.minPrice} or more.</li>
           </ul>
           <p>Why: bad public news is followed by drift lasting months, while no-news moves tend to reverse (Chan 2003); bad news travels slowly in thinly covered stocks (Hong, Lim &amp; Stein 2000); negative news wording predicts weak earnings and returns (Tetlock et al. 2008; Lopez-Lira &amp; Tang find it strongest for negative news and small caps); holders sitting on gains sell slowly (Frazzini 2006).</p>
-          <p>The freshest setups (up to {DRIFT.researchMaxDaysAfter} trading days after the event) are researched automatically, at most {DRIFT.maxResearchPerDay} a day, as short ideas held about 20 trading days on paper; they score as &quot;Scout · down drift&quot; on the Scoreboard. Your short rules still apply (nothing under $5, nothing that ran up hard just before). Much of the documented drift is in small stocks that can be hard or costly to short; free data has no short interest or borrow cost, so the research flags squeeze risk but cannot measure it.</p>
+          <p>The freshest setups (up to {DRIFT.researchMaxDaysAfter} trading days after the event) are researched automatically, at most {DRIFT.maxResearchPerDay} a day, as short ideas held about 20 trading days on paper; they score as &quot;Scout · down drift&quot; on the Scoreboard. Your short rules still apply (nothing under $5, nothing that ran up hard just before). Much of the documented drift is in small stocks that can be hard or costly to short; short interest (% of float, days to cover) comes from Schwab when it is connected in Settings; borrow cost is not available.</p>
           <p><b>Building</b> = 2-5 trading days since the event; <b>established</b> = 6-15.</p>
         </div>
       </details>
@@ -67,7 +67,7 @@ export default async function DriftPage() {
               <b className="neg">{pct(s.dayPct)}</b> on the day ({pct(s.dayVsSpy)} vs SPY) · <b className="neg">{pct(s.sincePct)}</b> since ({pct(s.sinceVsSpy)} vs SPY) over {s.daysAfter} trading days, down on {s.downDays} · <b>{pct(s.totalPct)}</b> in total · {s.bouncePct}% off the low · ${s.price}
             </div>
             <div className="small muted">
-              {s.volRatio ? `event-day volume ${s.volRatio}× normal · ` : ""}{s.badAfter} bad headline{s.badAfter === 1 ? "" : "s"} since{s.lawsuitAds ? ` (+${s.lawsuitAds} law-firm lawsuit ads)` : ""} · strength {s.score}
+              {shortLine(s) ? <span className={s.short?.squeeze === "high" ? "warn" : ""}>{shortLine(s)} · </span> : null}{s.volRatio ? `event-day volume ${s.volRatio}× normal · ` : ""}{s.badAfter} bad headline{s.badAfter === 1 ? "" : "s"} since{s.lawsuitAds ? ` (+${s.lawsuitAds} law-firm lawsuit ads)` : ""} · strength {s.score}
             </div>
             <div className="small" style={{ marginTop: 4 }}>
               {mine.length ? mine.map((c) => <a key={c.id} href={`/ideas?days=90&card=${c.id}#card-${c.id}`} style={{ marginRight: 8 }}>card #{c.id} ({c.status.replace("_", " ")})</a>) : <DriftResearch symbol={s.symbol} />}

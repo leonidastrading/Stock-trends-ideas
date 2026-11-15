@@ -9,15 +9,18 @@ import { etLabel, toEt } from "@/lib/time";
 import RunButtons from "./RunButtons";
 import SettingsForm from "./SettingsForm";
 import SitesEditor from "./SitesEditor";
+import SchwabPanel from "./SchwabPanel";
+import { schwabConfig, schwabStatus } from "@/lib/sources/schwab";
 import { FEEDS } from "@/config/feeds";
 import { SITES } from "@/lib/scout/sites";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export default async function SettingsPage() {
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ schwab?: string }> }) {
   const env = envStatus();
   if (!hasDatabase()) return <SetupNotice />;
+  const [sp, schwab] = await Promise.all([searchParams, schwabStatus().catch(() => ({ configured: !!schwabConfig(), connected: false, expiresAt: null, hoursLeft: null }))]);
   const [settings, health, spend, runs, versions, feedback, sites, articles] = await Promise.all([store.loadSettings(), store.allHealth(), store.spendByDay(30), store.recentRuns(60), store.listVersions(), store.recentFeedback(30), store.listSites(), store.recentSiteArticles(5)]);
   const h = new Map(health.map((x) => [x.source, x]));
   const sources = allSources(marketDataFromEnv());
@@ -41,6 +44,19 @@ export default async function SettingsPage() {
             </tr>
           ))}</tbody>
         </table></div>
+      </section>
+
+      <section className="card" id="schwab">
+        <h2>Schwab (short interest)</h2>
+        <p className="small secondary">Read-only Schwab market data: the scout reads short interest (% of float short, days to cover) for the Drift tab and its research. It can only call Schwab&apos;s market-data address; your accounts, positions and orders are never reached. Schwab makes you sign in again every 7 days; you get a phone alert the day before it lapses.</p>
+        <SchwabPanel configured={schwab.configured} connected={schwab.connected} hoursLeft={schwab.hoursLeft} expiresLabel={schwab.expiresAt ? etLabel(schwab.expiresAt) : null} message={sp.schwab ?? null} />
+        {!schwab.configured && (
+          <ol className="small secondary">
+            <li>On developer.schwab.com, open your app and add this callback URL (keep your existing ones): <code>https://trend-scout-livid.vercel.app/api/schwab/callback</code>. Schwab may take a little while to approve the change.</li>
+            <li>In Vercel → trend-scout → Settings → Environment Variables, add <code>SCHWAB_APP_KEY</code> and <code>SCHWAB_APP_SECRET</code> (your app&apos;s key and secret) and <code>SCHWAB_CALLBACK_URL</code> = the URL above, then redeploy.</li>
+            <li>Come back here and press Connect Schwab.</li>
+          </ol>
+        )}
       </section>
 
       <section className="card" id="websites">
