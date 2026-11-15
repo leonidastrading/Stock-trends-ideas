@@ -64,6 +64,15 @@ export async function researchCandidate(input: ResearchInput, deps: ResearchDeps
     return { outcome: "capped", reason, candidate: await store.addCandidate({ ...base, outcome: "rejected", reason }) };
   }
 
+  // One card per stock and direction per player (14 days): skip a repeat before spending anything on it.
+  const { DUPLICATE_DAYS, duplicateOf, existingCalls } = await import("./dedupe");
+  const recentCalls = async () => existingCalls(...(await Promise.all([store.cardsSince(DUPLICATE_DAYS), store.candidatesSince(DUPLICATE_DAYS), store.allTracks()])));
+  const early = duplicateOf(await recentCalls(), { origin: input.origin, term: input.term, symbol: input.tickersHint[0] });
+  if (early) {
+    const reason = `duplicate: card #${early.cardId} (${early.createdAt.slice(0, 10)}) already calls ${early.direction} ${early.symbol} for the same player`;
+    return { outcome: "rejected", reason, candidate: await store.addCandidate({ ...base, outcome: "rejected", reason }) };
+  }
+
   const results = input.results ?? (await probeAll(deps.sources, { term: input.term, kind: input.kindHint, tickers: input.tickersHint, now: deps.now, env: deps.env, fetchImpl: deps.fetchImpl }));
   if (!input.results) {
     await store.saveSignals(input.term, results.flatMap((r) => r.signals));
@@ -123,6 +132,13 @@ export async function researchCandidate(input: ResearchInput, deps: ResearchDeps
   }
   if (identity.notes.length) gated = { ...gated, notes: [...identity.notes, ...gated.notes] };
   if (identity.noValidTicker) gated = { ...gated, status: "not_promoted" as const, notes: [...gated.notes, "not promoted: no ticker that is still the named company's stock"] };
+
+  // The model may have chosen a different stock than the hint, or a parallel import may have just logged the same call.
+  const late = duplicateOf(await recentCalls(), { origin: input.origin, term: input.term, symbol: gated.card.tickers[0].symbol, direction: gated.card.direction });
+  if (late) {
+    const reason = `duplicate: card #${late.cardId} (${late.createdAt.slice(0, 10)}) already calls ${late.direction} ${late.symbol} for the same player`;
+    return { outcome: "rejected", reason, candidate: await store.addCandidate({ ...base, outcome: "rejected", reason }) };
+  }
 
   // Log the card before anything else happens.
   const cDate = catalystDate(gated.card);

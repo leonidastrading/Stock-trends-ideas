@@ -8,6 +8,7 @@
 import { z } from "zod";
 import { KINDS, type Kind } from "@/config/scout";
 import { researchCandidate, type ResearchDeps, type ResearchOutcome } from "./research";
+import { mergeSameStock } from "./dedupe";
 import { normalizeTicker } from "./tickers";
 
 export const importItemSchema = z.object({
@@ -93,7 +94,9 @@ export function importObservation(it: ImportItem, label: string): string {
 export interface ImportResult { term: string; outcome: string; cardId?: number; reason?: string }
 
 /** Research the items, a few at a time. */
-export async function runImport(items: ImportItem[], deps: ResearchDeps, label: string, concurrency = 3): Promise<ImportResult[]> {
+export async function runImport(all: ImportItem[], deps: ResearchDeps, label: string, concurrency = 3): Promise<ImportResult[]> {
+  // Two angles on the same stock and direction from one document are one call, researched once.
+  const items = mergeSameStock(all);
   const out: ImportResult[] = [];
   let next = 0;
   const worker = async () => {

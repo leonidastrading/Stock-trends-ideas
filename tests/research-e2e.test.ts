@@ -79,10 +79,17 @@ describe("research → card → track", () => {
     expect((await store.spendOn("2026-11-10")).calls).toBe(3);
 
     const t = sampleCard().tickers[0];
-    replies.push(JSON.stringify(sampleCard({ title: "Tiny line", tickers: [{ ...t, revenue_share_pct: 3 }] })));
+    replies.push(JSON.stringify(sampleCard({ title: "Tiny line", tickers: [{ ...t, symbol: "CAT", revenue_share_pct: 3 }] })));
     const r2 = await researchCandidate({ origin: "scout", term: "tiny", kindHint: null, tickersHint: [], observation: null }, deps);
     expect(r2.outcome === "card" && r2.card.status).toBe("not_promoted");
     expect(await store.getTrack(r2.outcome === "card" ? r2.card.id : 0)).toBeNull();
+
+    // The same player calling long HUBB again within 14 days is a repeat: rejected before any model call.
+    const calls = (await store.spendOn("2026-11-10")).calls;
+    const again = await researchCandidate({ origin: "scout", term: "transformer shortage, second look", kindHint: null, tickersHint: ["HUBB"], observation: null }, deps);
+    expect(again.outcome).toBe("rejected");
+    expect(again.outcome !== "card" && again.reason).toMatch(/^duplicate: card #1 \(2026-11-1\d\) already calls long HUBB/);
+    expect((await store.spendOn("2026-11-10")).calls).toBe(calls);
   });
 
   it("human observations are tagged, proposed to the watch-list, and the daily cap stops the scout", async () => {

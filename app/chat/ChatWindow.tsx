@@ -118,6 +118,9 @@ export default function ChatWindow({ past }: { past: Past[] }) {
             <div className="chat-text">{m.content || (busy && i === msgs.length - 1 ? <span className="muted">{status ?? "…"}</span> : "")}</div>
           </div>
         ))}
+        {!busy && msgs.length > 0 && msgs[msgs.length - 1].role === "user" && (
+          <p className="small muted">The reply to this is still being written or was interrupted. <button className="chip" onClick={() => thread && load(thread)}>Refresh</button></p>
+        )}
       </div>
 
       <form className="chat-input" onSubmit={(e) => { e.preventDefault(); void send(text); }}>
