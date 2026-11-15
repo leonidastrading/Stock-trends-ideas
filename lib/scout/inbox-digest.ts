@@ -3,7 +3,7 @@
  * separate lists, ranked by what is breaking, important and recent. Rewritten after new documents are read
  * (one model call); shown at the top of the Inbox tab. Ideas link to the scout's card when it made one.
  */
-import { addDays, daysBetween, toEt } from "../time";
+import { addDays, daysBetween, etLabel, toEt } from "../time";
 import type { ResearchDeps } from "./research";
 import * as store from "./store";
 
@@ -48,7 +48,29 @@ export function parseDigest(text: string): Digest {
   return { ideas: (j.ideas ?? []).filter(ok).slice(0, 12), news: (j.news ?? []).filter(ok).slice(0, 12) };
 }
 
-const label = (path: string) => path.split("/").pop()!.replace(/\.[^.]+$/, "");
+export const label = (path: string) => path.split("/").pop()!.replace(/\.[^.]+$/, "");
+
+/** Words for the 1-5 importance the summary gives each item. */
+export const IMPORTANCE = ["", "minor", "low", "medium", "high", "major"] as const;
+
+/** Pure: a document label without its leading date ("2026-11-15-discord-2" → "discord-2"). */
+export const shortSource = (l: string) => l.trim().replace(/^\d{4}-\d{2}-\d{2}-?/, "") || l.trim();
+
+/**
+ * Pure: the line under a summary item: importance in words, when its document arrived (New York time), the
+ * documents it came from, and the date the information is about when that is a different day.
+ */
+export function itemMeta(x: { source: string; date: string; importance: number }, received: ReadonlyMap<string, string>): string {
+  const labels = x.source.split(/\s*[,;]\s*/).filter(Boolean);
+  const times = labels.map((l) => received.get(l.trim())).filter((t): t is string => !!t).sort();
+  const at = times.at(-1) ?? null;
+  const day = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  const parts = [`${IMPORTANCE[Math.max(1, Math.min(5, Math.round(x.importance)))]} importance`];
+  parts.push(at ? `received ${etLabel(at)}` : /^\d{4}-\d{2}-\d{2}$/.test(x.date) ? day(x.date) : "");
+  if (at && /^\d{4}-\d{2}-\d{2}$/.test(x.date) && x.date !== toEt(new Date(at)).date) parts.push(`about ${day(x.date)}`);
+  parts.push(`from ${[...new Set(labels.map(shortSource))].join(", ")}`);
+  return parts.filter(Boolean).join(" · ");
+}
 
 /** Rewrite the summary from the last few days' documents. Documents read before their text was kept are fetched again from GitHub. */
 export async function refreshInboxDigest(deps: ResearchDeps, fetchImpl: typeof fetch = fetch): Promise<string> {

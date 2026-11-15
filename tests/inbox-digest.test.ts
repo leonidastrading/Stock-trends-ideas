@@ -46,3 +46,16 @@ describe("refresh (PGlite, stored document text, fake model)", () => {
     expect((await store.spendOn("2026-11-15")).cost).toBeCloseTo(0.02);
   });
 });
+
+describe("the line under each summary item", () => {
+  it("says importance in words, when the document arrived (ET), and where it came from", async () => {
+    const { itemMeta, shortSource } = await import("@/lib/scout/inbox-digest");
+    const received = new Map([["2026-11-15-discord-2", "2026-11-15T12:42:00Z"], ["2026-11-14-discord", "2026-11-15T01:05:00Z"]]);
+    expect(itemMeta({ source: "2026-11-15-discord-2", date: "2026-11-15", importance: 4 }, received)).toBe("high importance · received Nov 15, 7:42 AM ET · from discord-2");
+    // Arrived late on the 14th New York time (after 8 PM ET is the 15th in UTC): no extra "about" date.
+    expect(itemMeta({ source: "2026-11-14-discord", date: "2026-11-14", importance: 3 }, received)).toBe("medium importance · received Nov 14, 8:05 PM ET · from discord");
+    expect(itemMeta({ source: "2026-11-15-discord-2, 2026-11-14-discord", date: "2026-11-10", importance: 5 }, received)).toBe("major importance · received Nov 15, 7:42 AM ET · about Nov 10 · from discord-2, discord");
+    expect(itemMeta({ source: "unknown-doc", date: "2026-11-12", importance: 1 }, received)).toBe("minor importance · Nov 12 · from unknown-doc");
+    expect(shortSource("2026-11-14-discord-meetkevin-alpha-report-2026-11-10")).toBe("discord-meetkevin-alpha-report-2026-11-10");
+  });
+});

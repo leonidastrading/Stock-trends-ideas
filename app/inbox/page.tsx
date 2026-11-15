@@ -4,8 +4,8 @@ import { hasDatabase } from "@/lib/db";
 import { trackRecord } from "@/lib/scout/inbox-record";
 import { botPrompt, INBOX_EXAMPLE, INBOX_FIELDS } from "@/lib/scout/inbox-spec";
 import * as store from "@/lib/scout/store";
-import { DIGEST_DAYS, rank, type Digest } from "@/lib/scout/inbox-digest";
-import { fmtEt, toEt } from "@/lib/time";
+import { DIGEST_DAYS, itemMeta, label, rank, shortSource, type Digest } from "@/lib/scout/inbox-digest";
+import { etLabel, fmtEt, toEt } from "@/lib/time";
 import ImportForm from "../notice/ImportForm";
 import CopyBox from "./CopyBox";
 import RefreshDigest from "./RefreshDigest";
@@ -22,6 +22,9 @@ export default async function InboxPage() {
   const tokenSet = !!process.env.GITHUB_INBOX_TOKEN?.trim();
   const [files, runs, cards] = await Promise.all([store.inboxRecent(100), store.runsByAction("import", 100), store.cardsSince(365)]);
   const rows = trackRecord(files, runs);
+  // When each document arrived, by its label, for the summary's time stamps.
+  const received = new Map<string, string>();
+  for (const f of files) if (!received.has(label(f.path))) received.set(label(f.path), f.readAt);
   // Files in the repo not read yet (one GitHub call; skipped quietly if the repo cannot be listed).
   const waiting = await (async () => {
     const { inboxConfig, listInbox, pickFiles } = await import("@/lib/scout/inbox");
@@ -57,7 +60,7 @@ export default async function InboxPage() {
     <>
       <h1>Inbox</h1>
       <div className="panel-head" style={{ margin: "0 0 8px" }}>
-        <span className="small secondary">{digest ? <>Summary of {digest.docs.length} document(s) from the last {DIGEST_DAYS} days ({digest.docs.join(", ")}) · written {fmtEt(digest.createdAt)}</> : files.length ? "Writing the first summary of your documents… refresh in a minute." : "The summary appears after the first documents arrive."}</span>
+        <span className="small secondary">{digest ? <details className="digest-docs"><summary>Summary of {digest.docs.length} document{digest.docs.length === 1 ? "" : "s"} from the last {DIGEST_DAYS} days · written {fmtEt(digest.createdAt)}</summary>{digest.docs.map((d) => <div key={d}>{shortSource(d)} <span className="muted">· {received.get(d) ? `received ${etLabel(received.get(d)!)}` : d.slice(0, 10)}</span></div>)}</details> : files.length ? "Writing the first summary of your documents… refresh in a minute." : "The summary appears after the first documents arrive."}</span>
         <RefreshDigest />
       </div>
       {digest && (
@@ -75,7 +78,7 @@ export default async function InboxPage() {
                   </div>
                   <div className="small">{x.summary}</div>
                   <div className="small muted">
-                    {"●".repeat(Math.max(1, Math.min(5, x.importance)))}{"○".repeat(5 - Math.max(1, Math.min(5, x.importance)))} · {x.date} · {x.source}
+                    {itemMeta(x, received)}
                     {c ? <> · <a href={`/ideas?days=365&card=${c.id}#card-${c.id}`}>card #{c.id} ({c.status.replace("_", " ")})</a></> : null}
                   </div>
                 </div>
@@ -89,7 +92,7 @@ export default async function InboxPage() {
               <div key={i} className="digest-item">
                 <div>{x.breaking && <span className="tag not_promoted">breaking</span>}<b>{x.headline}</b>{x.tickers.length ? <span className="small"> · {x.tickers.slice(0, 4).map((tk, j) => <span key={tk}>{j ? ", " : ""}<Ticker symbol={tk} /></span>)}</span> : null}</div>
                 <div className="small">{x.summary}</div>
-                <div className="small muted">{"●".repeat(Math.max(1, Math.min(5, x.importance)))}{"○".repeat(5 - Math.max(1, Math.min(5, x.importance)))} · {x.date} · {x.source}</div>
+                <div className="small muted">{itemMeta(x, received)}</div>
               </div>
             ))}
           </section>
