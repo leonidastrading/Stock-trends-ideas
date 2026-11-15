@@ -233,3 +233,10 @@ a.button.primary { background: var(--accent); border-color: var(--accent); color
 .investigation-follow { display: flex; flex-direction: column; gap: 10px; margin: 10px 0 6px; padding-top: 10px; border-top: 1px solid var(--border); }
 .investigation-follow > button { align-self: flex-start; }
 .dig-deeper .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.thesis { position: relative; }
+.thesis > div:first-of-type { padding-right: 34px; }
+.collapse-btn { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; padding: 0; border-radius: 8px; font-size: 15px; line-height: 1; color: var(--text-secondary); }
+.collapse-btn:hover { color: var(--accent); border-color: var(--accent); }
+/* Collapsed: only the header (status, ticker, price, earnings, title, scores) stays. */
+.thesis.collapsed > :not(.collapse-btn):not(:nth-child(2)) { display: none; }
+.thesis.collapsed { gap: 0; }

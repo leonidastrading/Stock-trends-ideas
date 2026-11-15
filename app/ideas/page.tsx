@@ -1,5 +1,6 @@
 import CardActions from "@/components/CardActions";
 import CardView from "@/components/CardView";
+import { CollapseAll } from "@/components/CardCollapse";
 import Pager, { FilterLinks, hrefWith, paginate } from "@/components/Pager";
 import SetupNotice from "@/components/SetupNotice";
 import TickerSearch from "@/components/TickerSearch";
@@ -86,7 +87,7 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
       <div className="toolbar">
         <FilterLinks params={params} name="source" value={source} reset={["page", "card"]} options={[{ value: "", label: "All sources", count: shownCards.length }, ...PLAYERS.filter((p) => sourceCounts.get(p)).map((p) => ({ value: p, label: PLAYER_LABEL[p].replace(/^Scout · /, ""), count: sourceCounts.get(p) }))]} />
       </div>
-      <Pager params={params} name="page" page={page.page} pages={page.pages} total={page.total} label="cards" hash="#cards" />
+      <div className="toolbar" style={{ justifyContent: "space-between" }}><CollapseAll /><Pager params={params} name="page" page={page.page} pages={page.pages} total={page.total} label="cards" hash="#cards" /></div>
       {page.items.map((c) => {
         const tr = t.get(c.id) ?? null;
         return (

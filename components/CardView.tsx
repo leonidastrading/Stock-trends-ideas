@@ -1,6 +1,7 @@
 import { KIND_LABEL, SCOUT, type Kind } from "@/config/scout";
 import Direction from "@/components/Direction";
 import CardAsk from "@/components/CardAsk";
+import CardCollapse from "@/components/CardCollapse";
 import Feedback from "@/components/Feedback";
 import { after } from "next/server";
 import { marketDataFromEnv } from "@/lib/alpaca";
@@ -36,7 +37,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
   const nextE = info?.nextEarnings && daysBetween(today, info.nextEarnings) >= -3 ? info.nextEarnings : null;
   const beforeExit = nextE && track && !track.exitDate && nextE <= track.deadlineDate;
   return (
-    <section className="card thesis" id={`card-${c.id}`}>
+    <CardCollapse id={c.id}>
       <div>
         <div className="inline">
           <span className={`tag ${c.status}`}>{c.status.replace("_", " ")}</span>
@@ -93,7 +94,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
       </div>
       <div className="actions">{actions}<CardAsk cardId={c.id} symbol={c.primaryTicker} tickers={k.tickers.map((t) => t.symbol)} /></div>
       <Feedback target={`card:${c.id}`} initial={feedback ? { vote: feedback.vote, note: feedback.note } : null} />
-    </section>
+    </CardCollapse>
   );
 }
 
