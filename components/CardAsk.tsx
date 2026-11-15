@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTickers } from "@/components/useTickers";
 import { renderReply } from "@/app/chat/render";
 import { ATTACHED } from "@/lib/scout/chat-text";
 
@@ -16,6 +17,7 @@ export default function CardAsk({ cardId, symbol, tickers, subject, context, nou
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [answer, setAnswer] = useState<{ q: string; text: string } | null>(null);
+  const { known, cards } = useTickers(answer ? [answer.text] : [], [symbol, ...tickers].filter(Boolean));
 
   async function ask(e?: React.FormEvent) {
     e?.preventDefault();
@@ -60,7 +62,7 @@ export default function CardAsk({ cardId, symbol, tickers, subject, context, nou
       {answer && (
         <div className="card-ask-answer">
           <div className="small muted">You asked: {answer.q}</div>
-          <div className="chat-text">{renderReply(answer.text, new Set([symbol, ...tickers]))}</div>
+          <div className="chat-text">{renderReply(answer.text, known, cards)}</div>
           <div className="small"><a href="/chat">Continue in Chat →</a></div>
         </div>
       )}

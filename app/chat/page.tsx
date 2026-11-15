@@ -15,10 +15,13 @@ export default async function ChatPage() {
   const [past, cards, congress] = await Promise.all([store.recentChatThreads(15).catch(() => []), store.cardsSince(120).catch(() => []), store.congressTradesSince(since).catch(() => [])]);
   // Symbols the scout knows, for colouring tickers in replies (plain words in capitals stay plain).
   const tickers = [...new Set([...Object.values(UNIVERSE).flat(), ...OPTIONS_UNIVERSE, ...cards.flatMap((c) => c.card.tickers.map((t) => t.symbol)), ...congress.map((t) => t.symbol)])];
+  // The newest card per stock, so tickers in replies link to their card (cards come newest first).
+  const cardIds: Record<string, number> = {};
+  for (const c of cards) if (!(c.primaryTicker in cardIds)) cardIds[c.primaryTicker] = c.id;
   return (
     <>
       <h1>Chat</h1>
-      <ChatWindow past={past} tickers={tickers} />
+      <ChatWindow past={past} tickers={tickers} cardIds={cardIds} />
     </>
   );
 }

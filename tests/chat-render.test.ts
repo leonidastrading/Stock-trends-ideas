@@ -26,3 +26,16 @@ describe("chat reply formatting", () => {
       `<ol><li value="1"><b>Long ${tk("KNX")}</b><ul><li>Thesis: rates</li><li>Check: PPI</li></ul></li><li value="2"><b>Short ${tk("AAON")}</b><ul><li>Thesis: restatement</li></ul></li></ol>`);
   });
 });
+
+describe("tickers in replies link to TradingView and to the scout's card", () => {
+  it("links every known ticker, adds the newest card once per stock, and leaves abbreviations alone", async () => {
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const { createElement, Fragment } = await import("react");
+    const html = renderToStaticMarkup(createElement(Fragment, null, renderReply("Short FSK and PSEC; long ARCC. FSK again. A UBS ETN trades below NAV.", new Set(["FSK", "PSEC", "ARCC", "ETN"]), new Map([["FSK", 152]]))));
+    expect(html).toContain('?symbol=FSK"');
+    expect(html).toContain('?symbol=ARCC"');
+    expect(html.match(/card #152/g)).toHaveLength(1); // once per reply
+    expect(html).toContain('href="/ideas?days=365&amp;card=152#card-152"');
+    expect(html).not.toContain("symbol=ETN"); // "ETN" here means an exchange-traded note
+  });
+});

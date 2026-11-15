@@ -891,3 +891,10 @@ export async function recentSiteArticles(perSite = 5): Promise<SiteArticle[]> {
   return (await q(`SELECT * FROM (SELECT *, row_number() OVER (PARTITION BY site_id ORDER BY baseline, seen_at DESC, published DESC NULLS LAST) AS n FROM site_articles) x WHERE n <= $1 ORDER BY site_id, n`, [perSite]))
     .map((r) => ({ url: String(r.url), siteId: Number(r.site_id), title: String(r.title), published: iso(r.published), seenAt: iso(r.seen_at)!, baseline: !!r.baseline, outcome: (r.outcome as string) ?? null }));
 }
+
+/** The newest card per stock (as the tracked ticker), for linking tickers in AI replies to their card. */
+export async function latestCardIds(symbols: string[]): Promise<Map<string, number>> {
+  if (!symbols.length) return new Map();
+  const rows = await q(`SELECT DISTINCT ON (primary_ticker) primary_ticker, id FROM cards WHERE primary_ticker = ANY($1) ORDER BY primary_ticker, created_at DESC`, [symbols]);
+  return new Map(rows.map((r) => [String(r.primary_ticker), Number(r.id)]));
+}
