@@ -154,5 +154,7 @@ function summarize(d: unknown): string {
   if (Array.isArray(o.entered)) parts.push(`${o.entered.length} entered, ${(o.exited as unknown[]).length} exited, ${o.open} open`);
   if (typeof o.stoppedEarly === "string") parts.push(o.stoppedEarly);
   if (typeof o.reason === "string") parts.push(o.reason);
+  // Why a run was skipped (an already-researched story, the AI cap, a source down), in the run's own words.
+  if (typeof o.error === "string" && o.error) parts.push(`why: ${o.error}`);
   return parts.join(" · ");
 }
