@@ -82,7 +82,7 @@ describe("insiders + Congress signals for research", () => {
       "2026-11-15",
     );
     expect(s.map((x) => [x.kind, x.symbol, x.strength])).toEqual([["insider+congress", "MU", 3.5], ["congress", "LMT", 2.5]]);
-    expect(s[0].context).toMatch(/CEO Person \(CEO\) bought \$100k on 2026-11-06, \+12% to their holding, outside their usual trading month/);
+    expect(s[0].context).toMatch(/CEO Person \(CEO\) bought 1,000 shares at \$100 = \$100k on 2026-11-06, \+12% to their holding; outside their usual trading month \(opportunistic\); top executive/);
     expect(s[0].context).toMatch(/A \(House\) bought MU \$15,001 - \$50,000 on 2026-10-20, reported 2026-11-12/);
     expect(s[1].context).toMatch(/E \(Senate\) bought LMT/);
   });
@@ -98,9 +98,10 @@ describe("insiders + Congress signals for research", () => {
 describe("insider buy strength", () => {
   it("a single huge purchase ranks with clustered buying, not last", async () => {
     const { insiderStrength, pickSignals } = await import("@/lib/scout/filings");
-    expect(insiderStrength(1, [B({ value: 14_700_000, pctIncrease: 491, routine: false })])).toBe(3); // STWD: ahead of new 13Ds (2)
+    expect(insiderStrength(1, [B({ value: 14_700_000, pctIncrease: 491, routine: false })])).toBe(3.2); // STWD: ahead of new 13Ds (2); +0.2 for a confirmed opportunistic buy
     expect(insiderStrength(1, [B({ value: 9_200_000, pctIncrease: null, routine: null })])).toBe(2.5);
-    expect(insiderStrength(1, [B({ value: 1_000_000, pctIncrease: 4, routine: false })])).toBe(2);
+    expect(insiderStrength(1, [B({ value: 1_000_000, pctIncrease: 4, routine: false })])).toBe(2.2);
+    expect(insiderStrength(1, [B({ value: 1_000_000, pctIncrease: 4, routine: false, role: "director", local: true })])).toBe(2.8); // non-executive and local
     expect(insiderStrength(1, [B({ value: 60_000, pctIncrease: 5, routine: true })])).toBe(1);
     expect(insiderStrength(3, [B({ value: 5_000_000, pctIncrease: 80, routine: false })])).toBe(3.4);
     // A $9.2M director purchase with an unknown holding now qualifies on size alone.
