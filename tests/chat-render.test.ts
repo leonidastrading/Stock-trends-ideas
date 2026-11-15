@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { renderReply } from "@/app/chat/render";
 
-const tk = (sym: string, label = sym) => `<a class="ticker accent" href="https://www.tradingview.com/chart/WBvg0COi/?symbol=${sym}" target="_blank" rel="noreferrer">${label}</a>`;
+const tk = (sym: string, label = sym) => `<a class="ticker accent" href="/api/chart/${sym}" target="_blank" rel="noreferrer">${label}</a>`;
 const html = (s: string) => renderToStaticMarkup(createElement(Fragment, null, renderReply(s, new Set(["MSTR", "MU", "RKT", "LDI", "AAON", "KNX", "STWD", "AI", "A"]))));
 
 describe("chat reply formatting", () => {
@@ -32,10 +32,20 @@ describe("tickers in replies link to TradingView and to the scout's card", () =>
     const { renderToStaticMarkup } = await import("react-dom/server");
     const { createElement, Fragment } = await import("react");
     const html = renderToStaticMarkup(createElement(Fragment, null, renderReply("Short FSK and PSEC; long ARCC. FSK again. A UBS ETN trades below NAV.", new Set(["FSK", "PSEC", "ARCC", "ETN"]), new Map([["FSK", 152]]))));
-    expect(html).toContain('?symbol=FSK"');
-    expect(html).toContain('?symbol=ARCC"');
+    expect(html).toContain('href="/api/chart/FSK"');
+    expect(html).toContain('href="/api/chart/ARCC"');
     expect(html.match(/card #152/g)).toHaveLength(1); // once per reply
     expect(html).toContain('href="/ideas?days=365&amp;card=152#card-152"');
-    expect(html).not.toContain("symbol=ETN"); // "ETN" here means an exchange-traded note
+    expect(html).not.toContain("/api/chart/ETN"); // "ETN" here means an exchange-traded note
+  });
+});
+
+describe("ticker links open the right listing", () => {
+  it("adds the US exchange so TradingView does not open a foreign stock", async () => {
+    const { tradingViewUrl, chartUrl } = await import("@/config/links");
+    expect(chartUrl("$arcc")).toBe("/api/chart/ARCC");
+    expect(tradingViewUrl("ARCC", "NASDAQ")).toBe("https://www.tradingview.com/chart/WBvg0COi/?symbol=NASDAQ%3AARCC");
+    expect(tradingViewUrl("SPY", "ARCA")).toBe("https://www.tradingview.com/chart/WBvg0COi/?symbol=AMEX%3ASPY");
+    expect(tradingViewUrl("XYZ", null)).toBe("https://www.tradingview.com/chart/WBvg0COi/?symbol=XYZ");
   });
 });

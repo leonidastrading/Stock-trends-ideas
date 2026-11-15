@@ -229,3 +229,4 @@ a.button.primary { background: var(--accent); border-color: var(--accent); color
 .card-ask-answer { max-width: 80ch; }
 .card-chip { font-size: 11px; margin-left: 3px; padding: 0 5px; border: 1px solid var(--border); border-radius: 8px; text-decoration: none; color: var(--text-secondary); vertical-align: 1px; white-space: nowrap; }
 .card-chip:hover { border-color: var(--accent); color: var(--accent); }
+.investigation p, .investigation li, .rumor-item > div, .digest-item > div { max-width: 92ch; }

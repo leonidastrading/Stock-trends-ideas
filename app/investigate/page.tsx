@@ -5,6 +5,9 @@ import { listInvestigations, type Investigation } from "@/lib/scout/investigate"
 import * as store from "@/lib/scout/store";
 import { etLabel } from "@/lib/time";
 import ExposureResearch from "./ExposureResearch";
+import { inline } from "@/app/chat/render";
+import { tickersIn } from "@/lib/scout/ticker-words";
+import type { ReactNode } from "react";
 import InvestigateForm from "./InvestigateForm";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +27,9 @@ export default async function InvestigatePage() {
     const m = /^investigate: ([A-Z.]+) #(\d+)/.exec(c.term);
     if (m) researched.set(`${m[2]}:${m[1]}`, { cardId: c.cardId, outcome: c.cardId ? (status.get(c.cardId) ?? "card") : c.outcome });
   }
+  // Every real ticker in the reports links to TradingView (and its newest card, once per report).
+  const texts = invs.flatMap((i) => (i.report ? [i.report.what_happened, i.report.bottom_line, ...i.report.money_trail.map((m) => m.finding), ...i.report.listed.flatMap((x) => [x.why, x.catalyst]), ...i.report.open_questions] : []));
+  const { known, cards: cardIds } = await tickersIn(texts, invs.flatMap((i) => i.report?.listed.map((x) => x.ticker) ?? []));
   return (
     <>
       <h1>Investigate</h1>
@@ -42,12 +48,15 @@ export default async function InvestigatePage() {
       </details>
       <InvestigateForm running={invs.some((i) => i.status === "running")} />
       {invs.length === 0 && <p className="small muted">No investigations yet.</p>}
-      {invs.map((inv, i) => <InvestigationView key={inv.id} inv={inv} open={i === 0} researched={researched} />)}
+      {invs.map((inv, i) => {
+        const ctx = { cards: cardIds, shown: new Set<string>() };
+        return <InvestigationView key={inv.id} inv={inv} open={i === 0} researched={researched} t={(s: string) => inline(s, known, ctx)} />;
+      })}
     </>
   );
 }
 
-function InvestigationView({ inv, open, researched }: { inv: Investigation; open: boolean; researched: Map<string, { cardId: number | null; outcome: string }> }) {
+function InvestigationView({ inv, open, researched, t }: { inv: Investigation; open: boolean; researched: Map<string, { cardId: number | null; outcome: string }>; t: (s: string) => ReactNode[] }) {
   const r = inv.report;
   const rec = inv.records;
   const n = rec ? { contracts: rec.contracts.reduce((a, c) => a + c.awards.length, 0), lobbying: rec.lobbying.reduce((a, l) => a + l.filings.length, 0), pac: rec.pacs.reduce((a, p) => a + p.spending.length, 0) } : null;
@@ -62,9 +71,9 @@ function InvestigationView({ inv, open, researched }: { inv: Investigation; open
       {inv.status === "running" && <p className="small muted">{inv.records ? "Records pulled; writing the report…" : inv.plan ? "Plan made; pulling contracts, lobbying and PAC records…" : "Planning what to look up…"}</p>}
       {r && (
         <>
-          <p>{r.what_happened}</p>
+          <p>{t(r.what_happened)}</p>
           <h3>Money trail</h3>
-          <ul className="small">{r.money_trail.map((m, k) => <li key={k}><span className={`tag ${STATUS[m.status]?.[1] ?? ""}`}>{STATUS[m.status]?.[0] ?? m.status}</span> {m.finding} <span className="muted">({link(m.source)})</span></li>)}</ul>
+          <ul className="small">{r.money_trail.map((m, k) => <li key={k}><span className={`tag ${STATUS[m.status]?.[1] ?? ""}`}>{STATUS[m.status]?.[0] ?? m.status}</span> {t(m.finding)} <span className="muted">({link(m.source)})</span></li>)}</ul>
           <h3>Listed companies exposed</h3>
           {r.listed.length === 0 ? <p className="small muted">None found.</p> : (
             <ul className="small">
@@ -73,16 +82,16 @@ function InvestigationView({ inv, open, researched }: { inv: Investigation; open
                 return (
                   <li key={x.ticker} style={{ marginBottom: 6 }}>
                     <Ticker symbol={x.ticker} className={x.direction === "long" ? "pos" : x.direction === "short" ? "neg" : "accent"} />{" "}
-                    <span className={x.direction === "long" ? "pos" : x.direction === "short" ? "neg" : "muted"}>{x.direction === "long" ? "▲ long" : x.direction === "short" ? "▼ short" : "watch"}</span> · confidence {x.confidence} · {x.why}
-                    {x.catalyst && <span className="muted"> · catalyst: {x.catalyst}{x.catalyst_date ? ` (${x.catalyst_date})` : ""}</span>}{" "}
+                    <span className={x.direction === "long" ? "pos" : x.direction === "short" ? "neg" : "muted"}>{x.direction === "long" ? "▲ long" : x.direction === "short" ? "▼ short" : "watch"}</span> · confidence {x.confidence} · {t(x.why)}
+                    {x.catalyst && <span className="muted"> · catalyst: {t(x.catalyst)}{x.catalyst_date ? ` (${x.catalyst_date})` : ""}</span>}{" "}
                     {done ? (done.cardId ? <a href={`/ideas?days=120&card=${done.cardId}#card-${done.cardId}`}>card #{done.cardId} ({done.outcome.replace("_", " ")})</a> : <span className="muted">researched: {done.outcome}</span>) : <ExposureResearch id={inv.id} ticker={x.ticker} />}
                   </li>
                 );
               })}
             </ul>
           )}
-          {r.open_questions.length > 0 && <><h3>Open questions</h3><ul className="small secondary">{r.open_questions.map((x, k) => <li key={k}>{x}</li>)}</ul></>}
-          <p><b>Bottom line:</b> {r.bottom_line}</p>
+          {r.open_questions.length > 0 && <><h3>Open questions</h3><ul className="small secondary">{r.open_questions.map((x, k) => <li key={k}>{t(x)}</li>)}</ul></>}
+          <p><b>Bottom line:</b> {t(r.bottom_line)}</p>
         </>
       )}
       {rec && (
