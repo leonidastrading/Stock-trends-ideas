@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
+import BackToTop from "@/components/BackToTop";
 
 export const metadata: Metadata = {
   title: "Trend scout",
@@ -32,6 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Link href="/settings">Settings</Link>
         </nav>
         <main>{children}</main>
+        <BackToTop />
       </body>
     </html>
   );
