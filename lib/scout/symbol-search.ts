@@ -37,11 +37,11 @@ export function suggest(list: readonly Listing[], typed: string, limit = 8): Sug
   return scored.sort((a, b) => a[0] - b[0] || a[1].s.localeCompare(b[1].s)).slice(0, limit).map(([, l]) => ({ symbol: l.s, name: cleanName(l.n), exchange: l.x }));
 }
 
-/** Pure: what a search means. An exact ticker wins; otherwise the best name match; otherwise the text as a ticker. */
+/** Pure: what a search means. An exact ticker wins; otherwise the best match; with no stock list loaded, the text as a ticker; else null (not listed). */
 export function resolveTyped(list: readonly Listing[], typed: string): string | null {
   const sym = typed.trim().replace(/^\$/, "").toUpperCase().replace(/-/g, ".");
   if (list.some((l) => l.s === sym)) return sym;
-  return suggest(list, typed, 1)[0]?.symbol ?? (/^[A-Z]{1,5}(\.[A-Z])?$/.test(sym) ? sym : null);
+  return suggest(list, typed, 1)[0]?.symbol ?? (!list.length && /^[A-Z]{1,5}(\.[A-Z])?$/.test(sym) ? sym : null);
 }
 
 let memo: { at: number; list: Listing[] } | null = null;

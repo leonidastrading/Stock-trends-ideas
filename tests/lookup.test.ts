@@ -41,6 +41,8 @@ describe("ticker suggestions", async () => {
     expect(resolveTyped(list, "aple")).toBe("APLE");
     expect(resolveTyped([], "msft")).toBe("MSFT"); // no listing (Alpaca not set up): the text as a ticker
     expect(resolveTyped([], "microsoft corp")).toBeNull();
+    expect(resolveTyped(list, "spacex")).toBeNull(); // not listed: the box offers to research it as a theme
+    expect(resolveTyped(list, "zzzz")).toBeNull();
     expect(cleanName("Alibaba Group Holding Limited American Depositary Shares each representing eight Ordinary share")).toBe("Alibaba Group Holding Limited");
   });
 });

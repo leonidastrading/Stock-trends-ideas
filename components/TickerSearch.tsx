@@ -12,6 +12,8 @@ export default function TickerSearch() {
   const [busy, setBusy] = useState(false);
   const [r, setR] = useState<Lookup | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [noMatch, setNoMatch] = useState<string | null>(null);
+  const [theme, setTheme] = useState<"idle" | "busy" | { cardId?: number; status?: string; error?: string }>("idle");
   const [research, setResearch] = useState<"idle" | "busy" | { cardId?: number; status?: string; error?: string }>("idle");
   const [sugs, setSugs] = useState<Array<{ symbol: string; name: string; exchange: string }>>([]);
   const [hi, setHi] = useState(-1);
@@ -37,12 +39,23 @@ export default function TickerSearch() {
     if (!what) return;
     if (pick || hi >= 0) setQ(what);
     setOpen(false);
-    setBusy(true); setError(null); setResearch("idle");
+    setBusy(true); setError(null); setResearch("idle"); setNoMatch(null); setTheme("idle");
     const res = await fetch(`/api/lookup?symbol=${encodeURIComponent(what)}`);
     const j = await res.json().catch(() => ({ errors: [`HTTP ${res.status}`] }));
     setBusy(false);
+    if (res.status === 422) { setR(null); return setNoMatch(what); }
     if (!res.ok || !j.ok) { setR(null); return setError((j.errors ?? ["failed"]).join("; ")); }
     setR(j.result);
+  }
+
+  /** Not a listed stock (a private company, a product, a theme): the scout finds the listed stocks it moves. */
+  async function researchTheme() {
+    if (!noMatch) return;
+    setTheme("busy");
+    const observation = `Vadim searched for "${noMatch}", which is not a US-listed ticker or company name. Work out what it is (a private company, a product, a person, a theme), what is changing about it now, and which listed stocks would move because of it (suppliers, partners, customers, competitors, holders). Say whether there is a trade, which way, and how late it is.`;
+    const res = await fetch("/api/notice", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ observation, term: noMatch.slice(0, 80), kind: null }) });
+    const j = await res.json().catch(() => ({ errors: [`HTTP ${res.status}`] }));
+    setTheme(res.ok && j.ok ? { cardId: j.cardId, status: j.status } : { error: (j.errors ?? ["failed"]).join("; ") });
   }
 
   async function researchIt() {
@@ -79,6 +92,14 @@ export default function TickerSearch() {
         <button className="primary" type="submit" disabled={busy || !q.trim()}>{busy ? "…" : "Search"}</button>
         {error && <span className="small neg">{error}</span>}
       </form>
+      {noMatch && (
+        <div className="small" style={{ marginTop: 8 }}>
+          <span className="muted">No US-listed stock matches &ldquo;{noMatch}&rdquo; (it may be private or not listed yet). </span>
+          {theme === "idle" && <button className="primary" onClick={researchTheme}>Ask the scout about &ldquo;{noMatch}&rdquo;</button>}
+          {theme === "busy" && <span className="muted">Researching which listed stocks it moves… a minute or two.</span>}
+          {typeof theme === "object" && (theme.cardId ? <a href={cardLink(theme.cardId)}>card #{theme.cardId}: {String(theme.status).replace("_", " ")}</a> : <span className="neg">{theme.error}</span>)}
+        </div>
+      )}
       {r && (
         <div style={{ marginTop: 10 }}>
           <div>
