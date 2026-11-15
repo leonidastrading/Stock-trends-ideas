@@ -21,8 +21,8 @@ export default function CardActions({ cardId, canSend, sent, open, swingConfigur
   return (
     <>
       {canSend && !sent && !excluded && (
-        <button className="primary" disabled={busy || !swingConfigured} title={swingConfigured ? "" : "Set SWING_API_URL / SWING_API_USER / SWING_API_PASSWORD"}
-          onClick={() => post(`/api/cards/${cardId}/send`, {}, "Send this card to the Swing ideas log as a paper idea? Its paper account will place a market order (queued for the open if the market is closed).")}>
+        <button className="primary" disabled={busy || !swingConfigured} title={swingConfigured ? "Logs a paper idea; its paper account places a market order (queued for the open if the market is closed)" : "Set SWING_API_URL / SWING_API_USER / SWING_API_PASSWORD"}
+          onClick={() => post(`/api/cards/${cardId}/send`)}>
           {busy ? "Sending…" : "Send to Swing ideas (paper)"}
         </button>
       )}

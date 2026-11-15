@@ -28,7 +28,7 @@ type SP = { days?: string; source?: string; status?: string; sort?: string; page
 export default async function IdeasPage({ searchParams }: { searchParams: Promise<SP> }) {
   if (!hasDatabase()) return <SetupNotice />;
   const sp = await searchParams;
-  const days = [7, 30, 90].includes(Number(sp.days)) ? Number(sp.days) : 7;
+  const days = [7, 30, 90, 365].includes(Number(sp.days)) ? Number(sp.days) : 7;
   const source = (PLAYERS as readonly string[]).includes(sp.source ?? "") ? (sp.source as Player) : "";
   const status = sp.status && sp.status in STATUS_RANK ? sp.status : "";
   const sort = SORTS.some((s) => s.value === sp.sort) ? sp.sort! : "best";
@@ -75,7 +75,7 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
       </details>
       <span id="cards" />
       <div className="toolbar">
-        <FilterLinks params={params} name="days" value={days === 7 ? "" : String(days)} reset={["page", "card"]} options={[{ value: "", label: "7 days" }, { value: "30", label: "30 days" }, { value: "90", label: "90 days" }]} />
+        <FilterLinks params={params} name="days" value={days === 7 ? "" : String(days)} reset={["page", "card"]} options={[{ value: "", label: "7 days" }, { value: "30", label: "30 days" }, { value: "90", label: "90 days" }, { value: "365", label: "1 year" }]} />
         <FilterLinks params={params} name="sort" value={sort === "best" ? "" : sort} reset={["page", "card"]} options={SORTS.map((s) => ({ value: s.value === "best" ? "" : s.value, label: s.label }))} />
       </div>
       <div className="toolbar">

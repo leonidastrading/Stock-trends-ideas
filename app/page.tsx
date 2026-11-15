@@ -5,6 +5,7 @@ import Direction from "@/components/Direction";
 import MarketPanels from "@/components/MarketPanels";
 import { FilterLinks } from "@/components/Pager";
 import SetupNotice from "@/components/SetupNotice";
+import TickerSearch from "@/components/TickerSearch";
 import { hasDatabase } from "@/lib/db";
 import { upcomingCatalysts } from "@/lib/scout/calendar";
 import * as store from "@/lib/scout/store";
@@ -32,6 +33,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
   return (
     <>
       <h1>Home</h1>
+      <TickerSearch />
       {down.length > 0 && <p className="small warn">Sources not reporting: {down.map((h) => `${h.source} (${h.status})`).join(", ")}. See Settings.</p>}
       {running && <p className="small warn">A scan started at {running.startedAt.replace("T", " ").slice(0, 16)}Z is still running; refresh in a few minutes.</p>}
 

@@ -170,4 +170,12 @@ describe("watch-list upkeep", () => {
     expect((await store.watchlist("proposed")).map((w) => w.term)).toContain("Manual approval please");
     await store.saveSettings({ ...(await store.loadSettings()), autoApproveTerms: true });
   });
+
+  it("the Home search finds a stock's cards, newest first, and nothing for an unknown one", async () => {
+    const hubb = await store.cardsForSymbol("HUBB");
+    expect(hubb.length).toBeGreaterThan(0);
+    expect(hubb.every((c) => c.primaryTicker === "HUBB" || c.card.tickers.some((t) => t.symbol === "HUBB"))).toBe(true);
+    expect([...hubb].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((c) => c.id)).toEqual(hubb.map((c) => c.id));
+    expect(await store.cardsForSymbol("ZZZZ")).toEqual([]);
+  });
 });

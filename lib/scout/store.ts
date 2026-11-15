@@ -815,3 +815,10 @@ export async function watchlistUpkeep(staleDays = 30): Promise<{ approved: numbe
     AND NOT EXISTS (SELECT 1 FROM candidates c WHERE lower(c.term) = lower(w.term) AND c.outcome = 'card' AND c.created_at > now() - make_interval(days => $1)) RETURNING id`, [staleDays])).length;
   return { approved, retired };
 }
+
+// ------------------------------------------------------------ ticker lookup
+
+/** Cards on a stock, newest first: as the tracked ticker or anywhere in the card's ticker list. */
+export async function cardsForSymbol(symbol: string, limit = 25): Promise<StoredCard[]> {
+  return (await q(`SELECT ${CARD_COLS} FROM cards WHERE primary_ticker = $1 OR card->'tickers' @> jsonb_build_array(jsonb_build_object('symbol', $1::text)) ORDER BY created_at DESC LIMIT $2`, [symbol, limit])).map(toCard);
+}
