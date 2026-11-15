@@ -15,6 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <span className="brand">Trend scout</span>
           <Link href="/ideas">Ideas</Link>
           <Link href="/news">News</Link>
+          <Link href="/map">Map</Link>
           <Link href="/chat">Chat</Link>
           <Link href="/notice">I noticed something</Link>
           <Link href="/inbox">Inbox</Link>

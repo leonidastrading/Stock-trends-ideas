@@ -229,6 +229,24 @@ anything else happens. Cards, versions and track events are append-only, enforce
   Google's rising queries for anything worth adding to the watch-list.
 - **Watch-list**: term, kind, tickers, date, who added it; approve the scout's proposals, retire terms.
 - **Scoring**: per version (see below), with a CSV export of every card and track.
+- **Ideas tab** (`/ideas`, replaces Digest, Stories and Candidates, which redirect): market panels and dated
+  catalysts, then every card in the window (7/30/90 days) with sort (best: promoted, late, not promoted by rank;
+  newest; catalyst soonest), status and source filters (the Scoreboard players), a "From:" line per card, 10 a page;
+  folded below: the activity log (everything considered, outcome filter), the story desk's last scan and reaction
+  gaps, and the trend desk's last scan. `?card=N` opens the page holding card N.
+- **News tab** (`/news`, `lib/scout/newsfeed.ts`): the last 24 hours of Alpaca news plus market-relevant Trump posts;
+  "Top" ranks by freshness (half-life 6 hours), event words, pile-ups on one stock, a card on the stock and Trump
+  posts, and pushes down many-ticker round-ups; "Latest" is newest first; polled every 30 seconds with new items marked.
+- **Map tab** (`/map`, `lib/scout/idea-map.ts`): the scout's sources on a ring, every stock one of them flags in the
+  middle with a line to each source; multi-source stocks sit nearer the centre and grow; rings show long/short cards;
+  hover for why, click a source to isolate it. Built from stored data and panel caches only.
+- **Home widgets**: fear & greed (the breadth mood) and retail greed (bullish share of tagged Stocktwits posts on the
+  20 trending stocks) gauges; top gainers and losers (Alpaca's movers screener, read-only; falls back to the 390-stock
+  universe); a Stocktwits table (trending, most active, most watched, most bullish, most bearish) with IT/CT tags for
+  insider and Congress trades. X data needs a paid API, so Stocktwits stands in.
+- **Tickers** link to the TradingView chart layout in `config/links.ts` (new tab).
+- **Short gate**: shorts are not promoted under $5 or after a run-up of 50% in 30 days or 25% in 5 days (borrow cost,
+  squeezes); short cards on cheap or spiking stocks show a warning.
 - **Senate trades**: the Senate's disclosure search (efdsearch.senate.gov: accept the terms with the form's CSRF
   token, search periodic transaction reports, read each electronic report's table; paper filings are skipped) feeds
   the same `congress_filings` / `congress_trades` tables as the House, with chamber "Senate".
