@@ -28,11 +28,23 @@ export async function addSite(raw: string, label: string | undefined, fetchImpl?
   const existing = await store.listSites();
   if (existing.some((s) => s.url === url)) throw new Error("that site is already on the list");
   if (existing.length >= SITES.maxSites) throw new Error(`at most ${SITES.maxSites} sites`);
-  const read = await readSite(url, null, fetchImpl);
+  const read = await readSite(url, null, fetchImpl).catch((err) => { throw new Error(friendlyError(err)); });
   const detail = `${read.articles.length} articles via ${read.via === "feed" ? `its feed (${read.feedUrl})` : "the links on the page"}; new ones are read from the next daily check`;
   const site = await store.insertSite({ url, label: label?.trim().slice(0, 60) || host(url), kind, feedUrl: read.feedUrl, via: read.via, status: "ok", detail });
   await store.addSiteArticles(site.id, read.articles, true);
   return { site, found: read.articles.length };
+}
+
+/** Pure: a site read failure in plain words (a bot check, a login wall, a missing page). */
+export function friendlyError(err: unknown): string {
+  const m = err instanceof Error ? err.message : String(err);
+  const body = err && typeof err === "object" && "body" in err ? String((err as { body: unknown }).body).slice(0, 4000) : "";
+  if (/just a moment|cf-chl|challenge-platform|attention required|cloudflare|captcha|are you a robot|access denied/i.test(`${m} ${body}`)) return "This site blocks automated readers with a bot check (Cloudflare or similar), so the scout cannot read it. Save pages from it and paste or upload them on the Rumors tab (or drop them in the inbox repo's rumors/ folder) instead.";
+  if (/\b(401|403)\b/.test(m)) return "This site refused the scout (it needs a login or blocks automated readers). Save pages and paste or upload them on the Rumors tab instead.";
+  if (/\b404\b/.test(m)) return "That page was not found; check the address.";
+  if (/ENOTFOUND|getaddrinfo/i.test(m)) return "That web address does not exist.";
+  if (/abort|timed? ?out/i.test(m)) return "The site did not answer in time; try again later.";
+  return m;
 }
 
 /** Pure: the document the model reads for one site's new articles. */
@@ -51,7 +63,7 @@ export async function checkSite(site: store.Site, deps: ResearchDeps, deliver: (
   try {
     read = await readSite(site.url, site.feedUrl, fetchImpl);
   } catch (err) {
-    const error = err instanceof Error ? err.message.slice(0, 200) : String(err);
+    const error = friendlyError(err).slice(0, 300);
     await store.siteChecked(site.id, "down", error);
     return { site: site.label, status: "down", error };
   }

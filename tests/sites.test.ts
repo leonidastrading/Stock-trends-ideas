@@ -95,3 +95,14 @@ describe("following a website", () => {
     expect(await store.recentSiteArticles()).toEqual([]);
   });
 });
+
+describe("site read failures in plain words", () => {
+  it("names a bot check, a login wall and a missing page", async () => {
+    const { friendlyError } = await import("@/lib/scout/sites");
+    const { HttpError } = await import("@/lib/http");
+    expect(friendlyError(new HttpError("rumble.com 403: Just a moment...", 403, "<title>Just a moment...</title>"))).toMatch(/^This site blocks automated readers with a bot check/);
+    expect(friendlyError(new Error("example.com 401: Unauthorized"))).toMatch(/needs a login/);
+    expect(friendlyError(new Error("example.com 404: Not Found"))).toBe("That page was not found; check the address.");
+    expect(friendlyError(new Error("odd failure"))).toBe("odd failure");
+  });
+});
