@@ -1,3 +1,5 @@
+import { marketDataFromEnv } from "@/lib/alpaca";
+import { ATTACHED, CARD_ATTACHED, shownUserText } from "@/lib/scout/chat-text";
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { checkBasicAuth } from "@/lib/auth";
@@ -9,7 +11,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-const body = z.object({ thread: z.number().int().positive().optional(), cardId: z.number().int().positive().optional(), message: z.string().trim().min(1).max(CHAT_MAX_CHARS, `That message is too long (over ${CHAT_MAX_CHARS.toLocaleString("en-US")} characters). Split it into parts.`) });
+const body = z.object({ thread: z.number().int().positive().optional(), cardId: z.number().int().positive().optional(), fromCard: z.boolean().optional(), message: z.string().trim().min(1).max(CHAT_MAX_CHARS, `That message is too long (over ${CHAT_MAX_CHARS.toLocaleString("en-US")} characters). Split it into parts.`) });
 
 /** A thread's messages (for reloading the page). */
 export async function GET(request: Request) {
@@ -27,6 +29,8 @@ export async function POST(request: Request) {
   const parsed = body.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ ok: false, errors: parsed.error.issues.map((i) => i.message) }, { status: 422 });
   let thread = parsed.data.thread ? await store.getChatThread(parsed.data.thread) : null;
+  // A question asked from a card or rumor starts a fresh chat when the open one's data is over 12 hours old.
+  if (thread && (parsed.data.cardId || parsed.data.fromCard) && Date.now() - Date.parse(thread.createdAt) > 12 * 3600_000) thread = null;
   if (!thread) {
     const id = await store.createChatThread(await buildBriefing());
     thread = (await store.getChatThread(id))!;
@@ -34,11 +38,21 @@ export async function POST(request: Request) {
   const t = thread;
   // Asked from a card: the whole card and its paper track go with the question (and stay in the chat's history).
   let message = parsed.data.message;
+  let symbols: string[] = [];
   if (parsed.data.cardId) {
     const card = await store.getCard(parsed.data.cardId);
     if (!card) return NextResponse.json({ ok: false, errors: [`no card #${parsed.data.cardId}`] }, { status: 404 });
     message = cardQuestion(card, await store.getTrack(card.id).catch(() => null), message);
+    symbols = [card.primaryTicker, ...card.card.tickers.map((x) => x.symbol)];
+  } else {
+    // Tickers named in the question ($NVDA or NVDA) that are listed.
+    const asked = shownUserText(parsed.data.message);
+    const listed = new Set((await import("@/lib/scout/symbol-search").then(({ listings }) => listings()).catch(() => [])).map((l) => l.s));
+    symbols = (await import("@/lib/scout/live-context")).tickersAsked(asked, listed);
   }
+  // The price, moves and headlines as of now (the briefing is a snapshot from when the chat started).
+  const live = symbols.length ? await import("@/lib/scout/live-context").then(({ liveContext }) => liveContext(marketDataFromEnv(), symbols)).catch(() => null) : null;
+  if (live) message = message.includes(CARD_ATTACHED) || message.includes(ATTACHED) ? `${message}\n\n${live}` : `${message}${ATTACHED}${live}`;
   // Your message is saved now; the reply is saved when it finishes, even if the page was closed meanwhile.
   await store.appendChat(t.id, [{ role: "user", content: message, at: new Date().toISOString() }]);
   const enc = new TextEncoder();

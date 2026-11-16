@@ -82,7 +82,7 @@ export default function CardAsk({ cardId, symbol, tickers, subject, context, nou
     const askedAt = new Date().toISOString();
     saveAsked(askKey, { q: question, thread: thread ?? null, askedAt, text: null });
     try {
-      const res = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(cardId ? { thread, cardId, message: question } : { thread, message: `About ${subject ?? noun}: ${question}${context ? `${ATTACHED}${context}` : ""}` }) });
+      const res = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(cardId ? { thread, cardId, message: question } : { thread, fromCard: true, message: `About ${subject ?? noun}: ${question}${context ? `${ATTACHED}${context}` : ""}` }) });
       if (!res.ok || !res.body) {
         const j = await res.json().catch(() => ({ errors: [`HTTP ${res.status}`] }));
         throw new Error((j.errors ?? [j.error ?? "failed"]).join("; "));
