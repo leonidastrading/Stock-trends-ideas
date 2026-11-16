@@ -16,9 +16,9 @@ export default async function CapShort({ symbol, price }: { symbol: string; pric
       {cap && <span className="cap-chip" title={`Market cap${p.capSource ? ` (${p.capSource})` : ""}`}>{cap} <span className="muted">{capBucket(p.marketCap)}</span></span>}
       {s && s.interest !== null && (
         <span className={`cap-chip${s.squeeze === "high" ? " neg" : s.squeeze === "elevated" ? " warn" : ""}`} title={tip}>
-          short {pct !== null ? <><b>{pct}%</b>{s.pctFloat != null ? " of float" : " of shares"}</> : `${shares(s.interest)} sh`}
-          {s.daysToCover !== null ? ` · ${s.daysToCover}d to cover` : ""}
-          {s.squeeze && s.squeeze !== "normal" ? ` · squeeze risk ${s.squeeze}` : ""}
+          short {pct !== null ? <><b>{pct}%</b><span className="cap-long">{s.pctFloat != null ? " of float" : " of shares"}</span></> : `${shares(s.interest)} sh`}
+          {s.daysToCover !== null ? <> · {s.daysToCover}d<span className="cap-long"> to cover</span></> : ""}
+          {s.squeeze && s.squeeze !== "normal" ? <> · squeeze<span className="cap-long"> risk</span> {s.squeeze}</> : ""}
         </span>
       )}
     </span>
