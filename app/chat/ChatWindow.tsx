@@ -102,7 +102,7 @@ export default function ChatWindow({ past, tickers, cardIds = {} }: { past: Past
     <div className="chat">
       <div className="chat-bar small secondary">
         <span>{thread ? <>Chat started {startedAt ? when(startedAt) : ""} ET · memory: {briefing ? `${Math.round(briefing / 1000)}k characters of scout data` : "loaded"} from that moment</> : "New chat: the scout's latest data is loaded when you send the first message."}</span>
-        <span style={{ display: "flex", gap: 8 }}>
+        <span className="chat-controls">
           {past.length > 0 && (
             <select value="" onChange={(e) => e.target.value && load(Number(e.target.value))} aria-label="Earlier chats">
               <option value="">Earlier chats…</option>

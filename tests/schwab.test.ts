@@ -143,7 +143,9 @@ describe("Schwab: sharing oo-trading's login (fake Upstash Redis)", () => {
   });
 
   it("counts requests in oo-trading's per-minute window and respects its back-off", async () => {
-    const db = new Map([["schwab:tokens", tokens()]]), log: string[] = [];
+    // shortInterest reads the real clock, so the token's times are relative to it (not the fixed test date).
+    const real = Date.now();
+    const db = new Map([["schwab:tokens", tokens({ accessExpiresAt: real + 20 * 60_000, refreshIssuedAt: real - 2 * 86400_000, updatedAt: real })]]), log: string[] = [];
     process.env.KV_REST_API_URL = "https://redis.example"; process.env.KV_REST_API_TOKEN = "kv-token"; process.env.SCHWAB_CLIENT_ID = "oo-id"; process.env.SCHWAB_CLIENT_SECRET = "oo-secret";
     try {
       const si = await shortInterest(["GME"], fakeRedis(db, log));

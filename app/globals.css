@@ -299,10 +299,17 @@ a.button.primary { background: var(--accent); border-color: var(--accent); color
 @media (max-width: 640px) { .newsbar-more { display: none; } .newsbar-label { padding: 0 8px; } }
 
 /* Phones: nothing may make the page wider than the screen. */
-body { overflow-x: clip; }
+html, body { overflow-x: clip; max-width: 100%; }
+.chat-controls { display: flex; gap: 8px; min-width: 0; max-width: 100%; }
+.chat-controls select { min-width: 0; max-width: 22em; flex: 1 1 auto; text-overflow: ellipsis; }
+.chat-controls button { flex: none; white-space: nowrap; }
+.chat, .chat-log, .chat-input { min-width: 0; max-width: 100%; }
 main { overflow-wrap: break-word; }
 @media (max-width: 640px) {
   main { padding: 12px; }
+  .chat-bar > span:first-child { flex: 1 1 100%; }
+  .chat-controls { width: 100%; }
+  .chat-controls select { max-width: none; }
   .quote { white-space: normal; margin-left: 6px; }
   .cap-short { margin-left: 0; margin-top: 4px; }
   .cap-chip .cap-long { display: none; }
