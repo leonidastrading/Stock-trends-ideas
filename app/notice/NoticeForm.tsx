@@ -1,5 +1,6 @@
 "use client";
 
+import LinkedText from "@/components/LinkedText";
 import { useState } from "react";
 
 const KINDS = ["", "consumer", "platform", "second_order", "rerating", "event"];
@@ -42,7 +43,7 @@ export default function NoticeForm() {
         <button className="primary" type="submit" disabled={busy}>{busy ? (long ? "Reading the text for ideas…" : "Researching… this takes a minute or two") : long ? "Find the ideas and research them" : "Research it"}</button>
         <span className="small secondary">The card is logged as human-originated and scored separately. Nothing is traded.</span>
       </div>
-      {errors.length > 0 && <ul className="neg small">{errors.map((e) => <li key={e}>{e}</li>)}</ul>}
+      {errors.length > 0 && <ul className="neg small">{errors.map((e) => <li key={e}><LinkedText text={e} /></li>)}</ul>}
       {long && !busy && !extracted && <p className="small secondary">Long text ({f.observation.length.toLocaleString("en-US")} characters): the scout will read it for tradeable ideas (up to 12), then research each one in the background. They are logged as yours.</p>}
       {extracted && (
         <div className="small">

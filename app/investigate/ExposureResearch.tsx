@@ -1,5 +1,6 @@
 "use client";
 
+import LinkedText from "@/components/LinkedText";
 import { useState } from "react";
 
 /** Research one exposure from an investigation (scores as "Scout · investigations"). */
@@ -13,5 +14,5 @@ export default function ExposureResearch({ id, ticker }: { id: number; ticker: s
   }
   if (state === "idle") return <button className="small" onClick={go}>Research {ticker}</button>;
   if (state === "busy") return <span className="muted small">researching… a minute or two</span>;
-  return state.cardId ? <a className="small" href={`/ideas?days=7&card=${state.cardId}#card-${state.cardId}`}>card #{state.cardId}: {String(state.status).replace("_", " ")}</a> : <span className="neg small">{state.error}</span>;
+  return state.cardId ? <a className="small" href={`/ideas?days=7&card=${state.cardId}#card-${state.cardId}`}>card #{state.cardId}: {String(state.status).replace("_", " ")}</a> : <span className="neg small"><LinkedText text={state.error} /></span>;
 }

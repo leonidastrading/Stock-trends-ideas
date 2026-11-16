@@ -1,5 +1,6 @@
 "use client";
 
+import LinkedText from "@/components/LinkedText";
 import { useEffect, useRef, useState } from "react";
 import { chartUrl } from "@/config/links";
 import type { Lookup } from "@/lib/scout/lookup";
@@ -90,7 +91,7 @@ export default function TickerSearch() {
           )}
         </div>
         <button className="primary" type="submit" disabled={busy || !q.trim()}>{busy ? "…" : "Search"}</button>
-        {error && <span className="small neg">{error}</span>}
+        {error && <span className="small neg"><LinkedText text={error} /></span>}
       </form>
       {noMatch && (
         <div className="small" style={{ marginTop: 8 }}>

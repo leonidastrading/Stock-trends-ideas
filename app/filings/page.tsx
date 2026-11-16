@@ -1,3 +1,4 @@
+import LinkedText from "@/components/LinkedText";
 import SetupNotice from "@/components/SetupNotice";
 import { hasDatabase } from "@/lib/db";
 import { OPTIONS_UNIVERSE } from "@/config/options";
@@ -46,7 +47,7 @@ export default async function FilingsPage() {
                   <td><span className="tag">{s.kind}</span></td>
                   <td><b className={s.direction === "long" ? "pos" : "neg"}>{s.direction === "long" ? "▲" : "▼"} {s.symbol}</b></td>
                   <td className="small">{s.trigger[0]?.note}</td>
-                  <td className="small">{c ? (c.cardId ? <a href={`/ideas?days=30&card=${c.cardId}#card-${c.cardId}`}>card #{c.cardId}</a> : `${c.outcome}${c.reason ? `: ${c.reason}` : ""}`) : <span className="muted">queued</span>}</td>
+                  <td className="small">{c ? (c.cardId ? <a href={`/ideas?days=30&card=${c.cardId}#card-${c.cardId}`}>card #{c.cardId}</a> : <LinkedText text={`${c.outcome}${c.reason ? `: ${c.reason}` : ""}`} />) : <span className="muted">queued</span>}</td>
                 </tr>
               );
             })}</tbody>

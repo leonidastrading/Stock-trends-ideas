@@ -1,3 +1,4 @@
+import LinkedText from "@/components/LinkedText";
 import Pager, { FilterLinks, paginate } from "@/components/Pager";
 import type { Candidate, StoredCard } from "@/lib/scout/store";
 import { fmtEt } from "@/lib/time";
@@ -37,7 +38,7 @@ export default function ActivityLog({ candidates, cards, params, outcome, lpage,
                 <td className="small">{c.origin}</td>
                 <td>{c.term}{c.observation ? <div className="small muted">“{c.observation}”</div> : null}</td>
                 <td><span className={`tag ${c.outcome === "card" ? (c.reason ?? "") : c.outcome}`}>{c.outcome === "card" ? c.reason?.replace("_", " ") : c.outcome}</span>{c.cardId ? <a className="small" href={cardHref(c.cardId)}>#{c.cardId}</a> : null}</td>
-                <td className="small secondary">{c.outcome === "card" ? byId.get(c.cardId!)?.gateNotes.join(" · ") : c.reason}{c.trigger?.length ? <div className="muted">flagged by: {c.trigger.map((s) => `${s.source} ${s.changeVs12m === null ? "" : `${s.changeVs12m >= 0 ? "+" : ""}${Math.round(s.changeVs12m * 100)}%`}`).join(", ")}</div> : null}</td>
+                <td className="small secondary">{c.outcome === "card" ? byId.get(c.cardId!)?.gateNotes.join(" · ") : <LinkedText text={c.reason} />}{c.trigger?.length ? <div className="muted">flagged by: {c.trigger.map((s) => `${s.source} ${s.changeVs12m === null ? "" : `${s.changeVs12m >= 0 ? "+" : ""}${Math.round(s.changeVs12m * 100)}%`}`).join(", ")}</div> : null}</td>
               </tr>
             ))}
             {log.items.length === 0 && <tr><td colSpan={5} className="muted">Nothing matches in this window.</td></tr>}

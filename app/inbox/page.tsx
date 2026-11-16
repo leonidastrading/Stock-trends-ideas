@@ -1,3 +1,4 @@
+import LinkedText from "@/components/LinkedText";
 import { after } from "next/server";
 import SetupNotice from "@/components/SetupNotice";
 import { hasDatabase } from "@/lib/db";
@@ -129,7 +130,7 @@ export default async function InboxPage() {
                           const c = o.cardId ? cardById.get(o.cardId) : undefined;
                           return (
                             <li key={i}>
-                              {o.term.replace(/^inbox: |^stream (host|agent): /, "")}: {o.cardId ? <a href={`/ideas?days=365&card=${o.cardId}#card-${o.cardId}`}>{c ? `${c.direction === "long" ? "▲" : "▼"} ${c.primaryTicker}, ` : ""}{o.outcome.replace(/^card: /, "")}</a> : <span className="muted">{o.outcome}{o.reason ? ` (${o.reason})` : ""}</span>}
+                              {o.term.replace(/^inbox: |^stream (host|agent): /, "")}: {o.cardId ? <a href={`/ideas?days=365&card=${o.cardId}#card-${o.cardId}`}>{c ? `${c.direction === "long" ? "▲" : "▼"} ${c.primaryTicker}, ` : ""}{o.outcome.replace(/^card: /, "")}</a> : <span className="muted"><LinkedText text={`${o.outcome}${o.reason ? ` (${o.reason})` : ""}`} /></span>}
                             </li>
                           );
                         })}

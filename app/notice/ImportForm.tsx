@@ -1,5 +1,6 @@
 "use client";
 
+import LinkedText from "@/components/LinkedText";
 import { useState } from "react";
 
 /** Paste the machine-readable block from the daily stream file. */
@@ -28,7 +29,7 @@ export default function ImportForm() {
         <button className="primary" type="submit" disabled={busy}>{busy ? "Sending…" : "Import ideas"}</button>
         <span className="small secondary">Each idea is researched and gated like your own; host and agent ideas are scored on their own lines.</span>
       </div>
-      {msg && <p className="small">{msg}</p>}
+      {msg && <p className="small"><LinkedText text={msg} /></p>}
     </form>
   );
 }

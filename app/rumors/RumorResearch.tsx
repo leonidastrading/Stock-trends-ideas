@@ -1,5 +1,6 @@
 "use client";
 
+import LinkedText from "@/components/LinkedText";
 import { useState } from "react";
 
 /** Check one rumor against public evidence now (scores as "Scout · rumors (checked)"). */
@@ -13,5 +14,5 @@ export default function RumorResearch({ id }: { id: number }) {
   }
   if (state === "idle") return <button className="small" onClick={go}>Check it (research)</button>;
   if (state === "busy") return <span className="muted">Checking the facts… a minute or two.</span>;
-  return state.cardId ? <a href={`/ideas?days=7&card=${state.cardId}#card-${state.cardId}`}>card #{state.cardId}: {String(state.status).replace("_", " ")}</a> : <span className="neg">{state.error}</span>;
+  return state.cardId ? <a href={`/ideas?days=7&card=${state.cardId}#card-${state.cardId}`}>card #{state.cardId}: {String(state.status).replace("_", " ")}</a> : <span className="neg"><LinkedText text={state.error} /></span>;
 }
