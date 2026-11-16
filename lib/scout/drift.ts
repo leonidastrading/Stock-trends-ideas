@@ -262,6 +262,6 @@ export async function runDriftResearch(deps: ResearchDeps, setups: DriftSetup[],
 export async function researchDrift(deps: ResearchDeps, s: DriftSetup): Promise<{ term: string; outcome: string; cardId?: number; status?: string; reason?: string }> {
   const term = `drift: ${s.symbol} ${s.eventKind}`.slice(0, 80);
   const trigger: Signal[] = [{ source: "news", metric: `drift:${s.symbol}`, value: s.sinceVsSpy, baseline: null, changeVs12m: null, asOf: s.asOf, note: `${s.symbol} ${s.dayPct}% on ${s.eventDate} (${s.eventKind}), ${s.sincePct}% more over ${s.daysAfter} trading days` }];
-  const r = await researchCandidate({ origin: "scout", term, kindHint: "event", tickersHint: [s.symbol], observation: null, trigger, context: driftContext(s) }, deps);
+  const r = await researchCandidate({ origin: "scout", term, kindHint: "event", tickersHint: [s.symbol], observation: null, trigger, context: driftContext(s), proposedDirection: "short" }, deps);
   return r.outcome === "card" ? { term, outcome: `card: ${r.card.status}`, cardId: r.card.id, status: r.card.status } : { term, outcome: r.outcome, reason: r.reason };
 }

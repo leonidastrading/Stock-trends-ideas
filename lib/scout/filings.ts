@@ -246,7 +246,7 @@ export async function runFilingResearch(deps: ResearchDeps, maxNow: number = FIL
       background = await import("./insider-history").then(({ insiderBackground }) => insiderBackground(s.symbol, mine, { data: deps.data, ua: deps.env.SEC_USER_AGENT?.trim(), today, fetchImpl: deps.fetchImpl }, Date.now() + 45_000))
         .then((t) => `\nBackground:\n${t}`).catch((err) => `\nBackground: not available (${err instanceof Error ? err.message.slice(0, 100) : String(err)}).`);
     }
-    const r = await researchCandidate({ origin: "scout", term: s.term, kindHint: "event", tickersHint: [s.symbol], observation: null, trigger: s.trigger, context: `${s.context}${background}\nProposed direction: ${s.direction} ${s.symbol}.` }, deps);
+    const r = await researchCandidate({ origin: "scout", term: s.term, kindHint: "event", tickersHint: [s.symbol], observation: null, trigger: s.trigger, context: `${s.context}${background}\nProposed direction: ${s.direction} ${s.symbol}.`, proposedDirection: s.direction }, deps);
     out.researched.push(r.outcome === "card" ? { term: s.term, outcome: `card: ${r.card.status}`, cardId: r.card.id } : { term: s.term, outcome: r.outcome, reason: r.reason });
     if (r.outcome === "capped") {
       out.error = r.reason;

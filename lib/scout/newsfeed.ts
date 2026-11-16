@@ -6,6 +6,7 @@
 import { marketDataFromEnv, type NewsItem } from "../alpaca";
 import { eventWord } from "./stories";
 import * as store from "./store";
+import { isPennyShort } from "./card";
 
 /** Extra event words for the News tab only (operational shocks the story desk's list does not name). */
 const NEWS_EVENT = /\b(ground stop|grounded|grounding|delist\w*|cyberattack|ransomware|explosion|evacuat\w*|derail\w*|shutdown|layoffs?|job cuts|guidance raise|raises guidance|misses estimates|beats estimates)\b/i;
@@ -46,7 +47,7 @@ export async function newsFeed(now = new Date()): Promise<FeedItem[]> {
   const originals = new Set(news.filter((n) => !n.repostedAt).map((n) => bare(n.headline)));
   const bySym = new Map<string, number[]>();
   // One card per stock: its latest (a stock with many cards would otherwise list them all on every headline).
-  for (const c of cards) for (const t of c.card.tickers) if (c.id > (bySym.get(t.symbol)?.[0] ?? 0)) bySym.set(t.symbol, [c.id]);
+  for (const c of cards.filter((x) => !isPennyShort(x))) for (const t of c.card.tickers) if (c.id > (bySym.get(t.symbol)?.[0] ?? 0)) bySym.set(t.symbol, [c.id]);
   const items = [
     // A re-post ("Reported Sunday, …") is dropped when the original is in the feed; otherwise shown at the news's own date.
     ...news.filter((n) => !n.repostedAt || !originals.has(bare(n.headline))).map((n) => ({ id: `n${n.id}`, at: n.ts, headline: n.headline, summary: n.summary, source: n.source || "news", url: n.url, symbols: n.symbols.slice(0, 8), kind: "news" as const, ...(n.repostedAt ? { repostedAt: n.repostedAt } : {}) })),

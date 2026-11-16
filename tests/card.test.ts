@@ -119,9 +119,23 @@ describe("short-squeeze gate", () => {
     expect(applyGates(short, m({})).status).toBe("promoted");
     const cheap = applyGates(short, m({ lastClose: 2.6 }));
     expect(cheap.status).toBe("not_promoted");
-    expect(cheap.notes.join(" ")).toMatch(/short not promoted: \$2\.60 is under \$5/);
+    expect(cheap.notes.join(" ")).toMatch(/no shorts under \$5: \$2\.60 is under \$5/);
+    // The under-$5 note is added even when the card already failed another gate.
+    const lateCheap = applyGates(short, m({ lastClose: 2.6, newsStories30d: 99 }));
+    expect(lateCheap.notes.join(" ")).toMatch(/no shorts under \$5/);
     expect(applyGates(short, m({ stockMove5dPct: 26 })).notes.join(" ")).toMatch(/up 26\.0% in 5 days \(limit 25%\): squeeze risk/);
     expect(applyGates(short, m({ stockMove30dPct: 60 })).status).toBe("not_promoted");
     expect(applyGates(sampleCard({ direction: "long" }), m({ lastClose: 2.6, stockMove5dPct: 40 })).status).not.toBe("not_promoted");
+  });
+});
+
+describe("no shorts under $5", async () => {
+  const { isPennyShort } = await import("@/lib/scout/card");
+  it("spots them by the gate note, or by today's price for older cards", () => {
+    expect(isPennyShort({ direction: "short", gateNotes: ["no shorts under $5: $1.10 is under $5 (hard and costly to borrow, prone to squeezes)"] })).toBe(true);
+    expect(isPennyShort({ direction: "short", gateNotes: ["short not promoted: $1.10 is under $5: often hard and costly to borrow"] })).toBe(true);
+    expect(isPennyShort({ direction: "short", gateNotes: [] }, 1.1)).toBe(true);
+    expect(isPennyShort({ direction: "short", gateNotes: [] }, 12)).toBe(false);
+    expect(isPennyShort({ direction: "long", gateNotes: [] }, 1.1)).toBe(false);
   });
 });

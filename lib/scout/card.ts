@@ -156,6 +156,16 @@ export interface GateOptions {
   wholeCompany?: boolean;
 }
 
+/** The gate note on a short under $5 (such cards are kept in the log but hidden from the Ideas list). */
+export const PENNY_SHORT_NOTE = "no shorts under $5";
+
+/** Pure: a card the scout must not suggest: a short on a stock under $5 (by its gate note, or the price when known). */
+export function isPennyShort(c: { direction: string; gateNotes: string[] }, price?: number | null): boolean {
+  if (c.direction !== "short") return false;
+  if (c.gateNotes.some((n) => n.startsWith(PENNY_SHORT_NOTE) || /is under \$5\b/.test(n))) return true;
+  return price !== undefined && price !== null && price < SCOUT.minShortPrice;
+}
+
 export function applyGates(input: Card, measured: MeasuredLateness, opts: GateOptions = {}): GateResult {
   const notes: string[] = [];
   const evidence = input.evidence.filter((e) => e.source.trim() && /^\d{4}-\d{2}-\d{2}$/.test(e.as_of) && !Number.isNaN(Date.parse(e.as_of)));
@@ -197,10 +207,14 @@ export function applyGates(input: Card, measured: MeasuredLateness, opts: GateOp
     status = "late";
   }
   // Shorts that are impractical or dangerous to hold: cheap stocks and fresh run-ups (borrow cost, squeezes).
-  if (input.direction === "short" && status !== "not_promoted") {
-    const px = measured.lastClose ?? null, up30 = lateness.stock_move_30d_pct, up5 = measured.stockMove5dPct ?? null;
-    const why = px !== null && px < SCOUT.minShortPrice ? `$${px.toFixed(2)} is under $${SCOUT.minShortPrice}: often hard and costly to borrow, and prone to squeezes`
-      : up30 > SCOUT.maxShortRunUp30dPct ? `up ${up30.toFixed(1)}% in 30 days (limit ${SCOUT.maxShortRunUp30dPct}%): squeeze risk`
+  // No shorts under $5, whatever else the card failed (the note is what hides it from the Ideas list).
+  const shortPx = measured.lastClose ?? null;
+  if (input.direction === "short" && shortPx !== null && shortPx < SCOUT.minShortPrice) {
+    status = "not_promoted";
+    notes.push(`${PENNY_SHORT_NOTE}: $${shortPx.toFixed(2)} is under $${SCOUT.minShortPrice} (hard and costly to borrow, prone to squeezes)`);
+  } else if (input.direction === "short" && status !== "not_promoted") {
+    const up30 = lateness.stock_move_30d_pct, up5 = measured.stockMove5dPct ?? null;
+    const why = up30 > SCOUT.maxShortRunUp30dPct ? `up ${up30.toFixed(1)}% in 30 days (limit ${SCOUT.maxShortRunUp30dPct}%): squeeze risk`
         : up5 !== null && up5 > SCOUT.maxShortRunUp5dPct ? `up ${up5.toFixed(1)}% in 5 days (limit ${SCOUT.maxShortRunUp5dPct}%): squeeze risk` : null;
     if (why) {
       status = "not_promoted";

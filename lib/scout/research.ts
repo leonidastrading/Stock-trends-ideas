@@ -4,7 +4,7 @@
  * version and timestamp) before anything else happens.
  */
 import type { Kind } from "@/config/scout";
-import { SECTORS, type Sector } from "@/config/scout";
+import { SCOUT, SECTORS, type Sector } from "@/config/scout";
 import type { MarketData } from "../alpaca";
 import { probeAll, type Signal, type Source, type SourceResult } from "../sources";
 import { addDays, toEt } from "../time";
@@ -35,6 +35,17 @@ export interface ResearchInput {
   trigger?: Signal[];
   /** Results already gathered by the scan for this term (skips re-probing). */
   results?: SourceResult[];
+  /** The direction the desk proposes, when it proposes one: a short under $5 is skipped before any AI call. */
+  proposedDirection?: "long" | "short";
+}
+
+/** The latest price of a stock (snapshot, else the last daily close), or null. */
+async function lastPrice(data: ResearchDeps["data"], symbol: string | undefined, today: string): Promise<number | null> {
+  if (!data || !symbol) return null;
+  const snap = await data.getSnapshots?.([symbol]).catch(() => null);
+  if (snap?.[symbol]?.price) return snap[symbol].price;
+  const bars = await data.getDailyBars([symbol], addDays(today, -10), today).catch(() => []);
+  return bars.filter((b) => b.symbol === symbol).sort((a, b) => a.date.localeCompare(b.date)).at(-1)?.c ?? null;
 }
 
 export type ResearchOutcome =
@@ -71,6 +82,15 @@ export async function researchCandidate(input: ResearchInput, deps: ResearchDeps
   if (early) {
     const reason = `duplicate: card #${early.cardId} (${early.createdAt.slice(0, 10)}) already calls ${early.direction} ${early.symbol} for the same player`;
     return { outcome: "rejected", reason, candidate: await store.addCandidate({ ...base, outcome: "rejected", reason }) };
+  }
+
+  // No shorts under $5 (hard to borrow, squeeze-prone): a proposed one is skipped before anything is spent on it.
+  if (input.proposedDirection === "short") {
+    const px = await lastPrice(deps.data, input.tickersHint[0], et.date);
+    if (px !== null && px < SCOUT.minShortPrice) {
+      const reason = `short under $${SCOUT.minShortPrice}: ${input.tickersHint[0]} at $${px.toFixed(2)} (no shorts under $${SCOUT.minShortPrice})`;
+      return { outcome: "rejected", reason, candidate: await store.addCandidate({ ...base, outcome: "rejected", reason }) };
+    }
   }
 
   const results = input.results ?? (await probeAll(deps.sources, { term: input.term, kind: input.kindHint, tickers: input.tickersHint, now: deps.now, env: deps.env, fetchImpl: deps.fetchImpl }));

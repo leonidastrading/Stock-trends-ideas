@@ -12,6 +12,8 @@ import * as store from "@/lib/scout/store";
 import { swingConfigured } from "@/lib/scout/swing";
 import { toEt } from "@/lib/time";
 import RememberFilters from "@/components/RememberFilters";
+import { marketDataFromEnv } from "@/lib/alpaca";
+import { isPennyShort } from "@/lib/scout/card";
 import { profilesForCards, SHORT_MINS, shortPct, SIZE_KEYS, sizeKey } from "@/lib/scout/card-profiles";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +30,7 @@ function fromLine(player: Player, term: string): string {
   return `${PLAYER_LABEL[player]}${what && what !== term || player === "scout_trend" || player === "you" ? ` · ${what}` : ""}`;
 }
 
-type SP = { days?: string; source?: string; status?: string; sort?: string; conf?: string; cap?: string; short?: string; dir?: string; page?: string; card?: string };
+type SP = { days?: string; source?: string; status?: string; sort?: string; conf?: string; cap?: string; short?: string; dir?: string; penny?: string; page?: string; card?: string };
 
 export default async function IdeasPage({ searchParams }: { searchParams: Promise<SP> }) {
   if (!hasDatabase()) return <SetupNotice />;
@@ -45,6 +47,11 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
 
   const [cards, candidates, tracks, fb, recent] = await Promise.all([store.cardsSince(days), store.candidatesSince(days), store.allTracks(), store.latestFeedback(), store.cardsSince(120)]);
   const [reviews, profiles] = await Promise.all([store.allReviews(), profilesForCards(cards)]);
+  // No shorts under $5: such cards stay in the log but are hidden unless asked for (older cards checked at today's price).
+  const showPenny = sp.penny === "1";
+  const shortSyms = [...new Set(cards.filter((c) => c.direction === "short").map((c) => c.primaryTicker))];
+  const shortPx = shortSyms.length ? await (marketDataFromEnv()?.getSnapshots?.(shortSyms) ?? Promise.resolve({} as Record<string, { price: number }>)).catch(() => ({} as Record<string, { price: number }>)) : {};
+  const penny = new Set(cards.filter((c) => isPennyShort(c, shortPx[c.primaryTicker]?.price)).map((c) => c.id));
   // Size and short-interest filters: the card's market cap and % of float short (frozen when written, else today's).
   const capOk = (c: store.StoredCard, k = cap) => !k || sizeKey(profiles.get(c.id)?.marketCap) === k;
   const shortOk = (c: store.StoredCard, m = shortMin) => !m || (shortPct(profiles.get(c.id)) ?? -1) >= m;
@@ -62,7 +69,7 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
 
   // One list of every card in the window: filtered by source and status, sorted, 10 a page.
   const wantedId = Number(sp.card);
-  const bySource = cards.filter((c) => (!repeats.has(c.id) || c.id === wantedId) && (!source || playerFor(c) === source));
+  const bySource = cards.filter((c) => (!repeats.has(c.id) || c.id === wantedId) && (!source || playerFor(c) === source) && (showPenny || !penny.has(c.id) || c.id === wantedId));
   const byConf = bySource.filter((c) => c.card.confidence >= conf && capOk(c) && shortOk(c) && dirOk(c));
   const rows = byConf.filter((c) => !status || c.status === status).sort((a, b) =>
     sort === "newest" ? b.createdAt.localeCompare(a.createdAt)
@@ -115,6 +122,7 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
       <div className="toolbar">
         <FilterLinks params={params} name="source" value={source} reset={["page", "card"]} options={[{ value: "", label: "All sources", count: shownCards.length }, ...PLAYERS.filter((p) => sourceCounts.get(p)).map((p) => ({ value: p, label: PLAYER_LABEL[p].replace(/^Scout · /, ""), count: sourceCounts.get(p) }))]} />
       </div>
+      {penny.size > 0 && <p className="small muted">{showPenny ? <>Showing {penny.size} short{penny.size === 1 ? "" : "s"} on stocks under $5 (the scout does not suggest these). <a href={hrefWith(params, { penny: undefined })}>Hide them</a></> : <>{penny.size} short{penny.size === 1 ? "" : "s"} on stocks under $5 hidden (the scout does not suggest these). <a href={hrefWith(params, { penny: "1" })}>Show</a></>}</p>}
       <div className="toolbar" style={{ justifyContent: "space-between" }}><CollapseAll /><Pager params={params} name="page" page={page.page} pages={page.pages} total={page.total} label="cards" hash="#cards" /></div>
       {page.items.map((c) => {
         const tr = t.get(c.id) ?? null;

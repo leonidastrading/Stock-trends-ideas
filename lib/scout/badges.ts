@@ -14,7 +14,8 @@ export async function badgeCounts(since: Partial<Record<BadgeTab, string>>, now 
   const ok = (t: BadgeTab) => { const s = since[t]; return s && !Number.isNaN(Date.parse(s)) ? new Date(s).toISOString() : null; };
   const jobs: Array<Promise<void>> = [];
   const add = (t: BadgeTab, f: (s: string) => Promise<number>) => { const s = ok(t); if (s) jobs.push(f(s).then((v) => { out[t] = Math.min(100, v); }).catch(() => undefined)); };
-  add("ideas", (s) => n(`SELECT count(*) AS n FROM cards WHERE created_at > $1`, s));
+  // Shorts under $5 are not suggested, so they do not count as new ideas.
+  add("ideas", (s) => n(`SELECT count(*) AS n FROM cards WHERE created_at > $1 AND NOT (direction = 'short' AND array_to_string(gate_notes, ' ') ~ 'under [$]5')`, s));
   add("rumors", async (s) => (await n(`SELECT count(*) AS n FROM rumors WHERE created_at > $1`, s)) + (await n(`SELECT count(DISTINCT rumor_id) AS n FROM rumor_checks WHERE status = 'confirmed' AND checked_at > $1`, s)));
   add("investigate", (s) => n(`SELECT count(*) AS n FROM investigations WHERE status = 'done' AND created_at > $1`, s));
   add("inbox", (s) => n(`SELECT count(*) AS n FROM inbox_files WHERE read_at > $1`, s));

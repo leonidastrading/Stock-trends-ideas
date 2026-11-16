@@ -65,6 +65,15 @@ describe("research → card → track", () => {
     expect((await store.candidatesSince(1))[0]).toMatchObject({ outcome: "card", reason: "promoted", cardId: r.card.id });
   });
 
+  it("a proposed short on a stock under $5 is skipped before any AI call", async () => {
+    const before = prompts.length;
+    const cheap = { ...deps, data: { ...data, getSnapshots: async () => ({ MNTK: { price: 1.1, at: null, prevClose: 0.95, sessionDate: "2026-11-10" } }) } as MarketData };
+    const r = await researchCandidate({ origin: "scout", term: "story: mntk guidance cut → MNTK", kindHint: "event", tickersHint: ["MNTK"], observation: null, proposedDirection: "short" }, cheap);
+    expect(r.outcome).toBe("rejected");
+    if (r.outcome === "rejected") expect(r.reason).toMatch(/short under \$5: MNTK at \$1\.10/);
+    expect(prompts.length).toBe(before);
+  });
+
   it("cards are append-only", async () => {
     await expect(query(`UPDATE cards SET title = 'x' WHERE id = 1`)).rejects.toThrow(/append-only/);
     await expect(query(`DELETE FROM cards WHERE id = 1`)).rejects.toThrow(/append-only/);
