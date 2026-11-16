@@ -488,6 +488,56 @@ CREATE TABLE IF NOT EXISTS investigations (
   error text
 );
 
+-- Earnings drift (up): the trailing year of EPS surprises (for ranks), every report scanned (setup or reason),
+-- the paper track of each setup, and the AI's card for each A-setup (never edited).
+CREATE TABLE IF NOT EXISTS earnings_history (
+  symbol text NOT NULL,
+  report_date date NOT NULL,
+  surprise double precision NOT NULL,
+  cap_group text NOT NULL,
+  PRIMARY KEY (symbol, report_date)
+);
+CREATE INDEX IF NOT EXISTS earnings_history_group_idx ON earnings_history (cap_group, report_date);
+CREATE TABLE IF NOT EXISTS earnings_scans (
+  id serial PRIMARY KEY,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  version text NOT NULL,
+  symbol text NOT NULL,
+  report_date date NOT NULL,
+  reaction_date date NOT NULL,
+  timing text NOT NULL,
+  setup text,
+  reason text,
+  numbers jsonb NOT NULL,
+  UNIQUE (symbol, report_date)
+);
+CREATE OR REPLACE TRIGGER earnings_scans_ro BEFORE UPDATE OR DELETE ON earnings_scans FOR EACH ROW EXECUTE FUNCTION forbid_change();
+CREATE TABLE IF NOT EXISTS earnings_tracks (
+  scan_id integer PRIMARY KEY,
+  entry_date date NOT NULL,
+  exit_date date,
+  next_report date,
+  next_known boolean NOT NULL DEFAULT false,
+  entry_price double precision,
+  exit_price double precision,
+  closed boolean NOT NULL DEFAULT false,
+  ret_pct double precision,
+  spy_pct double precision,
+  peer_pct double precision,
+  worst_pct double precision,
+  tapped_at timestamptz,
+  swing_body jsonb
+);
+CREATE TABLE IF NOT EXISTS earnings_cards (
+  scan_id integer PRIMARY KEY,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  model text NOT NULL,
+  version text NOT NULL,
+  card jsonb NOT NULL,
+  cost_usd double precision
+);
+CREATE OR REPLACE TRIGGER earnings_cards_ro BEFORE UPDATE OR DELETE ON earnings_cards FOR EACH ROW EXECUTE FUNCTION forbid_change();
+
 -- Dashboard panels (market quotes, earnings calendar, contracts, breadth): cached fetches, refreshed hourly.
 CREATE TABLE IF NOT EXISTS dashboard_cache (
   key text PRIMARY KEY,

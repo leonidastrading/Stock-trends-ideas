@@ -55,7 +55,12 @@ export async function sendToSwing(card: StoredCard, env: NodeJS.ProcessEnv = pro
   const settings = await import("./store").then((s) => s.loadSettings()).catch(() => null);
   const speculative = card.card.confidence < 50;
   const size = settings ? (speculative ? settings.swingSpeculativeSize : settings.swingSize) : Number(env.SWING_NOTIONAL ?? 2000);
-  const idea = toSwingIdea(card, size);
+  return sendIdeaToSwing(toSwingIdea(card, size), env, fetchImpl);
+}
+
+/** POST one idea to the Swing ideas log's /api/swing (paper only). */
+export async function sendIdeaToSwing(idea: SwingIdeaInput, env: NodeJS.ProcessEnv = process.env, fetchImpl: typeof fetch = fetch): Promise<{ ok: boolean; status: number; body: unknown }> {
+  if (!swingConfigured(env)) throw new Error("SWING_API_URL / SWING_API_USER / SWING_API_PASSWORD are not set");
   const headers = { "content-type": "application/json", ...swingHeaders(env) };
   const res = await fetchImpl(`${env.SWING_API_URL!.trim().replace(/\/$/, "")}/api/swing`, { method: "POST", headers, body: JSON.stringify(idea) });
   const text = await res.text();

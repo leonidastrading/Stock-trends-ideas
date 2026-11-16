@@ -26,6 +26,8 @@ export const FEEDS: Feed[] = [
   // People and your own inputs
   { name: "Trump's Truth Social posts", host: "trumpstruth.org", what: "every post (via the public archive's feed), read for market impact", when: "every 5 minutes, or hourly", usedBy: "Trump posts desk" },
   { name: "GitHub inbox", host: "api.github.com", what: "documents your bot drops in the inbox repo, read for ideas", when: "on each new file (webhook) or hourly", usedBy: "Your bot", key: "GITHUB_INBOX_REPO" },
+  { name: "Nasdaq earnings calendar (actuals)", host: "api.nasdaq.com", what: "every report's consensus and actual EPS, timing, market cap and quarter end, plus sectors", when: "nightly after the close; the year of history loads hourly", usedBy: "Earnings drift (up)" },
+  { name: "Finnhub earnings", host: "finnhub.io", what: "consensus and actual revenue per report", when: "nightly", usedBy: "Earnings drift (up)", key: "FINNHUB_API_KEY" },
   { name: "USAspending awards", host: "api.usaspending.gov", what: "federal contract awards by keyword or company, for investigations", when: "per investigation", usedBy: "Investigate" },
   { name: "Senate lobbying disclosures", host: "lda.senate.gov", what: "who paid lobbyists, on which issues, which agencies they lobbied", when: "per investigation", usedBy: "Investigate" },
   { name: "FEC campaign finance", host: "api.open.fec.gov", what: "PAC and campaign spending, including contributions to candidates", when: "per investigation", usedBy: "Investigate", key: "FEC_API_KEY" },

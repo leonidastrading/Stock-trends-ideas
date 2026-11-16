@@ -240,3 +240,5 @@ a.button.primary { background: var(--accent); border-color: var(--accent); color
 /* Collapsed: only the header (status, ticker, price, earnings, title, scores) stays. */
 .thesis.collapsed > :not(.collapse-btn):not(:nth-child(2)) { display: none; }
 .thesis.collapsed { gap: 0; }
+.earnings-card { margin-bottom: 10px; }
+.earnings-card > div { margin-top: 4px; max-width: 110ch; }

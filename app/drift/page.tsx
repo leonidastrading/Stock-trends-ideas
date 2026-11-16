@@ -35,7 +35,8 @@ export default async function DriftPage() {
   const setups: DriftSetup[] = p.data?.setups ?? [];
   return (
     <>
-      <h1>Down drift</h1>
+      <h1>Drift</h1>
+      <div className="toolbar"><span className="filter-links small"><a className="chip active" href="/drift">Down drift (bad news)</a><a className="chip" href="/earnings">Earnings drift (up)</a></span></div>
       <details className="card section">
         <summary><b>How this page works</b> <span className="small muted">stocks still falling days after bad news</span></summary>
         <div className="small secondary">

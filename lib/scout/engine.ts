@@ -116,9 +116,11 @@ export async function runTrack(now = new Date()) {
     // The day after a catalyst: read what happened and push the verdict.
     const reviews = await runReviews({ data, callModel: callResearchModel, now }).catch((err) => [{ cardId: 0, error: err instanceof Error ? err.message : String(err) }]);
     const pushed = await pushReviews(reviews as Array<{ cardId: number; verdict?: string }>).catch((err) => `push failed: ${err instanceof Error ? err.message : String(err)}`);
+    // The earnings-drift desk: tonight's reports through the numbers, exits moved to known report dates, paper tracks, cards.
+    const earnings = await earningsNight(data, now, started + 200_000);
     // Then housekeeping in time-limited slices, so the core job always finishes inside the function's limit.
     const upkeep = await maintenance(started + 240_000, now);
-    const detail = { ...r, reviews, pushedReviews: pushed, upkeep };
+    const detail = { ...r, reviews, pushedReviews: pushed, earnings, upkeep };
     await store.finishRun(run, "ok", detail);
     return { status: "ok" as const, ...detail };
   } catch (err) {
@@ -127,6 +129,21 @@ export async function runTrack(now = new Date()) {
     await pushFailure("tracker", message);
     throw err;
   }
+}
+
+/** The earnings desk's nightly steps (never fails the job it rides on). */
+export async function earningsNight(data: import("../alpaca").MarketData, now: Date, deadline: number): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = {};
+  try {
+    const e = await import("./earnings");
+    out.scan = await e.scanEarnings(data, now).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+    out.exits = await e.refreshExits(data, now).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+    out.tracks = await e.updateEarningsTracks(data, now).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+    out.cards = await e.writeCards({ data, callModel: callResearchModel, now, env: process.env }, deadline).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+  } catch (err) {
+    out.error = err instanceof Error ? err.message : String(err);
+  }
+  return out;
 }
 
 /** Bars for the look-back pass start here (the exploratory Stocktwits history covers the 3 months before the test began). */
@@ -187,6 +204,13 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
     }
     return `connected, ${s.hoursLeft}h left`;
   }).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+  // Earnings desk: fill the year of surprise history (a few days per call) and write any cards still waiting.
+  if (data && left() > 60_000) {
+    out.earnings = await import("./earnings").then(async (e) => ({
+      history: await e.backfillHistory(data, now, Math.min(deadline - 40_000, Date.now() + 60_000), fetchImpl),
+      cards: left() > 90_000 ? await e.writeCards({ data, callModel: callResearchModel, now, env: process.env, fetchImpl }, deadline - 30_000, 2) : "later",
+    })).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+  } else out.earnings = "later: not enough time";
   // Down drift: stocks still falling after bad news (bars for ~700 stocks, headlines for the few that qualify), hourly.
   if (data && left() > 70_000) {
     out.drift = await Promise.all([import("./drift"), import("../market/panels")]).then(async ([{ scanDrift }, { panel }]) => {
