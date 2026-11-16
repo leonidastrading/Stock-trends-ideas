@@ -146,3 +146,18 @@ export async function themesIfDue(deps: Parameters<typeof runThemes>[0]): Promis
   if (last && last.etDate === et.date) return "done today";
   return runThemes(deps);
 }
+
+/** Themes already sent to the Swing ideas log: "run:index" → ticker. */
+export async function themeSends(): Promise<Map<string, string>> {
+  const rows = await q(`SELECT run_id, idx, ticker FROM theme_sends`).catch(() => []);
+  return new Map(rows.map((r) => [`${r.run_id}:${r.idx}`, String(r.ticker)]));
+}
+
+/** Pure: the Swing ideas log entry for a theme's main ticker (1-2 weeks: a 14-day time exit). */
+export function themeToSwing(t: Theme, runDate: string, sizes: { normal: number; speculative: number }) {
+  const speculative = t.confidence < 50;
+  return {
+    ticker: t.tickers[0], side: t.direction, catalyst: "theme" as const, speculative, notional: speculative ? sizes.speculative : sizes.normal, exitRule: "time" as const, exitParam: 14,
+    thesis: `[Trend scout theme, ${runDate}] ${t.title}. ${t.thesis} Catalyst: ${t.catalyst || "none dated"}. Agreement: ${t.agreement.documents} documents, ${t.agreement.websites} website articles, ${t.agreement.stocktwits} Stocktwits posts. Crowding: ${t.crowding} Breaks it: ${t.breaks_it}`.slice(0, 1000),
+  };
+}

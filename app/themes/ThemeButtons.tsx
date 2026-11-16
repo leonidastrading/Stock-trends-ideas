@@ -36,3 +36,22 @@ export function ThemesRefresh() {
     </span>
   );
 }
+
+/** Send the theme's main ticker to the Swing ideas log (paper), once. */
+export function ThemeSend({ run, index, ticker, side, sent, configured }: { run: number; index: number; ticker: string; side: "long" | "short"; sent: boolean; configured: boolean }) {
+  const [state, setState] = useState<"idle" | "busy" | "sent" | string>(sent ? "sent" : "idle");
+  async function go() {
+    setState("busy");
+    const res = await fetch("/api/themes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "send", run, index }) });
+    const j = await res.json().catch(() => ({ errors: [`HTTP ${res.status}`] }));
+    setState(res.ok && j.ok ? "sent" : (j.errors ?? ["failed"]).join("; "));
+  }
+  if (state === "sent") return <span className="tag ok">{side} {ticker} sent to Swing ideas</span>;
+  if (state === "busy") return <span className="small muted">sending…</span>;
+  return (
+    <span className="small">
+      <button className="primary" onClick={go} disabled={!configured} title={configured ? `Logs a paper idea: ${side} ${ticker}, exits after 14 days` : "Set SWING_API_URL / SWING_API_USER / SWING_API_PASSWORD"}>Send {side} {ticker} to Swing ideas (paper)</button>
+      {state !== "idle" && <span className="neg"> <LinkedText text={state} /></span>}
+    </span>
+  );
+}

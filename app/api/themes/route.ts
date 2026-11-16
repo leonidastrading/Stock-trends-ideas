@@ -11,6 +11,7 @@ export const maxDuration = 300;
 const body = z.union([
   z.object({ action: z.literal("refresh") }),
   z.object({ action: z.literal("research"), run: z.number().int().positive(), index: z.number().int().min(0).max(2) }),
+  z.object({ action: z.literal("send"), run: z.number().int().positive(), index: z.number().int().min(0).max(2) }),
 ]);
 
 /** Refresh today's themes now, or research one theme into a card (scores as "Scout · themes (consensus)"). */
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
   if (!checkBasicAuth(request.headers.get("authorization"))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!hasDatabase()) return NextResponse.json({ ok: false, errors: ["database not connected"] }, { status: 503 });
   const parsed = body.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ ok: false, errors: ["send { action: 'refresh' } or { action: 'research', run, index }"] }, { status: 422 });
+  if (!parsed.success) return NextResponse.json({ ok: false, errors: ["send { action: 'refresh' } or { action: 'research' | 'send', run, index }"] }, { status: 422 });
   const deps = defaultDeps();
   const { runThemes, themeRuns } = await import("@/lib/scout/themes");
   try {
@@ -27,6 +28,22 @@ export async function POST(request: Request) {
     const r = (await themeRuns(60)).find((x) => x.id === run);
     const t = r?.themes[index];
     if (!r || !t) return NextResponse.json({ ok: false, errors: ["that theme is not on file"] }, { status: 404 });
+    if (parsed.data.action === "send") {
+      // The main ticker to the Swing ideas log, once per theme; no shorts under $5.
+      const { themeSends, themeToSwing } = await import("@/lib/scout/themes");
+      if ((await themeSends()).has(`${run}:${index}`)) return NextResponse.json({ ok: false, errors: ["already sent"] }, { status: 409 });
+      const { SCOUT } = await import("@/config/scout");
+      const px = (await deps.data?.getSnapshots?.([t.tickers[0]]).catch(() => null))?.[t.tickers[0]]?.price ?? t.prices?.[t.tickers[0]] ?? null;
+      if (t.direction === "short" && px !== null && px < SCOUT.minShortPrice) return NextResponse.json({ ok: false, errors: [`no shorts under $${SCOUT.minShortPrice}: ${t.tickers[0]} is at $${px.toFixed(2)}`] }, { status: 422 });
+      const settings = (await import("@/lib/scout/store")).loadSettings;
+      const st = await settings();
+      const { sendIdeaToSwing } = await import("@/lib/scout/swing");
+      const sent = await sendIdeaToSwing(themeToSwing(t, r.etDate, { normal: st.swingSize, speculative: st.swingSpeculativeSize }));
+      if (!sent.ok) return NextResponse.json({ ok: false, errors: (sent.body as { errors?: string[] }).errors ?? [`swing log replied ${sent.status}`] }, { status: 422 });
+      const { query } = await import("@/lib/db");
+      await query(`INSERT INTO theme_sends (run_id, idx, ticker, side, response) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING`, [run, index, t.tickers[0], t.direction, JSON.stringify(sent.body ?? null)]);
+      return NextResponse.json({ ok: true });
+    }
     const { researchCandidate } = await import("@/lib/scout/research");
     const context = `A consensus theme the scout found on ${r.etDate} across the trader's sources (${t.agreement.documents} documents, ${t.agreement.websites} website articles, ${t.agreement.stocktwits} Stocktwits posts agree): ${t.title}.
 Proposed: ${t.direction} ${t.tickers.join(", ")} for 1-2 weeks. Thesis: ${t.thesis}

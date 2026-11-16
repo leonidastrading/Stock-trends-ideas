@@ -3,9 +3,10 @@ import Ticker from "@/components/Ticker";
 import CardAsk from "@/components/CardAsk";
 import { marketDataFromEnv } from "@/lib/alpaca";
 import { hasDatabase } from "@/lib/db";
-import { themeRuns, type Theme, type ThemeRun } from "@/lib/scout/themes";
+import { themeRuns, themeSends, type Theme, type ThemeRun } from "@/lib/scout/themes";
+import { swingConfigured } from "@/lib/scout/swing";
 import { fmtEt } from "@/lib/time";
-import { ThemeResearch, ThemesRefresh } from "./ThemeButtons";
+import { ThemeResearch, ThemeSend, ThemesRefresh } from "./ThemeButtons";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -33,7 +34,8 @@ function details(t: Theme, run: ThemeRun): string {
 /** Themes: the top 3 trade ideas the trader's sources talk about and agree on, for the next 1-2 weeks. */
 export default async function ThemesPage() {
   if (!hasDatabase()) return <SetupNotice />;
-  const runs = await themeRuns(30).catch(() => []);
+  const [runs, sends] = await Promise.all([themeRuns(30).catch(() => []), themeSends().catch(() => new Map<string, string>())]);
+  const sw = swingConfigured();
   const syms = [...new Set(runs.flatMap((r) => r.themes.flatMap((t) => t.tickers)))];
   const snaps = syms.length ? await (marketDataFromEnv()?.getSnapshots?.(syms) ?? Promise.resolve({})).catch(() => ({})) : {};
   const now = Object.fromEntries(Object.entries(snaps as Record<string, { price: number }>).map(([s, v]) => [s, v.price]));
@@ -71,6 +73,7 @@ export default async function ThemesPage() {
             <div className="small" style={{ marginTop: 4 }}><b>What would break it:</b> {t.breaks_it}</div>
             {s.each.some((e) => e.move !== null) && <div className="small muted" style={{ marginTop: 4 }}>Since published: {s.each.map((e) => `${e.s} ${pct(e.move)}${t.prices?.[e.s] ? ` (from $${t.prices[e.s].toFixed(2)})` : ""}`).join(" · ")}</div>}
             <div className="small rumor-actions" style={{ marginTop: 8 }}>
+              <ThemeSend run={latest.id} index={i} ticker={t.tickers[0]} side={t.direction} sent={sends.has(`${latest.id}:${i}`)} configured={sw} />
               <ThemeResearch run={latest.id} index={i} />
               <CardAsk symbol={t.tickers[0]} tickers={t.tickers} noun="theme" subject={`theme "${t.title}" (${t.direction} ${t.tickers.join(", ")})`} context={details(t, latest)} />
             </div>

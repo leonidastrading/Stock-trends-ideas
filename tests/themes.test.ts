@@ -5,7 +5,7 @@ import { setQuerierForTests } from "@/lib/db";
 import type { CallModel } from "@/lib/scout/llm";
 import { playerOf } from "@/lib/scout/scoreboard";
 import * as store from "@/lib/scout/store";
-import { parseThemes, runThemes, themeRuns, themesIfDue, THEMES_PROMPT } from "@/lib/scout/themes";
+import { parseThemes, runThemes, themeRuns, themesIfDue, themeToSwing, THEMES_PROMPT } from "@/lib/scout/themes";
 
 const theme = (o: Record<string, unknown> = {}) => ({ title: "Power for AI data centers", direction: "long", tickers: ["$vst", "CEG", "not a ticker!"], thesis: "t", catalyst: "c", agreement: { documents: 3, websites: 2, stocktwits: 9 }, quotes: [{ text: "grid is the bottleneck", source: "newsletter.md" }], disagreement: "", crowding: "up 20% in a month", breaks_it: "b", confidence: 140, ...o });
 
@@ -21,6 +21,14 @@ describe("themes", () => {
     const t = parseThemes(JSON.stringify({ themes: [theme(), theme({ tickers: [] }), theme({ title: "b" }), theme({ title: "c" }), theme({ title: "d" })] }));
     expect(t).toHaveLength(3);
     expect(t[0]).toMatchObject({ tickers: ["VST", "CEG"], confidence: 100, direction: "long" });
+  });
+
+  it("sends the main ticker to Swing: theme catalyst, 14-day exit, smaller size under 50 confidence", () => {
+    const [t] = parseThemes(JSON.stringify({ themes: [theme({ confidence: 62 })] }));
+    expect(themeToSwing(t, "2026-11-17", { normal: 2000, speculative: 1000 })).toMatchObject({ ticker: "VST", side: "long", catalyst: "theme", speculative: false, notional: 2000, exitRule: "time", exitParam: 14 });
+    const [w] = parseThemes(JSON.stringify({ themes: [theme({ confidence: 40, direction: "short" })] }));
+    expect(themeToSwing(w, "2026-11-17", { normal: 2000, speculative: 1000 })).toMatchObject({ side: "short", speculative: true, notional: 1000 });
+    expect(themeToSwing(w, "2026-11-17", { normal: 2000, speculative: 1000 }).thesis).toMatch(/^\[Trend scout theme, 2026-11-17\] Power for AI data centers/);
   });
 
   it("theme research scores as its own player", () => {

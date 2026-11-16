@@ -483,6 +483,17 @@ CREATE TABLE IF NOT EXISTS theme_runs (
   cost_usd double precision
 );
 CREATE OR REPLACE TRIGGER theme_runs_ro BEFORE UPDATE OR DELETE ON theme_runs FOR EACH ROW EXECUTE FUNCTION forbid_change();
+-- Themes sent to the Swing ideas log (main ticker), once each, never edited.
+CREATE TABLE IF NOT EXISTS theme_sends (
+  run_id integer NOT NULL,
+  idx integer NOT NULL,
+  ticker text NOT NULL,
+  side text NOT NULL,
+  sent_at timestamptz NOT NULL DEFAULT now(),
+  response jsonb,
+  PRIMARY KEY (run_id, idx)
+);
+CREATE OR REPLACE TRIGGER theme_sends_ro BEFORE UPDATE OR DELETE ON theme_sends FOR EACH ROW EXECUTE FUNCTION forbid_change();
 -- Watching open cards for their invalidation: one row per check (never edited); the latest is the card's state.
 CREATE TABLE IF NOT EXISTS invalidation_checks (
   id serial PRIMARY KEY,
