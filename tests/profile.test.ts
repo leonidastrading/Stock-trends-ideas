@@ -33,3 +33,11 @@ describe("card profiles: bands for scoring", async () => {
     expect([shortBand(p(null, 9.2)), shortBand(p(null, null, 25)), shortBand(p(null, 3)), shortBand(p(null, null))]).toEqual(["5–10% short", "20%+ short", "under 5% short", "short interest unknown"]);
   });
 });
+
+describe("Ideas filters: size and short interest", async () => {
+  const { sizeKey, shortPct } = await import("@/lib/scout/card-profiles");
+  it("maps a market cap to its size filter and reads % of float short", () => {
+    expect([sizeKey(6.6e9), sizeKey(250e6), sizeKey(1.2e9), sizeKey(50e9), sizeKey(3e12), sizeKey(null)]).toEqual(["mid", "micro", "small", "large", "mega", null]);
+    expect([shortPct({ shortPctFloat: 9.2, shortPctOut: 8 }), shortPct({ shortPctFloat: null, shortPctOut: 8 }), shortPct(undefined)]).toEqual([9.2, 8, null]);
+  });
+});

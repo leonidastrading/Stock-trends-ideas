@@ -12,6 +12,7 @@ import * as store from "@/lib/scout/store";
 import { swingConfigured } from "@/lib/scout/swing";
 import { toEt } from "@/lib/time";
 import RememberFilters from "@/components/RememberFilters";
+import { profilesForCards, SHORT_MINS, shortPct, SIZE_KEYS, sizeKey } from "@/lib/scout/card-profiles";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -27,7 +28,7 @@ function fromLine(player: Player, term: string): string {
   return `${PLAYER_LABEL[player]}${what && what !== term || player === "scout_trend" || player === "you" ? ` · ${what}` : ""}`;
 }
 
-type SP = { days?: string; source?: string; status?: string; sort?: string; conf?: string; page?: string; card?: string };
+type SP = { days?: string; source?: string; status?: string; sort?: string; conf?: string; cap?: string; short?: string; page?: string; card?: string };
 
 export default async function IdeasPage({ searchParams }: { searchParams: Promise<SP> }) {
   if (!hasDatabase()) return <SetupNotice />;
@@ -37,10 +38,15 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   const status = sp.status && sp.status in STATUS_RANK ? sp.status : "";
   const sort = SORTS.some((s) => s.value === sp.sort) ? sp.sort! : "best";
   const conf = CONFS.includes(Number(sp.conf)) ? Number(sp.conf) : 0;
-  const params: Record<string, string | undefined> = { days: days === 7 ? undefined : String(days), source: source || undefined, status: status || undefined, sort: sort === "best" ? undefined : sort, conf: conf ? String(conf) : undefined, page: sp.page };
+  const cap = SIZE_KEYS.some((s) => s.key === sp.cap) ? sp.cap! : "";
+  const shortMin = (SHORT_MINS as readonly number[]).includes(Number(sp.short)) ? Number(sp.short) : 0;
+  const params: Record<string, string | undefined> = { days: days === 7 ? undefined : String(days), source: source || undefined, status: status || undefined, sort: sort === "best" ? undefined : sort, conf: conf ? String(conf) : undefined, cap: cap || undefined, short: shortMin ? String(shortMin) : undefined, page: sp.page };
 
   const [cards, candidates, tracks, fb, recent] = await Promise.all([store.cardsSince(days), store.candidatesSince(days), store.allTracks(), store.latestFeedback(), store.cardsSince(120)]);
-  const reviews = await store.allReviews();
+  const [reviews, profiles] = await Promise.all([store.allReviews(), profilesForCards(cards)]);
+  // Size and short-interest filters: the card's market cap and % of float short (frozen when written, else today's).
+  const capOk = (c: store.StoredCard, k = cap) => !k || sizeKey(profiles.get(c.id)?.marketCap) === k;
+  const shortOk = (c: store.StoredCard, m = shortMin) => !m || (shortPct(profiles.get(c.id)) ?? -1) >= m;
   const opp = opposingCalls(recent, tracks);
   const t = new Map(tracks.map((x) => [x.cardId, x]));
   const termOf = new Map(candidates.filter((c) => c.cardId !== null).map((c) => [c.cardId!, c.term]));
@@ -55,7 +61,7 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   // One list of every card in the window: filtered by source and status, sorted, 10 a page.
   const wantedId = Number(sp.card);
   const bySource = cards.filter((c) => (!repeats.has(c.id) || c.id === wantedId) && (!source || playerFor(c) === source));
-  const byConf = bySource.filter((c) => c.card.confidence >= conf);
+  const byConf = bySource.filter((c) => c.card.confidence >= conf && capOk(c) && shortOk(c));
   const rows = byConf.filter((c) => !status || c.status === status).sort((a, b) =>
     sort === "newest" ? b.createdAt.localeCompare(a.createdAt)
       : sort === "confidence" ? b.card.confidence - a.card.confidence || b.rankScore - a.rankScore
@@ -69,12 +75,14 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   const shownCards = cards.filter((c) => !repeats.has(c.id));
   for (const c of shownCards) sourceCounts.set(playerFor(c), (sourceCounts.get(playerFor(c)) ?? 0) + 1);
   const statusCount = (v: string) => byConf.filter((c) => !v || c.status === v).length;
-  const confCount = (n: number) => bySource.filter((c) => (!status || c.status === status) && c.card.confidence >= n).length;
+  const confCount = (n: number) => bySource.filter((c) => (!status || c.status === status) && c.card.confidence >= n && capOk(c) && shortOk(c)).length;
+  const capCount = (k: string) => bySource.filter((c) => (!status || c.status === status) && c.card.confidence >= conf && capOk(c, k) && shortOk(c)).length;
+  const shortCount = (m: number) => bySource.filter((c) => (!status || c.status === status) && c.card.confidence >= conf && capOk(c) && shortOk(c, m)).length;
 
   return (
     <>
       <h1>Ideas</h1>
-      <RememberFilters keys={["days", "sort", "status", "source", "conf"]} />
+      <RememberFilters keys={["days", "sort", "status", "source", "conf", "cap", "short"]} />
       <TickerSearch />
       <details className="card notice small section">
         <summary><b>How this page works</b></summary>
@@ -93,6 +101,12 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
       </div>
       <div className="toolbar">
         <FilterLinks params={params} name="conf" value={conf ? String(conf) : ""} reset={["page", "card"]} options={[{ value: "", label: "Any confidence", count: confCount(0) }, ...CONFS.map((n) => ({ value: String(n), label: `Confidence ${n}+`, count: confCount(n) }))]} />
+      </div>
+      <div className="toolbar">
+        <FilterLinks params={params} name="cap" value={cap} reset={["page", "card"]} options={[{ value: "", label: "Any size", count: capCount("") }, ...SIZE_KEYS.map((s) => ({ value: s.key, label: s.label, count: capCount(s.key) }))]} />
+      </div>
+      <div className="toolbar">
+        <FilterLinks params={params} name="short" value={shortMin ? String(shortMin) : ""} reset={["page", "card"]} options={[{ value: "", label: "Any short interest", count: shortCount(0) }, ...SHORT_MINS.map((m) => ({ value: String(m), label: `Short ${m}%+ of float`, count: shortCount(m) }))]} />
       </div>
       <div className="toolbar">
         <FilterLinks params={params} name="source" value={source} reset={["page", "card"]} options={[{ value: "", label: "All sources", count: shownCards.length }, ...PLAYERS.filter((p) => sourceCounts.get(p)).map((p) => ({ value: p, label: PLAYER_LABEL[p].replace(/^Scout · /, ""), count: sourceCounts.get(p) }))]} />
