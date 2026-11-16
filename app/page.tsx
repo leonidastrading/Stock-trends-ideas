@@ -11,6 +11,8 @@ import { upcomingCatalysts } from "@/lib/scout/calendar";
 import * as store from "@/lib/scout/store";
 import { etLabel, toEt } from "@/lib/time";
 import RememberFilters from "@/components/RememberFilters";
+import SectionLoading from "@/components/SectionLoading";
+import { Suspense } from "react";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -24,22 +26,42 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
   const days = [7, 30, 90].includes(Number(sp.days)) ? Number(sp.days) : 7;
   const lo = OUTCOMES.some((o) => o.value === sp.lo) ? sp.lo! : "";
   const params: Record<string, string | undefined> = { days: days === 7 ? undefined : String(days), lo: lo || undefined, lpage: sp.lpage, spage: sp.spage };
-  const [candidates, cards, tracks, recent, health, runs, fb] = await Promise.all([
-    store.candidatesSince(days), store.cardsSince(days), store.allTracks(), store.cardsSince(120), store.allHealth(), store.recentRuns(30), store.latestFeedback(),
-  ]);
-  const coming = upcomingCatalysts(recent, tracks, toEt(new Date()).date);
-  const down = health.filter((h) => h.status === "down" || h.status === "missing");
-  const lastDaily = runs.find((r) => r.action === "daily" && r.status !== "running");
-  const running = runs.find((r) => r.action === "daily" && r.status === "running");
   return (
     <>
       <h1>Home</h1>
       <RememberFilters keys={["days", "lo"]} />
       <TickerSearch />
+      <Suspense fallback={null}><Notices /></Suspense>
+      <Suspense fallback={<SectionLoading label="market panels" height={260} />}><MarketPanels /></Suspense>
+      <Suspense fallback={<SectionLoading label="desk reports" height={200} />}>
+        <Desks days={days} lo={lo} params={params} lpage={Number(sp.lpage ?? 1)} spage={Number(sp.spage ?? 1)} />
+      </Suspense>
+    </>
+  );
+}
+
+/** Sources not reporting, and a scan still running. */
+async function Notices() {
+  const [health, runs] = await Promise.all([store.allHealth(), store.recentRuns(30)]);
+  const down = health.filter((h) => h.status === "down" || h.status === "missing");
+  const running = runs.find((r) => r.action === "daily" && r.status === "running");
+  return (
+    <>
       {down.length > 0 && <p className="small warn">Sources not reporting: {down.map((h) => `${h.source} (${h.status})`).join(", ")}. See Settings.</p>}
       {running && <p className="small warn">A scan started at {etLabel(running.startedAt, true)} is still running; refresh in a few minutes.</p>}
+    </>
+  );
+}
 
-      <MarketPanels />
+/** Coming up, and what the desks did: the database part of Home, streamed in after the header. */
+async function Desks({ days, lo, params, lpage, spage }: { days: number; lo: string; params: Record<string, string | undefined>; lpage: number; spage: number }) {
+  const [candidates, cards, tracks, recent, runs, fb] = await Promise.all([
+    store.candidatesSince(days), store.cardsSince(days), store.allTracks(), store.cardsSince(120), store.recentRuns(30), store.latestFeedback(),
+  ]);
+  const coming = upcomingCatalysts(recent, tracks, toEt(new Date()).date);
+  const lastDaily = runs.find((r) => r.action === "daily" && r.status !== "running");
+  return (
+    <>
 
       {coming.length > 0 && (
         <details className="card section" open>
@@ -61,8 +83,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
         <span className="small muted">Activity window:</span>
         <FilterLinks params={params} name="days" value={days === 7 ? "" : String(days)} reset={["lpage"]} options={[{ value: "", label: "7 days" }, { value: "30", label: "30 days" }, { value: "90", label: "90 days" }]} />
       </div>
-      <ActivityLog candidates={candidates} cards={cards} params={params} outcome={lo} lpage={Number(sp.lpage ?? 1)} cardHref={cardLink} />
-      <StoryDesk runs={runs} fb={fb} params={params} spage={Number(sp.spage ?? 1)} />
+      <ActivityLog candidates={candidates} cards={cards} params={params} outcome={lo} lpage={lpage} cardHref={cardLink} />
+      <StoryDesk runs={runs} fb={fb} params={params} spage={spage} />
       {lastDaily && <TrendScan run={lastDaily} />}
     </>
   );

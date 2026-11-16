@@ -259,3 +259,10 @@ a.button.primary { background: var(--accent); border-color: var(--accent); color
 .nav-link { position: relative; }
 .nav-badge { display: inline-block; min-width: 16px; height: 16px; margin-left: 4px; padding: 0 4px; border-radius: 999px; background: #e5484d; color: #fff; font-size: 10.5px; font-weight: 700; line-height: 16px; text-align: center; vertical-align: 2px; text-decoration: none; animation: badge-in .25s ease-out; }
 @keyframes badge-in { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* Loading states: shown the moment a tab is clicked, and per section while it streams in. */
+.skeleton { border-radius: 10px; margin: 10px 0; background: linear-gradient(90deg, rgba(128,128,128,0.10) 25%, rgba(128,128,128,0.20) 50%, rgba(128,128,128,0.10) 75%); background-size: 200% 100%; animation: skeleton-shimmer 1.2s ease-in-out infinite; }
+@keyframes skeleton-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.page-loading-bar { position: fixed; top: 0; left: 0; height: 3px; width: 100%; z-index: 1000; background: var(--accent); transform-origin: left; animation: page-loading-bar 2.5s ease-out infinite; }
+@keyframes page-loading-bar { from { transform: scaleX(0.05); } 70% { transform: scaleX(0.8); } to { transform: scaleX(0.95); } }
+@media (prefers-reduced-motion: reduce) { .skeleton, .page-loading-bar { animation: none; } }
