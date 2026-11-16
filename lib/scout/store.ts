@@ -420,6 +420,13 @@ export async function spendOn(etDate: string): Promise<{ cost: number; calls: nu
   return { cost: Number(r.cost), calls: Number(r.calls) };
 }
 
+/** AI spend by what it was for, over the last `days` days (today included), most expensive first. */
+export async function spendByPurpose(days = 7): Promise<Array<{ purpose: string; cost: number; calls: number; today: number }>> {
+  const rows = await q(`SELECT purpose, sum(cost_usd) AS cost, count(*) AS calls, sum(CASE WHEN et_date = (SELECT max(et_date) FROM llm_calls) THEN cost_usd ELSE 0 END) AS today
+    FROM llm_calls WHERE et_date >= current_date - $1::int GROUP BY purpose ORDER BY sum(cost_usd) DESC NULLS LAST`, [days - 1]);
+  return rows.map((r) => ({ purpose: String(r.purpose ?? "other"), cost: Number(r.cost ?? 0), calls: Number(r.calls), today: Number(r.today ?? 0) }));
+}
+
 export async function spendByDay(days = 30): Promise<Array<{ date: string; cost: number; calls: number }>> {
   const rows = await q(`SELECT et_date, sum(cost_usd) AS cost, count(*) AS calls FROM llm_calls WHERE et_date >= current_date - $1::int GROUP BY et_date ORDER BY et_date DESC`, [days]);
   return rows.map((r) => ({ date: dstr(r.et_date)!, cost: Number(r.cost ?? 0), calls: Number(r.calls) }));

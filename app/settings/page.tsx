@@ -14,6 +14,14 @@ import { schwabConfig, schwabStatus, sharedConfig } from "@/lib/sources/schwab";
 import { FEEDS } from "@/config/feeds";
 import { SITES } from "@/lib/scout/sites";
 
+/** What each kind of AI call is, in plain words. */
+const PURPOSE_LABEL: Record<string, string> = {
+  research: "Writing idea cards (all desks)", chat: "Chat and Ask the scout", stories: "Story desk: reading the news", triage: "Trend desk: picking what to research",
+  review: "Reviewing cards after their catalyst", inbox: "Reading inbox files", inbox_digest: "Inbox digest", truth: "Reading Trump posts",
+  rumors: "Reading rumor dumps", rumor_check: "Did the rumor come true?", investigate_plan: "Investigate: planning", investigate_report: "Investigate: report",
+  earnings_card: "Earnings drift cards", invalidation: "Invalidation watch",
+};
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -26,6 +34,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const sources = allSources(marketDataFromEnv());
   const today = toEt(new Date()).date;
   const todaySpend = spend.find((s) => s.date === today);
+  const byPurpose = await store.spendByPurpose(7).catch(() => []);
+  const weekTotal = byPurpose.reduce((a, b) => a + b.cost, 0);
   return (
     <>
       <h1>Settings</h1>
@@ -94,6 +104,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       <section className="card">
         <h2>LLM spend</h2>
         <p>Today: <b>${(todaySpend?.cost ?? 0).toFixed(2)}</b> of ${settings.dailyCapUsd} cap over {todaySpend?.calls ?? 0} calls.</p>
+        <h3>What it is spent on (last 7 days)</h3>
+        <div className="table-wrap"><table><thead><tr><th>For</th><th className="num">Calls</th><th className="num">Cost</th><th className="num">Per call</th><th className="num">Share</th><th className="num">Today</th></tr></thead>
+          <tbody>{byPurpose.map((b) => <tr key={b.purpose}><td>{PURPOSE_LABEL[b.purpose] ?? b.purpose}</td><td className="num">{b.calls}</td><td className="num">${b.cost.toFixed(2)}</td><td className="num">${(b.cost / Math.max(1, b.calls)).toFixed(3)}</td><td className="num">{weekTotal ? `${Math.round((b.cost / weekTotal) * 100)}%` : "—"}</td><td className="num">${b.today.toFixed(2)}</td></tr>)}{byPurpose.length === 0 && <tr><td colSpan={6} className="muted">No calls yet.</td></tr>}</tbody></table></div>
+        <h3>By day</h3>
         <div className="table-wrap"><table><thead><tr><th>Day</th><th className="num">Calls</th><th className="num">Cost</th></tr></thead>
           <tbody>{spend.map((s) => <tr key={s.date}><td>{s.date}</td><td className="num">{s.calls}</td><td className="num">${s.cost.toFixed(2)}</td></tr>)}{spend.length === 0 && <tr><td colSpan={3} className="muted">No calls yet.</td></tr>}</tbody></table></div>
       </section>
