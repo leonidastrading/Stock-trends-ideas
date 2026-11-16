@@ -27,11 +27,13 @@ export interface ScoutSettings {
   /** Paper size of an idea sent to the Swing ideas log, and of a speculative one (confidence under 50, which Swing caps in total). */
   swingSize: number;
   swingSpeculativeSize: number;
+  /** The earnings desk's own daily AI budget (inside the overall cap); cards beyond it wait for the next day. */
+  earningsCapUsd: number;
 }
 
 export const DEFAULT_SETTINGS: ScoutSettings = {
   enabled: true, model: SCOUT.defaultModel, effort: SCOUT.defaultEffort, dailyCapUsd: SCOUT.defaultDailyCapUsd, maxCandidatesPerScan: SCOUT.maxCandidatesPerScan, discoveryPerScan: SCOUT.discoveryPerScan, emailDigest: true, notifyPromoted: true, notifyStories: true, notifyReviews: true, autoApproveTerms: true,
-  swingSize: 2000, swingSpeculativeSize: 1000,
+  swingSize: 2000, swingSpeculativeSize: 1000, earningsCapUsd: 1.5,
 };
 
 export async function loadSettings(): Promise<ScoutSettings> {
@@ -396,6 +398,11 @@ export async function tickerDailyAverages(from: string, to: string): Promise<Rec
 
 export async function logLlmCall(c: { etDate: string; model: string; purpose: string; usage: unknown; costUsd: number | null; ok: boolean }): Promise<void> {
   await q(`INSERT INTO llm_calls (et_date, model, purpose, usage, cost_usd, ok) VALUES ($1, $2, $3, $4, $5, $6)`, [c.etDate, c.model, c.purpose, JSON.stringify(c.usage ?? null), c.costUsd, c.ok]);
+}
+
+/** One kind of model call's spend on a day (the earnings desk has its own cap so it cannot starve the rest). */
+export async function spendOnPurpose(etDate: string, purpose: string): Promise<number> {
+  return Number((await q(`SELECT coalesce(sum(cost_usd), 0) AS cost FROM llm_calls WHERE et_date = $1 AND purpose = $2`, [etDate, purpose]))[0].cost);
 }
 
 export async function spendOn(etDate: string): Promise<{ cost: number; calls: number }> {

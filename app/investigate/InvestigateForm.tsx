@@ -30,7 +30,7 @@ export default function InvestigateForm({ running }: { running: boolean }) {
 
   return (
     <form onSubmit={go} className="card section">
-      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={6} placeholder="Paste a story, a video transcript, a thread, or ask a question (e.g. who profits from the $50B air traffic control rebuild?)" style={{ width: "100%", boxSizing: "border-box" }} disabled={busy} />
+      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={6} placeholder="A ticker or name (CBRS, L3Harris), a question (who profits from the $50B air traffic control rebuild?), or paste a story, transcript or thread" style={{ width: "100%", boxSizing: "border-box" }} disabled={busy} />
       <div className="toolbar" style={{ margin: "6px 0 0" }}>
         <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="…or a link to an article (optional)" style={{ width: 360 }} disabled={busy} />
         <button className="primary" type="submit" disabled={busy || (!text.trim() && !url.trim())}>{busy ? "Starting…" : "Investigate"}</button>

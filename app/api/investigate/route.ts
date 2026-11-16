@@ -46,7 +46,9 @@ export async function POST(request: Request) {
     }
     text = `Link: ${url}\n\n${text}`;
   }
-  if (text.length < 40) return NextResponse.json({ ok: false, errors: ["paste the story, transcript or question (or a link to an article)"] }, { status: 422 });
+  if (text.length < 2) return NextResponse.json({ ok: false, errors: ["type a ticker, a name or a question, paste a story, or give a link"] }, { status: 422 });
+  // Just a ticker, a name or a short question: ask the scout to work out what it is first.
+  if (text.length < 80 && !url) text = `Investigate "${text}". It may be a ticker, a company, a person, a program or a topic: work out what it most likely is (say if it is ambiguous, e.g. a ticker that is also a foreign listing or an acronym), then follow the money around it: federal contracts, lobbying, PAC and campaign money, and the listed companies exposed.`;
   const id = await startInvestigation(text);
   after(() => runInvestigation(id, defaultDeps()).catch((err) => console.error(`investigation ${id} failed: ${err instanceof Error ? err.message : String(err)}`)));
   return NextResponse.json({ ok: true, id }, { status: 202 });

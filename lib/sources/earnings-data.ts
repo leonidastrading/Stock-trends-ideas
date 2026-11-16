@@ -59,8 +59,9 @@ export function parseCalendarDay(json: unknown, date: string): EarningsReport[] 
   }).filter((r) => /^[A-Z]{1,5}(\.[A-Z])?$/.test(r.symbol));
 }
 
-export async function calendarDay(date: string, fetchImpl?: typeof fetch): Promise<EarningsReport[]> {
-  const j = JSON.parse(await getText(`https://api.nasdaq.com/api/calendar/earnings?date=${date}`, { headers: BROWSER, fetchImpl, cacheMs: 30 * 60000, minIntervalMs: 400, timeoutMs: 15_000 }));
+/** One day's calendar. `fresh` skips the cache (the nightly scan must see the actuals, not an earlier copy). */
+export async function calendarDay(date: string, fetchImpl?: typeof fetch, fresh = false): Promise<EarningsReport[]> {
+  const j = JSON.parse(await getText(`https://api.nasdaq.com/api/calendar/earnings?date=${date}`, { headers: BROWSER, fetchImpl, cacheMs: fresh ? 0 : 30 * 60000, minIntervalMs: 400, timeoutMs: 15_000 }));
   return parseCalendarDay(j, date);
 }
 

@@ -137,6 +137,9 @@ export async function earningsNight(data: import("../alpaca").MarketData, now: D
   try {
     const e = await import("./earnings");
     out.scan = await e.scanEarnings(data, now).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+    // Tomorrow's reports: freeze consensus, market cap and year-ago EPS while they are still before release.
+    out.snapshots = await e.snapshotConsensus(data, now).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+    out.docs = await e.gatherSetupDocs({ data, env: process.env, now }, deadline).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
     out.exits = await e.refreshExits(data, now).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
     out.tracks = await e.updateEarningsTracks(data, now).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
     out.cards = await e.writeCards({ data, callModel: callResearchModel, now, env: process.env }, deadline).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -207,6 +210,8 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
   // Earnings desk: fill the year of surprise history (a few days per call) and write any cards still waiting.
   if (data && left() > 60_000) {
     out.earnings = await import("./earnings").then(async (e) => ({
+      // Consensus snapshots for the next sessions' reports, hourly too (a report's snapshot is the latest one before its release).
+      snapshots: await e.snapshotConsensus(data, now, fetchImpl).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`),
       history: await e.backfillHistory(data, now, Math.min(deadline - 40_000, Date.now() + 60_000), fetchImpl),
       cards: left() > 90_000 ? await e.writeCards({ data, callModel: callResearchModel, now, env: process.env, fetchImpl }, deadline - 30_000, 2) : "later",
     })).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);

@@ -498,6 +498,32 @@ CREATE TABLE IF NOT EXISTS earnings_history (
   PRIMARY KEY (symbol, report_date)
 );
 CREATE INDEX IF NOT EXISTS earnings_history_group_idx ON earnings_history (cap_group, report_date);
+ALTER TABLE earnings_history ADD COLUMN IF NOT EXISTS eps_actual double precision;
+ALTER TABLE earnings_history ADD COLUMN IF NOT EXISTS eps_estimate double precision;
+ALTER TABLE earnings_history ADD COLUMN IF NOT EXISTS runup_10d double precision;
+ALTER TABLE earnings_history ADD COLUMN IF NOT EXISTS source text;
+-- Consensus frozen before each report (latest capture before the release), with market cap and year-ago EPS as of then.
+CREATE TABLE IF NOT EXISTS earnings_consensus (
+  symbol text NOT NULL,
+  report_date date NOT NULL,
+  timing text NOT NULL,
+  eps_estimate double precision,
+  revenue_estimate double precision,
+  market_cap double precision,
+  quarter_end date,
+  last_year_eps double precision,
+  captured_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (symbol, report_date)
+);
+-- What the AI read for each A-setup (press release, headlines before paper entry) and the code's own guidance read.
+CREATE TABLE IF NOT EXISTS earnings_docs (
+  scan_id integer PRIMARY KEY,
+  fetched_at timestamptz NOT NULL DEFAULT now(),
+  press_url text,
+  press_text text,
+  headlines jsonb,
+  guidance_numeric text
+);
 CREATE TABLE IF NOT EXISTS earnings_scans (
   id serial PRIMARY KEY,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -528,6 +554,11 @@ CREATE TABLE IF NOT EXISTS earnings_tracks (
   tapped_at timestamptz,
   swing_body jsonb
 );
+ALTER TABLE earnings_tracks ADD COLUMN IF NOT EXISTS close_price double precision;
+ALTER TABLE earnings_tracks ADD COLUMN IF NOT EXISTS ret_close_pct double precision;
+ALTER TABLE earnings_tracks ADD COLUMN IF NOT EXISTS spy_close_pct double precision;
+ALTER TABLE earnings_tracks ADD COLUMN IF NOT EXISTS exit_basis text;
+ALTER TABLE earnings_tracks ADD COLUMN IF NOT EXISTS exit_moves jsonb NOT NULL DEFAULT '[]'::jsonb;
 CREATE TABLE IF NOT EXISTS earnings_cards (
   scan_id integer PRIMARY KEY,
   created_at timestamptz NOT NULL DEFAULT now(),

@@ -21,6 +21,7 @@ const schema = z.object({
   autoApproveTerms: z.boolean().default(true),
   swingSize: z.number().min(100).max(100_000).default(2000),
   swingSpeculativeSize: z.number().min(100).max(100_000).default(1000),
+  earningsCapUsd: z.number().min(0).max(100).default(1.5),
 });
 
 /** Changing the model or effort starts a new version; results are reported per version. */
