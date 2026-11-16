@@ -112,6 +112,11 @@ regulator's move, an indictment, a recall, a pivot, a guidance cut. `lib/scout/s
   of the last scan are answered "throttled" and do nothing; `?force=1` overrides): on the Hobby plan
   Vercel cron is daily only, so for intraday stories add a cron-job.org job every hour, 09:00–17:00 ET, with the
   header `Authorization: Bearer <CRON_SECRET>` (and `x-vercel-protection-bypass` if the deployment is protected).
+- **Invalidation watch.** Every open card's own invalidation conditions are checked against the live price, moves and
+  the week's headlines about every 3 hours (inside the hourly and daily runs), and all of them before the open by
+  `GET /api/cron/premarket` (bearer `CRON_SECRET`): add a cron-job.org job at **9:29 AM America/New_York, Monday–Friday**
+  with the header `Authorization: Bearer <CRON_SECRET>`. A card whose condition is met gets a big red INVALIDATED banner,
+  a phone alert, and its paper trade exits at the next open (the same as the manual button). Own AI budget in Settings.
 - The **Stories** page shows the last detection, the desk's read and trades, and the story cards grouped by story,
   each with the Send and Invalidation buttons.
 

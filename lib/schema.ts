@@ -473,6 +473,16 @@ CREATE TABLE IF NOT EXISTS rumors (
   mainstream jsonb
 );
 CREATE INDEX IF NOT EXISTS rumors_created_idx ON rumors (created_at);
+-- Watching open cards for their invalidation: one row per check (never edited); the latest is the card's state.
+CREATE TABLE IF NOT EXISTS invalidation_checks (
+  id serial PRIMARY KEY,
+  card_id integer NOT NULL,
+  checked_at timestamptz NOT NULL DEFAULT now(),
+  verdict text NOT NULL,
+  condition text,
+  reason text
+);
+CREATE INDEX IF NOT EXISTS invalidation_checks_card_idx ON invalidation_checks (card_id, checked_at);
 -- Market cap and short interest per card, frozen once, for splitting results by size and by short interest.
 CREATE TABLE IF NOT EXISTS card_profiles (
   card_id integer PRIMARY KEY,

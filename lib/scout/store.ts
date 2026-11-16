@@ -31,11 +31,13 @@ export interface ScoutSettings {
   earningsCapUsd: number;
   /** The daily check of whether rumors came true: its own AI budget. */
   rumorCheckCapUsd: number;
+  /** Watching open cards for their invalidation: its own AI budget. */
+  invalidationCapUsd: number;
 }
 
 export const DEFAULT_SETTINGS: ScoutSettings = {
   enabled: true, model: SCOUT.defaultModel, effort: SCOUT.defaultEffort, dailyCapUsd: SCOUT.defaultDailyCapUsd, maxCandidatesPerScan: SCOUT.maxCandidatesPerScan, discoveryPerScan: SCOUT.discoveryPerScan, emailDigest: true, notifyPromoted: true, notifyStories: true, notifyReviews: true, autoApproveTerms: true,
-  swingSize: 2000, swingSpeculativeSize: 1000, earningsCapUsd: 1.5, rumorCheckCapUsd: 0.5,
+  swingSize: 2000, swingSpeculativeSize: 1000, earningsCapUsd: 1.5, rumorCheckCapUsd: 0.5, invalidationCapUsd: 0.5,
 };
 
 export async function loadSettings(): Promise<ScoutSettings> {
@@ -221,15 +223,21 @@ export interface Track {
   deadlineDate: string; exitDate: string | null; exitPrice: number | null; spyExit: number | null; sectorExit: number | null; exitReason: string | null; maxDrawdownPct: number | null; tappedAt: string | null; swingResponse: unknown;
   /** Set when the track was excluded from scoring (it followed the wrong security): the reason. */
   excluded?: string | null;
+  /** Set when the invalidation was marked met (by Vadim or the automatic watch): when, and the note. */
+  invalidatedAt?: string | null;
+  invalidatedNote?: string | null;
 }
 
 const toTrack = (r: Row): Track => ({
   cardId: Number(r.card_id), symbol: r.symbol, sectorEtf: r.sector_etf, direction: r.direction, cardDate: dstr(r.card_date)!, entryDate: dstr(r.entry_date), entryPrice: num(r.entry_price), spyEntry: num(r.spy_entry), sectorEntry: num(r.sector_entry),
   deadlineDate: dstr(r.deadline_date)!, exitDate: dstr(r.exit_date), exitPrice: num(r.exit_price), spyExit: num(r.spy_exit), sectorExit: num(r.sector_exit), exitReason: r.exit_reason, maxDrawdownPct: num(r.max_drawdown_pct), tappedAt: iso(r.tapped_at), swingResponse: r.swing_response,
   excluded: r.excluded ?? null,
+  invalidatedAt: iso(r.invalidated_at) ?? null, invalidatedNote: r.invalidated_detail ?? null,
 });
 
-const TRACK_SELECT = `SELECT t.*, (SELECT e.detail FROM track_events e WHERE e.card_id = t.card_id AND e.kind = 'excluded' ORDER BY e.id LIMIT 1) AS excluded FROM tracks t`;
+const TRACK_SELECT = `SELECT t.*, (SELECT e.detail FROM track_events e WHERE e.card_id = t.card_id AND e.kind = 'excluded' ORDER BY e.id LIMIT 1) AS excluded,
+  (SELECT e.at FROM track_events e WHERE e.card_id = t.card_id AND e.kind = 'invalidated' ORDER BY e.id LIMIT 1) AS invalidated_at,
+  (SELECT e.detail FROM track_events e WHERE e.card_id = t.card_id AND e.kind = 'invalidated' ORDER BY e.id LIMIT 1) AS invalidated_detail FROM tracks t`;
 
 export async function insertTrack(t: { cardId: number; symbol: string; sectorEtf: string; direction: "long" | "short"; cardDate: string; deadlineDate: string }): Promise<void> {
   await q(`INSERT INTO tracks (card_id, symbol, sector_etf, direction, card_date, deadline_date) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (card_id) DO NOTHING`, [t.cardId, t.symbol, t.sectorEtf, t.direction, t.cardDate, t.deadlineDate]);

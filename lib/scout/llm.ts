@@ -5,6 +5,7 @@ import { TRUTH_PROMPT, TRUTH_SCHEMA } from "./truth";
 import { RUMORS_PROMPT, RUMORS_SCHEMA } from "./rumors";
 import { EARN_PROMPT, EARN_SCHEMA } from "./earnings";
 import { RUMOR_CHECK_PROMPT, RUMOR_CHECK_SCHEMA } from "./rumor-check";
+import { INVALIDATION_PROMPT, INVALIDATION_SCHEMA } from "./invalidation";
 import { INVESTIGATE_PLAN_PROMPT, INVESTIGATE_PLAN_SCHEMA, INVESTIGATE_REPORT_PROMPT, INVESTIGATE_REPORT_SCHEMA } from "./investigate";
 import Anthropic from "@anthropic-ai/sdk";
 import { callCost } from "@/config/scout";
@@ -24,7 +25,7 @@ export interface ModelReply {
   costUsd: number | null;
 }
 
-export type Purpose = "research" | "triage" | "stories" | "review" | "inbox" | "inbox_digest" | "truth" | "rumors" | "investigate_plan" | "investigate_report" | "earnings_card" | "rumor_check";
+export type Purpose = "research" | "triage" | "stories" | "review" | "inbox" | "inbox_digest" | "truth" | "rumors" | "investigate_plan" | "investigate_report" | "earnings_card" | "rumor_check" | "invalidation";
 export type CallModel = (args: { model: string; effort: Effort; user: string; purpose?: Purpose }) => Promise<ModelReply>;
 
 const PROMPTS: Record<Purpose, { system: string; schema: Record<string, unknown> }> = {
@@ -37,6 +38,7 @@ const PROMPTS: Record<Purpose, { system: string; schema: Record<string, unknown>
   truth: { system: TRUTH_PROMPT, schema: TRUTH_SCHEMA as unknown as Record<string, unknown> },
   rumors: { system: RUMORS_PROMPT, schema: RUMORS_SCHEMA as unknown as Record<string, unknown> },
   investigate_plan: { system: INVESTIGATE_PLAN_PROMPT, schema: INVESTIGATE_PLAN_SCHEMA as unknown as Record<string, unknown> },
+  invalidation: { system: INVALIDATION_PROMPT, schema: INVALIDATION_SCHEMA as unknown as Record<string, unknown> },
   rumor_check: { system: RUMOR_CHECK_PROMPT, schema: RUMOR_CHECK_SCHEMA as unknown as Record<string, unknown> },
   earnings_card: { system: EARN_PROMPT, schema: EARN_SCHEMA as unknown as Record<string, unknown> },
   investigate_report: { system: INVESTIGATE_REPORT_PROMPT, schema: INVESTIGATE_REPORT_SCHEMA as unknown as Record<string, unknown> },

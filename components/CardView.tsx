@@ -53,6 +53,13 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
           <span className="tag">{c.origin === "human" ? "human-originated" : "scout"}</span>
           <span className="small muted" title={`card #${c.id} · ${c.model} · version ${c.versionId}`}>{fmtEt(c.createdAt)}</span>
         </div>
+        {track?.invalidatedAt && (
+          <div className="invalidated-banner">
+            <div className="invalidated-label">✗ INVALIDATED</div>
+            <div className="invalidated-note">{(track.invalidatedNote ?? "").replace(/^automatic: /, "") || "Marked by you."}</div>
+            <div className="small">{track.invalidatedNote?.startsWith("automatic: ") ? "Found by the scout's invalidation watch" : "Marked by you"} · {fmtEt(track.invalidatedAt)} · {track.exitDate ? `paper trade exited ${track.exitDate}` : "paper trade exits at the next open"}</div>
+          </div>
+        )}
         {track?.excluded && <div className="small neg" style={{ marginTop: 6 }}><b>Excluded from scoring: wrong security.</b> {track.excluded}</div>}
         <div style={{ margin: "8px 0 4px" }}><Direction direction={c.direction} ticker={c.primaryTicker} name={info?.name ?? company ?? (info ? "company name unavailable" : "company name loading — reload in a moment")} warn={wrong} />
           {q ? (

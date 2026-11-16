@@ -151,7 +151,7 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
               {angles.get(c.id)?.length ? <> · also {angles.get(c.id)!.map((id, j) => <span key={id}>{j ? ", " : ""}<a href={hrefWith(params, { card: String(id), page: undefined }, `#card-${id}`)}>card #{id}</a></span>)} <span title="Another angle on the same call from the same source within 14 days: kept on file, scored once">(same call, scored once)</span></> : null}
               {repeats.has(c.id) ? <> · <span className="warn">repeat of <a href={hrefWith(params, { card: String(repeats.get(c.id)), page: undefined }, `#card-${repeats.get(c.id)}`)}>card #{repeats.get(c.id)}</a>: not scored</span></> : null}
             </div>
-            <CardView c={c} track={tr} feedback={fb.get(`card:${c.id}`) ?? null} opposing={opp.get(c.id)} review={reviews.get(c.id) ?? null} actions={<CardActions cardId={c.id} canSend={c.status !== "not_promoted"} sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate} swingConfigured={sw} excluded={!!tr?.excluded} />} />
+            <CardView c={c} track={tr} feedback={fb.get(`card:${c.id}`) ?? null} opposing={opp.get(c.id)} review={reviews.get(c.id) ?? null} actions={<CardActions cardId={c.id} canSend={c.status !== "not_promoted"} sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate && !tr.invalidatedAt} swingConfigured={sw} excluded={!!tr?.excluded} />} />
           </div>
         );
       })}
