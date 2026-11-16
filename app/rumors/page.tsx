@@ -17,6 +17,7 @@ const TRUTH: Record<string, { label: string; cls: string }> = {
   confirmed: { label: "✅ CAME TRUE", cls: "truth-confirmed" },
   partly: { label: "◐ PARTLY TRUE", cls: "truth-partly" },
   denied: { label: "✗ DENIED", cls: "truth-denied" },
+  already_news: { label: "📰 ALREADY NEWS", cls: "truth-denied" },
 };
 
 /** The verdict banner: big and green when the rumor came true. */
@@ -59,7 +60,7 @@ export default async function RumorsPage({ searchParams }: { searchParams: Promi
   const days = [7, 30, 90].includes(Number(sp.days)) ? Number(sp.days) : 7;
   const cat = (CATEGORIES as readonly string[]).includes(sp.cat ?? "") ? sp.cat! : "";
   const withTickers = sp.tickers === "1";
-  const truth = ["confirmed", "partly", "denied"].includes(sp.truth ?? "") ? sp.truth! : "";
+  const truth = ["confirmed", "partly", "denied", "already_news"].includes(sp.truth ?? "") ? sp.truth! : "";
   const [all, docs, cands, cards, verdicts] = await Promise.all([rumorsSince(days), recentRumorDocs(15), store.candidatesSince(days + 1), store.cardsSince(days + 1), latestChecks().catch(() => new Map<number, RumorCheck>())]);
   const status = new Map(cards.map((c) => [c.id, c.status]));
   // Rumors already checked: their card, from the "rumor: … #id" research term.
@@ -70,23 +71,28 @@ export default async function RumorsPage({ searchParams }: { searchParams: Promi
   }
   // Came-true rumors first, then the rest newest first.
   const rank = (r: Rumor) => (verdicts.get(r.id)?.status === "confirmed" ? 0 : verdicts.get(r.id)?.status === "partly" ? 1 : 2);
-  const rows = all.filter((r) => (!cat || r.category === cat) && (!withTickers || r.tickers.length > 0) && (!truth || verdicts.get(r.id)?.status === truth))
+  // A claim already reported by a credible outlet when the scout read it is news, not a rumor: only under its own filter.
+  const isNews = (r: Rumor) => verdicts.get(r.id)?.status === "already_news";
+  const rows = all.filter((r) => (!cat || r.category === cat) && (!withTickers || r.tickers.length > 0) && (truth ? verdicts.get(r.id)?.status === truth : !isNews(r)))
     .sort((a, b) => rank(a) - rank(b) || b.createdAt.localeCompare(a.createdAt));
   const tally = (s: string) => all.filter((r) => verdicts.get(r.id)?.status === s).length;
-  const checkedCount = all.filter((r) => verdicts.has(r.id)).length;
+  const rumorsOnly = all.filter((r) => !isNews(r));
+  const checkedCount = rumorsOnly.filter((r) => verdicts.has(r.id)).length;
   const page = paginate(rows, Number(sp.page ?? 1), PAGE);
   const params: Record<string, string | undefined> = { days: days === 7 ? undefined : String(days), cat: cat || undefined, tickers: withTickers ? "1" : undefined, truth: truth || undefined };
   const counts = new Map<string, number>();
-  for (const r of all) counts.set(r.category, (counts.get(r.category) ?? 0) + 1);
+  for (const r of rumorsOnly) counts.set(r.category, (counts.get(r.category) ?? 0) + 1);
   return (
     <>
       <h1>Rumors</h1>
       <RememberFilters keys={["days", "cat", "tickers", "truth"]} />
-      {tally("confirmed") > 0 && <div className="truth truth-confirmed truth-summary"><div className="truth-label">✅ {tally("confirmed")} rumor{tally("confirmed") === 1 ? "" : "s"} came true</div><div className="truth-note">{tally("partly") ? `${tally("partly")} partly true · ` : ""}{checkedCount} of {all.length} checked in this window. Shown first below.</div></div>}
+      {tally("confirmed") > 0 && <div className="truth truth-confirmed truth-summary"><div className="truth-label">✅ {tally("confirmed")} rumor{tally("confirmed") === 1 ? "" : "s"} came true</div><div className="truth-note">{tally("partly") ? `${tally("partly")} partly true · ` : ""}{checkedCount} of {rumorsOnly.length} checked in this window. Shown first below.</div></div>}
+      {tally("already_news") > 0 && truth !== "already_news" && <p className="small muted">{tally("already_news")} claim{tally("already_news") === 1 ? " was" : "s were"} already mainstream news when the scout read {tally("already_news") === 1 ? "it" : "them"}, so {tally("already_news") === 1 ? "it is" : "they are"} on the News tab, not listed here (<a href="?truth=already_news">show</a>).</p>}
       <p className="small warn">Unverified claims from conspiracy forums and fringe sites. Listed as claims, not facts; nothing here is researched or traded unless you press Check it.</p>
       <details className="card section">
         <summary><b>How this page works</b> <span className="small muted">where rumors come from and what the scout does with them</span></summary>
         <div className="small secondary">
+          <p><b>Already news?</b> Each claim is checked against the news the moment it is read. If a credible outlet had already reported it, it is news, not a rumor: it goes to the News tab and is hidden here (filter &quot;already news&quot; shows it).</p>
           <p><b>Did it come true?</b> Every day the scout checks each rumor from the last 30 days again: mainstream headlines on its tickers since it was logged, plus a Google News search on its key words. Rumors with matching headlines go to the AI in batches (its own budget in Settings), which marks them <b>came true</b> (a credible outlet or official source now reports it as fact), <b>partly true</b>, <b>denied</b>, or not yet. Came-true rumors get a big green banner with the article, are listed first, and send a phone alert. Came true and denied are final; the rest are checked again the next day.</p>
           <p>Three ways in: paste or upload below (text, Markdown, HTML, PDF, CSV or JSON, including Reddit and forum JSON exports and JSON lines); drop files into the <code>rumors/</code> folder of your GitHub inbox repo (read within the hour, or right away with the inbox webhook); or mark a website &quot;for the Rumors tab&quot; in Settings → Your websites (read once a day).</p>
           <p>The scout keeps only claims that could move a listed stock, ETF, sector, commodity or the market if true, and skips hate, harassment, claims about private individuals and anything with no market link. For each it notes the tickers, what it would mean if true, how specific it is, when it supposedly happens, what public evidence would confirm it, and where it came from. Rumors with tickers are checked against the week&apos;s mainstream headlines on those tickers.</p>
@@ -103,7 +109,7 @@ export default async function RumorsPage({ searchParams }: { searchParams: Promi
       <div className="toolbar" id="rumors">
         <FilterLinks params={params} name="days" value={days === 7 ? "" : String(days)} reset={["page"]} options={[{ value: "", label: "7 days" }, { value: "30", label: "30 days" }, { value: "90", label: "90 days" }]} />
         <FilterLinks params={params} name="tickers" value={withTickers ? "1" : ""} reset={["page"]} options={[{ value: "", label: "all" }, { value: "1", label: "with tickers" }]} />
-        <FilterLinks params={params} name="truth" value={truth} reset={["page"]} options={[{ value: "", label: "any status" }, { value: "confirmed", label: "✅ came true", count: tally("confirmed") }, { value: "partly", label: "partly true", count: tally("partly") }, { value: "denied", label: "denied", count: tally("denied") }]} />
+        <FilterLinks params={params} name="truth" value={truth} reset={["page"]} options={[{ value: "", label: "any status" }, { value: "confirmed", label: "✅ came true", count: tally("confirmed") }, { value: "partly", label: "partly true", count: tally("partly") }, { value: "denied", label: "denied", count: tally("denied") }, { value: "already_news", label: "already news", count: tally("already_news") }]} />
         <FilterLinks params={params} name="cat" value={cat} reset={["page"]} options={[{ value: "", label: "every kind" }, ...CATEGORIES.filter((c) => counts.get(c)).map((c) => ({ value: c, label: c, count: counts.get(c) }))]} />
       </div>
       {rows.length === 0 && <p className="small muted">No rumors in this window yet.</p>}

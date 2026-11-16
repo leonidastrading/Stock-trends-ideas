@@ -7,6 +7,7 @@ import { chunks, mainstreamFor, parseRumors, readRumorDoc, rumorContext, rumorsS
 import { playerOf } from "@/lib/scout/scoreboard";
 import { articleLinks } from "@/lib/sources/site";
 
+const emptyRss = (async () => new Response("<rss><channel></channel></rss>", { status: 200 })) as unknown as typeof fetch;
 const news = (headline: string, symbols: string[], ts = "2026-11-14T15:00:00Z"): NewsItem => ({ id: Math.random(), ts, headline, summary: "", symbols, source: "benzinga", url: `https://example.com/${encodeURIComponent(headline)}` });
 
 describe("rumors: reading", () => {
@@ -69,12 +70,13 @@ describe("rumors: a document end to end (PGlite, fake model and news)", () => {
   it("reads a pasted page, stores the rumors with the mainstream check, and lists them", async () => {
     let seen = "";
     const callModel: CallModel = async ({ user, purpose }) => {
+      if (purpose === "rumor_check") return { text: JSON.stringify({ results: [] }), stopReason: "end_turn", modelServed: "m", usage: { input_tokens: 1, output_tokens: 1 }, costUsd: 0 };
       expect(purpose).toBe("rumors");
       seen = user;
       return { text: JSON.stringify({ rumors: [{ claim: "Posters claim Boeing will lose an Air Force contract", tickers: ["BA"], direction: "short", category: "corporate", specificity: 4, timeframe: "next week", confirm: "a DoD contract notice", source: "r/conspiracy", quote: "BA is done" }] }), stopReason: "end_turn", modelServed: "m", usage: { input_tokens: 10, output_tokens: 10 }, costUsd: 0.01 };
     };
     const data = { getNews: async () => [news("Boeing loses Air Force tanker contract", ["BA"])] } as unknown as MarketData;
-    const r = await readRumorDoc("<html><body><p>BA is done, insiders say the contract is gone.</p><script>x()</script></body></html>", "r-conspiracy.html", { data, sources: [], callModel, now: new Date("2026-11-15T15:00:00Z"), env: {} as NodeJS.ProcessEnv });
+    const r = await readRumorDoc("<html><body><p>BA is done, insiders say the contract is gone.</p><script>x()</script></body></html>", "r-conspiracy.html", { data, sources: [], callModel, now: new Date("2026-11-15T15:00:00Z"), env: {} as NodeJS.ProcessEnv, fetchImpl: emptyRss });
     expect(r).toMatchObject({ rumors: 1, error: null });
     expect(seen).toContain("BA is done, insiders say the contract is gone.");
     expect(seen).not.toContain("<script>");
@@ -119,7 +121,7 @@ describe("rumors: JSON dumps", () => {
   it("a JSON file goes to the model as posts, not raw JSON", async () => {
     let seen = "";
     const callModel: CallModel = async ({ user }) => { seen = user; return { text: JSON.stringify({ rumors: [] }), stopReason: "end_turn", modelServed: "m", usage: { input_tokens: 1, output_tokens: 1 }, costUsd: 0 }; };
-    await readRumorDoc(JSON.stringify({ data: { children: [{ data: { title: "Lockheed whistleblower", selftext: "F-35 parts faked", id: "zzz999" } }] } }), "conspiracy.json", { data: null, sources: [], callModel, now: new Date("2026-11-15T15:00:00Z"), env: {} as NodeJS.ProcessEnv });
+    await readRumorDoc(JSON.stringify({ data: { children: [{ data: { title: "Lockheed whistleblower", selftext: "F-35 parts faked", id: "zzz999" } }] } }), "conspiracy.json", { data: null, sources: [], callModel, now: new Date("2026-11-15T15:00:00Z"), env: {} as NodeJS.ProcessEnv, fetchImpl: emptyRss });
     expect(seen).toContain("# Lockheed whistleblower\nF-35 parts faked");
     expect(seen).not.toContain("zzz999");
   });

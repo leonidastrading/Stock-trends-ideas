@@ -74,6 +74,7 @@ export default function NewsFeed({ initial }: { initial: FeedItem[] }) {
           <div className="news-meta small muted">
             {fresh.has(i.id) && <span className="tag ok">new</span>}
             {i.kind === "trump" && <span className="tag late">Trump</span>}
+            {i.kind === "rumor" && <a className="tag" href="/rumors?truth=already_news" title="Found in your rumor sources; already reported by this outlet">from rumors</a>}
             {i.event && <span className="tag">{i.event}</span>}
             {i.buzz >= 3 && <span className="tag warn" title="headlines on this stock in the last 6 hours">{i.buzz} in 6h</span>}
             {i.cardIds.map((id) => <a key={id} className="tag promoted" href={`/ideas?days=30&card=${id}#card-${id}`}>card #{id}</a>)}

@@ -1,9 +1,8 @@
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { MarketData, NewsItem } from "@/lib/alpaca";
 import { query, setQuerierForTests } from "@/lib/db";
 import type { CallModel } from "@/lib/scout/llm";
-import { checkRumors, latestChecks, matching, parseGoogleNews, RUMOR_CHECK_PROMPT, searchTerms } from "@/lib/scout/rumor-check";
+import { alreadyNewsSince, checkRumors, latestChecks, matching, parseGoogleNews, RUMOR_CHECK_PROMPT, searchTerms, settle } from "@/lib/scout/rumor-check";
 import { readRumorDoc, rumorsSince } from "@/lib/scout/rumors";
 
 const RSS = `<?xml version="1.0"?><rss><channel><title>x</title>
@@ -39,7 +38,14 @@ describe("rumor check: pieces", () => {
   });
 });
 
-describe("rumor check: daily pass (PGlite, fake news and model)", () => {
+const rss = (items: Array<{ title: string; at: string; source: string }>) => (async () => new Response(`<rss><channel>${items.map((i, k) => `<item><title>${i.title}</title><link>https://news.example/${k}</link><pubDate>${new Date(i.at).toUTCString()}</pubDate><source url="https://x">${i.source}</source></item>`).join("")}</channel></rss>`, { status: 200 })) as unknown as typeof fetch;
+const reply = (o: unknown) => ({ text: JSON.stringify(o), stopReason: "end_turn", modelServed: "m", usage: { input_tokens: 1, output_tokens: 1 }, costUsd: 0.001 });
+const READ = [
+  { claim: "Posters claim Boeing will lose the Air Force tanker contract", tickers: ["BA"], direction: "short", category: "corporate", specificity: 4, timeframe: "next week", confirm: "a DoD contract notice", source: "r/conspiracy", quote: "" },
+  { claim: "Lizard people run the Federal Reserve", tickers: [], direction: "none", category: "macro", specificity: 1, timeframe: "", confirm: "", source: "r/conspiracy", quote: "" },
+];
+
+describe("rumor check: at intake and daily (PGlite, fake news and model)", () => {
   let pg: PGlite;
   beforeAll(() => {
     pg = new PGlite();
@@ -47,41 +53,44 @@ describe("rumor check: daily pass (PGlite, fake news and model)", () => {
   });
   afterAll(() => setQuerierForTests(null));
 
-  it("marks a rumor that came true, leaves one with no news open without a model call, and does not recheck settled ones", async () => {
+  it("a claim already reported when read is news, not a rumor; a later report makes a rumor come true", async () => {
     const now = new Date();
-    const reading: CallModel = async () => ({ text: JSON.stringify({ rumors: [
-      { claim: "Posters claim Boeing will lose the Air Force tanker contract", tickers: ["BA"], direction: "short", category: "corporate", specificity: 4, timeframe: "next week", confirm: "a DoD contract notice", source: "r/conspiracy", quote: "" },
-      { claim: "Lizard people run the Federal Reserve", tickers: [], direction: "none", category: "macro", specificity: 1, timeframe: "", confirm: "", source: "r/conspiracy", quote: "" },
-    ] }), stopReason: "end_turn", modelServed: "m", usage: { input_tokens: 1, output_tokens: 1 }, costUsd: 0 });
-    await readRumorDoc("BA is done. The Fed is run by lizards.", "dump.txt", { data: null, sources: [], callModel: reading, now, env: {} as NodeJS.ProcessEnv });
+    // Intake: the Boeing claim was already on Reuters an hour before the scout read it.
+    const before = rss([{ title: "Boeing loses Air Force tanker contract to Airbus", at: new Date(now.getTime() - 3600_000).toISOString(), source: "Reuters" }]);
+    let checkCalls = 0;
+    const model: CallModel = async ({ user, purpose }) => {
+      if (purpose === "rumors") return reply({ rumors: READ });
+      checkCalls++;
+      const id = Number(/RUMOR (\d+)/.exec(user)![1]);
+      return reply({ results: [{ id, status: "confirmed", evidence: [0], note: "Reuters reports the Air Force picked Airbus." }] });
+    };
+    await readRumorDoc("BA is done. The Fed is run by lizards.", "dump.txt", { data: null, sources: [], callModel: model, now, env: {} as NodeJS.ProcessEnv, fetchImpl: before });
     const list = await rumorsSince(7);
     const ba = list.find((r) => r.claim.includes("Boeing"))!, fed = list.find((r) => r.claim.includes("Lizard"))!;
-    expect(ba.tickers).toEqual(["BA"]);
-
-    const news: NewsItem[] = [{ id: 1, ts: now.toISOString(), headline: "Boeing loses Air Force tanker contract to Airbus", summary: "", symbols: ["BA"], source: "benzinga", url: "https://example.com/ba" }];
-    const data = { getNews: async () => news } as unknown as MarketData;
-    const fetchImpl = (async () => new Response("<rss><channel></channel></rss>", { status: 200 })) as unknown as typeof fetch;
-    let calls = 0, seen = "";
-    const judge: CallModel = async ({ user, purpose }) => {
-      calls++; seen = user;
-      expect(purpose).toBe("rumor_check");
-      return { text: JSON.stringify({ results: [{ id: ba.id, status: "confirmed", evidence: [0], note: "The Air Force awarded the tanker deal to Airbus." }] }), stopReason: "end_turn", modelServed: "m", usage: { input_tokens: 1, output_tokens: 1 }, costUsd: 0.001 };
-    };
-    const out = await checkRumors({ data, callModel: judge, now, fetchImpl, env: {} as NodeJS.ProcessEnv }, Date.now() + 600_000);
-    expect(out).toMatch(/1 came true/);
-    expect(calls).toBe(1);
-    expect(seen).toContain(`RUMOR ${ba.id}`);
-    expect(seen).not.toContain(`RUMOR ${fed.id}`);
-    const v = await latestChecks();
-    expect(v.get(ba.id)).toMatchObject({ status: "confirmed", note: "The Air Force awarded the tanker deal to Airbus.", evidence: [{ headline: "Boeing loses Air Force tanker contract to Airbus", url: "https://example.com/ba" }] });
+    let v = await latestChecks();
+    expect(checkCalls).toBe(1);
+    expect(v.get(ba.id)).toMatchObject({ status: "already_news", evidence: [{ source: "Reuters" }] });
     expect(v.get(fed.id)).toMatchObject({ status: "open", evidence: [] });
+    expect((await alreadyNewsSince(new Date(now.getTime() - 86400_000))).map((x) => x.rumor.id)).toEqual([ba.id]);
 
-    // The next pass the same day: nothing due (came true is final; the open one waits a day).
-    expect(await checkRumors({ data, callModel: judge, now, fetchImpl, env: {} as NodeJS.ProcessEnv }, Date.now() + 600_000)).toBe("nothing due");
-    // A day later only the open one is rechecked.
+    // Same day: nothing due. Already news is final; the open one waits a day.
+    expect(await checkRumors({ data: null, callModel: model, now, fetchImpl: before, env: {} as NodeJS.ProcessEnv }, Date.now() + 600_000)).toBe("nothing due");
+
+    // A day later the lizard claim is "reported" after it was read: it came true (a test of the flow, not of lizards).
     const later = new Date(now.getTime() + 21 * 3600_000);
-    await checkRumors({ data, callModel: judge, now: later, fetchImpl, env: {} as NodeJS.ProcessEnv }, Date.now() + 600_000);
+    const after = rss([{ title: "Federal Reserve run by lizard people, officials confirm", at: new Date(now.getTime() + 20 * 3600_000).toISOString(), source: "Wire" }]);
+    const out = await checkRumors({ data: null, callModel: model, now: later, fetchImpl: after, env: {} as NodeJS.ProcessEnv }, Date.now() + 600_000);
+    expect(out).toMatch(/1 came true/);
+    v = await latestChecks();
+    expect(v.get(fed.id)).toMatchObject({ status: "confirmed", evidence: [{ source: "Wire" }] });
     const rows = await query(`SELECT rumor_id FROM rumor_checks ORDER BY id`);
-    expect(rows.map((r) => Number(r.rumor_id)).sort()).toEqual([ba.id, fed.id, fed.id].sort());
+    expect(rows.map((r) => Number(r.rumor_id)).sort((a, b) => a - b)).toEqual([ba.id, fed.id, fed.id].sort((a, b) => a - b));
+  });
+
+  it("settles a came-true whose evidence predates the rumor as already news", () => {
+    const e = (at: string) => ({ at, headline: "h", url: "u", source: "s" });
+    expect(settle("confirmed", [e("2026-11-15T10:00:00Z"), e("2026-11-16T10:00:00Z")], "2026-11-15T23:21:00Z")).toBe("already_news");
+    expect(settle("confirmed", [e("2026-11-16T10:00:00Z")], "2026-11-15T23:21:00Z")).toBe("confirmed");
+    expect(settle("partly", [e("2026-11-14T10:00:00Z")], "2026-11-15T23:21:00Z")).toBe("partly");
   });
 });

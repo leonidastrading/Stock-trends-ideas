@@ -6,6 +6,8 @@
  *    reports the claim as fact (came true), part of it (partly), denies or debunks it (denied), or not yet (open).
  *    Rumors with no matching headline are recorded as open without a model call.
  * Each check is logged (never edited); the latest one is the rumor's status. A rumor that comes true sends a phone alert.
+ * New rumors are checked the moment they are read: a claim a credible outlet had already reported before the scout read it
+ * is not a rumor but news ("already news"); it leaves the Rumors list and shows on the News tab instead.
  */
 import { z } from "zod";
 import { query as q } from "../db";
@@ -18,7 +20,16 @@ import * as store from "./store";
 
 export const CHECK = { days: 30, everyHours: 20, batch: 12, perCall: 36, minShared: 2, capUsd: 0.5 };
 
-export type CheckStatus = "confirmed" | "partly" | "denied" | "open";
+export type CheckStatus = "confirmed" | "partly" | "denied" | "open" | "already_news";
+
+/** Pure: a "came true" whose evidence was published before the scout read the rumor was already news, not a rumor. */
+export function settle(status: CheckStatus, evidence: Evidence[], rumorAt: string): CheckStatus {
+  if (status !== "confirmed" || !evidence.length) return status;
+  const first = Math.min(...evidence.map((e) => Date.parse(e.at)).filter(Number.isFinite));
+  return first <= Date.parse(rumorAt) ? "already_news" : status;
+}
+/** Settled for good: never checked again. */
+const FINAL = new Set<CheckStatus>(["confirmed", "denied", "already_news"]);
 export interface Evidence { at: string; headline: string; url: string; source: string }
 export interface RumorCheck { rumorId: number; checkedAt: string; status: CheckStatus; evidence: Evidence[]; note: string }
 
@@ -72,13 +83,30 @@ export function matching(r: Pick<Rumor, "claim" | "tickers">, items: Evidence[],
 
 async function googleNews(query: string, fetchImpl?: typeof fetch): Promise<Evidence[]> {
   if (!query.trim()) return [];
-  const xml = await getText(`https://news.google.com/rss/search?${new URLSearchParams({ q: `${query} when:30d`, hl: "en-US", gl: "US", ceid: "US:en" })}`, { headers: UA, fetchImpl, cacheMs: 6 * 3600_000, minIntervalMs: 1200, timeoutMs: 12_000, retries: 1 });
+  const xml = await getText(`https://news.google.com/rss/search?${new URLSearchParams({ q: `${query} when:30d`, hl: "en-US", gl: "US", ceid: "US:en" })}`, { headers: UA, fetchImpl, cacheMs: 0, minIntervalMs: 1200, timeoutMs: 12_000, retries: 1 });
   return parseGoogleNews(xml).slice(0, 25);
 }
 
 export async function latestChecks(): Promise<Map<number, RumorCheck>> {
-  const rows = await q(`SELECT DISTINCT ON (rumor_id) * FROM rumor_checks ORDER BY rumor_id, checked_at DESC`);
-  return new Map(rows.map((r) => [Number(r.rumor_id), { rumorId: Number(r.rumor_id), checkedAt: new Date(r.checked_at as string).toISOString(), status: r.status as CheckStatus, evidence: (r.evidence as Evidence[]) ?? [], note: String(r.note ?? "") }]));
+  const rows = await q(`SELECT DISTINCT ON (c.rumor_id) c.*, r.created_at AS rumor_at FROM rumor_checks c JOIN rumors r ON r.id = c.rumor_id ORDER BY c.rumor_id, c.checked_at DESC, c.id DESC`);
+  return new Map(rows.map((r) => {
+    const evidence = (r.evidence as Evidence[]) ?? [];
+    // Older checks were logged before "already news" existed: settle them the same way when read.
+    const status = settle(r.status as CheckStatus, evidence, new Date(r.rumor_at as string).toISOString());
+    return [Number(r.rumor_id), { rumorId: Number(r.rumor_id), checkedAt: new Date(r.checked_at as string).toISOString(), status, evidence, note: String(r.note ?? "") }];
+  }));
+}
+
+/** Rumors that turned out to be news already, checked since `since` (for the News tab). */
+export async function alreadyNewsSince(since: Date): Promise<Array<{ rumor: Rumor; check: RumorCheck }>> {
+  const { getRumor } = await import("./rumors");
+  const out: Array<{ rumor: Rumor; check: RumorCheck }> = [];
+  for (const c of (await latestChecks()).values()) {
+    if (c.status !== "already_news" || Date.parse(c.checkedAt) < since.getTime()) continue;
+    const rumor = await getRumor(c.rumorId);
+    if (rumor) out.push({ rumor, check: c });
+  }
+  return out;
 }
 
 async function record(c: Omit<RumorCheck, "checkedAt">, now: Date): Promise<void> {
@@ -89,10 +117,10 @@ async function record(c: Omit<RumorCheck, "checkedAt">, now: Date): Promise<void
  * One pass: the rumors from the last 30 days not checked in the last `everyHours` and not already settled (came true or
  * denied), oldest check first, up to `perCall`. Returns a summary.
  */
-export async function checkRumors(deps: { data: MarketData | null; callModel: CallModel; now: Date; fetchImpl?: typeof fetch; env?: NodeJS.ProcessEnv }, deadline: number): Promise<string> {
+export async function checkRumors(deps: { data: MarketData | null; callModel: CallModel; now: Date; fetchImpl?: typeof fetch; env?: NodeJS.ProcessEnv }, deadline: number, only?: number[]): Promise<string> {
   const [rumors, last] = await Promise.all([rumorsSince(CHECK.days, 2000), latestChecks()]);
   const due = rumors
-    .filter((r) => { const c = last.get(r.id); return !c || (c.status !== "confirmed" && c.status !== "denied" && deps.now.getTime() - Date.parse(c.checkedAt) > CHECK.everyHours * 3600_000); })
+    .filter((r) => (only ? only.includes(r.id) && !last.has(r.id) : (() => { const c = last.get(r.id); return !c || (!FINAL.has(c.status) && deps.now.getTime() - Date.parse(c.checkedAt) > CHECK.everyHours * 3600_000); })()))
     .sort((a, b) => (last.get(a.id)?.checkedAt ?? "").localeCompare(last.get(b.id)?.checkedAt ?? ""))
     .slice(0, CHECK.perCall);
   if (!due.length) return "nothing due";
@@ -114,7 +142,7 @@ export async function checkRumors(deps: { data: MarketData | null; callModel: Ca
     withEvidence.push({ r, ev });
   }
   // 2. The model judges the ones with matching headlines, a batch at a time, within the rumor-check budget.
-  let judged = 0, confirmed = 0;
+  let judged = 0, confirmed = 0, news = 0;
   const confirmedNow: Array<{ r: Rumor; ev: Evidence[]; note: string }> = [];
   for (let i = 0; i < withEvidence.length; i += CHECK.batch) {
     if (deadline - Date.now() < 40_000) break;
@@ -128,10 +156,12 @@ export async function checkRumors(deps: { data: MarketData | null; callModel: Ca
       const res = replySchema.parse(JSON.parse(reply.text)).results;
       for (const { r, ev } of batch) {
         const x = res.find((y) => y.id === r.id);
-        const status: CheckStatus = x?.status ?? "open";
         const picked = (x?.evidence ?? []).map((k) => ev[k]).filter(Boolean);
-        await record({ rumorId: r.id, status, evidence: picked.length ? picked : ev.slice(0, 3), note: x?.note ?? "" }, deps.now);
+        const evidence = picked.length ? picked : ev.slice(0, 3);
+        const status = settle(x?.status ?? "open", evidence, r.createdAt);
+        await record({ rumorId: r.id, status, evidence, note: x?.note ?? "" }, deps.now);
         judged++;
+        if (status === "already_news") news++;
         if (status === "confirmed") { confirmed++; if (last.get(r.id)?.status !== "confirmed") confirmedNow.push({ r, ev: picked.length ? picked : ev, note: x?.note ?? "" }); }
       }
     } catch (err) {
@@ -147,5 +177,5 @@ export async function checkRumors(deps: { data: MarketData | null; callModel: Ca
       }
     }
   }
-  return `${due.length} checked: ${open} with no news yet, ${judged} judged by the model, ${confirmed} came true`;
+  return `${due.length} checked: ${open} with no news yet, ${judged} judged by the model, ${confirmed} came true${news ? `, ${news} already news` : ""}`;
 }

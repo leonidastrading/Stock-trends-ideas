@@ -206,9 +206,16 @@ export async function readRumorDoc(text: string, source: string, deps: ResearchD
   const tickers = [...new Set(found.flatMap((r) => r.tickers))];
   const news = deps.data && tickers.length ? await deps.data.getNews(tickers.slice(0, 60), new Date(deps.now.getTime() - 7 * 86400_000), deps.now, 500).catch(() => [] as NewsItem[]) : [];
   const docId = Number((await q(`INSERT INTO rumor_docs (source, path, chars, rumors, cost_usd, error) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`, [source.slice(0, 200), path, text.length, found.length, cost, error]))[0].id);
+  const ids: number[] = [];
   for (const r of found.slice(0, RUMORS.perDoc * RUMORS.maxChunks)) {
-    await q(`INSERT INTO rumors (doc_id, claim, tickers, direction, category, specificity, timeframe, confirm, source, quote, mainstream) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+    const row = await q(`INSERT INTO rumors (doc_id, claim, tickers, direction, category, specificity, timeframe, confirm, source, quote, mainstream) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
       [docId, r.claim, r.tickers, r.direction, r.category, r.specificity, r.timeframe, r.confirm, r.source, r.quote, JSON.stringify(mainstreamFor(r, news))]);
+    ids.push(Number(row[0].id));
+  }
+  // Before a claim is listed as a rumor, check the news: one a credible outlet already reported is news, not a rumor.
+  if (ids.length && !error) {
+    await import("./rumor-check").then(({ checkRumors }) => checkRumors({ data: deps.data, callModel: deps.callModel, now: deps.now, fetchImpl: deps.fetchImpl, env: deps.env }, Date.now() + 120_000, ids))
+      .catch((err) => console.error(`rumor news check failed: ${err instanceof Error ? err.message : String(err)}`));
   }
   return { docId, rumors: found.length, error };
 }

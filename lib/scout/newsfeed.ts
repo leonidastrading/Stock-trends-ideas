@@ -10,7 +10,7 @@ import * as store from "./store";
 /** Extra event words for the News tab only (operational shocks the story desk's list does not name). */
 const NEWS_EVENT = /\b(ground stop|grounded|grounding|delist\w*|cyberattack|ransomware|explosion|evacuat\w*|derail\w*|shutdown|layoffs?|job cuts|guidance raise|raises guidance|misses estimates|beats estimates)\b/i;
 
-export interface FeedItem { id: string; at: string; headline: string; summary: string; source: string; url: string; symbols: string[]; event: string | null; cardIds: number[]; buzz: number; score: number; kind: "news" | "trump" }
+export interface FeedItem { id: string; at: string; headline: string; summary: string; source: string; url: string; symbols: string[]; event: string | null; cardIds: number[]; buzz: number; score: number; kind: "news" | "trump" | "rumor" }
 
 /** Pure: score and rank. Freshness halves every 6 hours; an event word, a pile-up on one stock and a card on it each lift a story. */
 export function rankFeed(items: Array<Omit<FeedItem, "score" | "buzz" | "event" | "cardIds">>, cards: Map<string, number[]>, now: Date): FeedItem[] {
@@ -36,15 +36,18 @@ export async function newsFeed(now = new Date()): Promise<FeedItem[]> {
   if (Date.now() - cache.at < 30_000 && cache.items.length) return cache.items;
   const data = marketDataFromEnv();
   const since = new Date(now.getTime() - 24 * 3600_000);
-  const [news, posts, cards] = await Promise.all([
+  const [news, posts, cards, fromRumors] = await Promise.all([
     data ? data.getNews([], since, now, 200).catch(() => [] as NewsItem[]) : Promise.resolve([] as NewsItem[]),
     store.truthPostsSince(since.toISOString(), true).catch(() => []),
     store.cardsSince(30).catch(() => []),
+    import("./rumor-check").then(({ alreadyNewsSince }) => alreadyNewsSince(new Date(now.getTime() - 3 * 86400_000))).catch(() => []),
   ]);
   const bySym = new Map<string, number[]>();
   for (const c of cards) for (const t of c.card.tickers) bySym.set(t.symbol, [...(bySym.get(t.symbol) ?? []), c.id]);
   const items = [
     ...news.map((n) => ({ id: `n${n.id}`, at: n.ts, headline: n.headline, summary: n.summary, source: n.source || "news", url: n.url, symbols: n.symbols.slice(0, 8), kind: "news" as const })),
+    // Claims from the rumor sources that turned out to be news already: the outlet's headline, flagged as found there.
+    ...fromRumors.map(({ rumor, check }) => ({ id: `r${rumor.id}`, at: check.checkedAt, headline: check.evidence[0]?.headline ?? rumor.claim, summary: `Found in ${rumor.source || rumor.docSource}: ${rumor.claim}${check.note ? ` (${check.note})` : ""}`, source: check.evidence[0]?.source ?? "news", url: check.evidence[0]?.url ?? "/rumors?truth=already_news", symbols: rumor.tickers.slice(0, 8), kind: "rumor" as const })),
     ...posts.filter((p) => p.read).map((p) => ({ id: `t${p.id}`, at: p.at, headline: `Trump: ${p.read!.summary}`, summary: p.text.slice(0, 400), source: "Truth Social", url: p.url, symbols: p.read!.tickers, kind: "trump" as const })),
   ];
   cache.items = rankFeed(items, bySym, now);
