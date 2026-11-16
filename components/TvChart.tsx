@@ -8,7 +8,7 @@ const SCRIPT = "https://s3.tradingview.com/external-embedding/embed-widget-advan
  * A daily TradingView chart (their free embedded Advanced Chart widget), loaded only when the card scrolls near the
  * screen, so a page of cards does not load ten charts at once. Follows the dashboard's light or dark look.
  */
-export default function TvChart({ symbol, tvSymbol, height = 340 }: { symbol: string; tvSymbol: string; height?: number }) {
+export default function TvChart({ symbol, tvSymbol, height = 680 }: { symbol: string; tvSymbol: string; height?: number }) {
   const box = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const [show, setShow] = useState(false);
@@ -35,7 +35,7 @@ export default function TvChart({ symbol, tvSymbol, height = 340 }: { symbol: st
     s.async = true;
     s.type = "text/javascript";
     s.text = JSON.stringify({
-      symbol: tvSymbol, interval: "D", range: "6M", timezone: "America/New_York", theme: dark ? "dark" : "light", style: "1", locale: "en",
+      symbol: tvSymbol, interval: "D", timezone: "America/New_York", theme: dark ? "dark" : "light", style: "1", locale: "en",
       autosize: true, allow_symbol_change: false, hide_side_toolbar: true, hide_volume: false, save_image: false, calendar: false, details: false, hotlist: false,
       withdateranges: true, support_host: "https://www.tradingview.com",
     });

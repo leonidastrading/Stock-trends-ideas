@@ -328,4 +328,4 @@ main { overflow-wrap: break-word; }
 .tv-chart { width: 100%; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface-0); }
 .tv-chart-placeholder { display: flex; align-items: center; justify-content: center; height: 100%; }
 .card.thesis.collapsed .card-chart { display: none; }
-@media (max-width: 640px) { .tv-chart { height: 260px !important; } }
+@media (max-width: 640px) { .tv-chart { height: 520px !important; } }
