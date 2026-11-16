@@ -4,6 +4,13 @@ export const TRADINGVIEW_CHART = "https://www.tradingview.com/chart/WBvg0COi/";
 /** Alpaca's exchange names → TradingView's prefixes (a bare symbol can open a foreign stock: ARCC is also Arabian Cement). */
 const TV_EXCHANGE: Record<string, string> = { NASDAQ: "NASDAQ", NYSE: "NYSE", ARCA: "AMEX", AMEX: "AMEX", BATS: "CBOE", OTC: "OTC" };
 
+/** Pure: TradingView's symbol with its exchange when known ("NASDAQ:ARCC"), else the bare symbol. */
+export const tvSymbol = (symbol: string, exchange?: string | null) => {
+  const sym = symbol.replace(/^\$/, "").toUpperCase();
+  const ex = exchange ? TV_EXCHANGE[exchange.toUpperCase()] : undefined;
+  return ex ? `${ex}:${sym}` : sym;
+};
+
 /** Pure: the TradingView link for a US symbol, with its exchange when known ("NASDAQ:ARCC"). */
 export const tradingViewUrl = (symbol: string, exchange?: string | null) => {
   const sym = symbol.replace(/^\$/, "").toUpperCase();
