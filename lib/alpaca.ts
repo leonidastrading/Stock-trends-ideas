@@ -66,12 +66,35 @@ export interface DailyBar {
 
 export interface NewsItem {
   id: number;
+  /** When the news happened: the post time, or for a re-post ("Reported Sunday, …") that day. */
   ts: string;
   headline: string;
   summary: string;
   symbols: string[];
   source: string;
   url: string;
+  /** Set on a re-post of earlier news: when it was re-posted. */
+  repostedAt?: string;
+}
+
+const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+const ET_DATE = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
+
+/**
+ * Pure: Benzinga re-posts earlier stories with a "Reported Friday, …" (or "Reported Earlier, …") prefix, mostly on
+ * Monday mornings. Returns when the news happened (noon ET of the named day, never after the re-post), or null when
+ * the headline is not a re-post.
+ */
+export function repostedFrom(headline: string, postedIso: string): string | null {
+  const m = /^\s*reported\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday|earlier|yesterday|last week)\b\s*,?/i.exec(headline);
+  if (!m) return null;
+  const posted = new Date(postedIso);
+  const word = m[1].toLowerCase();
+  const day = new Date(`${ET_DATE.format(posted)}T12:00:00Z`);
+  const back = word === "yesterday" ? 1 : word === "earlier" ? 0 : word === "last week" ? 7 : (day.getUTCDay() - WEEKDAYS.indexOf(word) + 7) % 7;
+  const date = new Date(day.getTime() - back * 86400_000).toISOString().slice(0, 10);
+  const noonEt = new Date(`${date}T17:00:00Z`);
+  return new Date(Math.min(noonEt.getTime(), posted.getTime())).toISOString();
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -159,7 +182,13 @@ export class AlpacaClient {
         DATA_HOST, "/v1beta1/news",
         { start: start.toISOString(), end: end.toISOString(), symbols: symbols.join(","), sort: "desc", include_content: false, exclude_contentless: false, limit: 50, page_token: pageToken },
       );
-      for (const n of resp.news ?? []) out.push({ id: n.id, ts: new Date(n.created_at).toISOString(), headline: decodeEntities(n.headline ?? ""), summary: decodeEntities(n.summary ?? ""), symbols: n.symbols ?? [], source: n.source ?? "", url: n.url ?? "" });
+      for (const n of resp.news ?? []) {
+        const posted = new Date(n.created_at).toISOString();
+        const headline = decodeEntities(n.headline ?? "");
+        // A re-post of earlier news is dated when the news happened, so nothing treats it as fresh.
+        const from = repostedFrom(headline, posted);
+        out.push({ id: n.id, ts: from ?? posted, headline, summary: decodeEntities(n.summary ?? ""), symbols: n.symbols ?? [], source: n.source ?? "", url: n.url ?? "", ...(from ? { repostedAt: posted } : {}) });
+      }
       pageToken = resp.next_page_token ?? undefined;
     } while (pageToken && out.length < max);
     return out;
