@@ -28,7 +28,7 @@ function fromLine(player: Player, term: string): string {
   return `${PLAYER_LABEL[player]}${what && what !== term || player === "scout_trend" || player === "you" ? ` · ${what}` : ""}`;
 }
 
-type SP = { days?: string; source?: string; status?: string; sort?: string; conf?: string; cap?: string; short?: string; page?: string; card?: string };
+type SP = { days?: string; source?: string; status?: string; sort?: string; conf?: string; cap?: string; short?: string; dir?: string; page?: string; card?: string };
 
 export default async function IdeasPage({ searchParams }: { searchParams: Promise<SP> }) {
   if (!hasDatabase()) return <SetupNotice />;
@@ -39,14 +39,16 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   const sort = SORTS.some((s) => s.value === sp.sort) ? sp.sort! : "best";
   const conf = CONFS.includes(Number(sp.conf)) ? Number(sp.conf) : 0;
   const cap = SIZE_KEYS.some((s) => s.key === sp.cap) ? sp.cap! : "";
+  const dir = sp.dir === "long" || sp.dir === "short" ? sp.dir : "";
   const shortMin = (SHORT_MINS as readonly number[]).includes(Number(sp.short)) ? Number(sp.short) : 0;
-  const params: Record<string, string | undefined> = { days: days === 7 ? undefined : String(days), source: source || undefined, status: status || undefined, sort: sort === "best" ? undefined : sort, conf: conf ? String(conf) : undefined, cap: cap || undefined, short: shortMin ? String(shortMin) : undefined, page: sp.page };
+  const params: Record<string, string | undefined> = { days: days === 7 ? undefined : String(days), source: source || undefined, status: status || undefined, sort: sort === "best" ? undefined : sort, conf: conf ? String(conf) : undefined, cap: cap || undefined, short: shortMin ? String(shortMin) : undefined, dir: dir || undefined, page: sp.page };
 
   const [cards, candidates, tracks, fb, recent] = await Promise.all([store.cardsSince(days), store.candidatesSince(days), store.allTracks(), store.latestFeedback(), store.cardsSince(120)]);
   const [reviews, profiles] = await Promise.all([store.allReviews(), profilesForCards(cards)]);
   // Size and short-interest filters: the card's market cap and % of float short (frozen when written, else today's).
   const capOk = (c: store.StoredCard, k = cap) => !k || sizeKey(profiles.get(c.id)?.marketCap) === k;
   const shortOk = (c: store.StoredCard, m = shortMin) => !m || (shortPct(profiles.get(c.id)) ?? -1) >= m;
+  const dirOk = (c: store.StoredCard, d = dir) => !d || c.direction === d;
   const opp = opposingCalls(recent, tracks);
   const t = new Map(tracks.map((x) => [x.cardId, x]));
   const termOf = new Map(candidates.filter((c) => c.cardId !== null).map((c) => [c.cardId!, c.term]));
@@ -61,7 +63,7 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   // One list of every card in the window: filtered by source and status, sorted, 10 a page.
   const wantedId = Number(sp.card);
   const bySource = cards.filter((c) => (!repeats.has(c.id) || c.id === wantedId) && (!source || playerFor(c) === source));
-  const byConf = bySource.filter((c) => c.card.confidence >= conf && capOk(c) && shortOk(c));
+  const byConf = bySource.filter((c) => c.card.confidence >= conf && capOk(c) && shortOk(c) && dirOk(c));
   const rows = byConf.filter((c) => !status || c.status === status).sort((a, b) =>
     sort === "newest" ? b.createdAt.localeCompare(a.createdAt)
       : sort === "confidence" ? b.card.confidence - a.card.confidence || b.rankScore - a.rankScore
@@ -75,14 +77,15 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   const shownCards = cards.filter((c) => !repeats.has(c.id));
   for (const c of shownCards) sourceCounts.set(playerFor(c), (sourceCounts.get(playerFor(c)) ?? 0) + 1);
   const statusCount = (v: string) => byConf.filter((c) => !v || c.status === v).length;
-  const confCount = (n: number) => bySource.filter((c) => (!status || c.status === status) && c.card.confidence >= n && capOk(c) && shortOk(c)).length;
-  const capCount = (k: string) => bySource.filter((c) => (!status || c.status === status) && c.card.confidence >= conf && capOk(c, k) && shortOk(c)).length;
-  const shortCount = (m: number) => bySource.filter((c) => (!status || c.status === status) && c.card.confidence >= conf && capOk(c) && shortOk(c, m)).length;
+  const confCount = (n: number) => bySource.filter((c) => (!status || c.status === status) && c.card.confidence >= n && capOk(c) && shortOk(c) && dirOk(c)).length;
+  const capCount = (k: string) => bySource.filter((c) => (!status || c.status === status) && c.card.confidence >= conf && capOk(c, k) && shortOk(c) && dirOk(c)).length;
+  const shortCount = (m: number) => bySource.filter((c) => (!status || c.status === status) && c.card.confidence >= conf && capOk(c) && shortOk(c, m) && dirOk(c)).length;
+  const dirCount = (d: string) => bySource.filter((c) => (!status || c.status === status) && c.card.confidence >= conf && capOk(c) && shortOk(c) && dirOk(c, d)).length;
 
   return (
     <>
       <h1>Ideas</h1>
-      <RememberFilters keys={["days", "sort", "status", "source", "conf", "cap", "short"]} />
+      <RememberFilters keys={["days", "sort", "status", "source", "conf", "cap", "short", "dir"]} />
       <TickerSearch />
       <details className="card notice small section">
         <summary><b>How this page works</b></summary>
@@ -97,6 +100,7 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
         <FilterLinks params={params} name="sort" value={sort === "best" ? "" : sort} reset={["page", "card"]} options={SORTS.map((s) => ({ value: s.value === "best" ? "" : s.value, label: s.label }))} />
       </div>
       <div className="toolbar">
+        <FilterLinks params={params} name="dir" value={dir} reset={["page", "card"]} options={[{ value: "", label: "Long and short", count: dirCount("") }, { value: "long", label: "▲ Long", count: dirCount("long") }, { value: "short", label: "▼ Short", count: dirCount("short") }]} />
         <FilterLinks params={params} name="status" value={status} reset={["page", "card"]} options={[{ value: "", label: "Any status", count: statusCount("") }, { value: "promoted", label: "Promoted", count: statusCount("promoted") }, { value: "late", label: "Late", count: statusCount("late") }, { value: "not_promoted", label: "Not promoted", count: statusCount("not_promoted") }]} />
       </div>
       <div className="toolbar">
