@@ -11,10 +11,22 @@ export default function CardCollapse({ id, children }: { id: number; children: R
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => {
     // A card opened from a link (#card-N) always starts open.
-    setCollapsed(read().has(String(id)) && location.hash !== `#card-${id}`);
+    const linked = location.hash === `#card-${id}`;
+    setCollapsed(read().has(String(id)) && !linked);
+    // Opened from a link: the page streams in, so the browser's own jump to #card-N can miss; scroll here and flash it.
+    let t: ReturnType<typeof setTimeout> | undefined;
+    if (linked) {
+      t = setTimeout(() => {
+        const el = document.getElementById(`card-${id}`);
+        if (!el) return;
+        el.scrollIntoView({ block: "start", behavior: "smooth" });
+        el.classList.add("card-linked");
+        setTimeout(() => el.classList.remove("card-linked"), 2600);
+      }, 60);
+    }
     const on = (e: Event) => set((e as CustomEvent<boolean>).detail);
     window.addEventListener("cards:collapse", on);
-    return () => window.removeEventListener("cards:collapse", on);
+    return () => { window.removeEventListener("cards:collapse", on); if (t) clearTimeout(t); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
   function set(v: boolean) {
