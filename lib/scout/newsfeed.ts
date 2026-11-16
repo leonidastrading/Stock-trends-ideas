@@ -57,3 +57,19 @@ export async function newsFeed(now = new Date()): Promise<FeedItem[]> {
   cache.at = Date.now();
   return cache.items;
 }
+
+export interface BreakingItem { id: string; at: string; headline: string; url: string; symbols: string[]; source: string; why: string; kind: FeedItem["kind"] }
+
+/**
+ * Pure: the running ticker's items. The last 3 hours' stories that look like breaking news: an event word (halt,
+ * downgrade, FDA, guidance, merger…), several stories piling onto one stock, a stock on one of the scout's cards, a
+ * Trump post or a claim from the rumor sources already reported. Re-posts of older news never count. Newest first;
+ * topped up with the latest headlines when the hour is quiet.
+ */
+export function breakingNews(items: FeedItem[], now: Date, max = 30, minShown = 10): BreakingItem[] {
+  const recent = items.filter((i) => !i.repostedAt && now.getTime() - Date.parse(i.at) <= 3 * 3600_000 && Date.parse(i.at) <= now.getTime() + 60_000);
+  const why = (i: FeedItem) => (i.kind === "trump" ? "Trump" : i.kind === "rumor" ? "from rumors" : i.event ? i.event : i.cardIds.length ? "on your cards" : i.buzz >= 3 ? `${i.buzz} stories` : "");
+  const strong = recent.filter((i) => why(i));
+  const pick = strong.length >= minShown ? strong : [...strong, ...recent.filter((i) => !why(i)).sort((a, b) => b.at.localeCompare(a.at)).slice(0, minShown - strong.length)];
+  return pick.sort((a, b) => b.at.localeCompare(a.at)).slice(0, max).map((i) => ({ id: i.id, at: i.at, headline: i.headline, url: i.url, symbols: i.symbols.slice(0, 3), source: i.source, why: why(i), kind: i.kind }));
+}
