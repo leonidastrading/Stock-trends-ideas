@@ -77,7 +77,8 @@ export default function NewsFeed({ initial }: { initial: FeedItem[] }) {
             {i.kind === "rumor" && <a className="tag" href="/rumors?truth=already_news" title="Found in your rumor sources; already reported by this outlet">from rumors</a>}
             {i.event && <span className="tag">{i.event}</span>}
             {i.buzz >= 3 && <span className="tag warn" title="headlines on this stock in the last 6 hours">{i.buzz} in 6h</span>}
-            {i.cardIds.map((id) => <a key={id} className="tag promoted" href={`/ideas?days=30&card=${id}#card-${id}`}>card #{id}</a>)}
+            {i.cardIds.slice(0, 3).map((id) => <a key={id} className="tag promoted" href={`/ideas?days=30&card=${id}#card-${id}`}>card #{id}</a>)}
+            {i.cardIds.length > 3 && <span className="tag" title={i.cardIds.slice(3).map((id) => `#${id}`).join(", ")}>+{i.cardIds.length - 3} more cards</span>}
             <span>{i.repostedAt ? <><span className="tag late" title={`Re-posted ${when(i.repostedAt)}; the news itself is from ${new Date(i.at).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: "America/New_York" })}`}>old news, re-posted</span> {new Date(i.at).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/New_York" })} · re-posted {when(i.repostedAt)}</> : when(i.at)} · {i.source}</span>
             <span className="news-action"><ResearchButton ticker={i.symbols.length <= 3 ? i.symbols[0] : null} observation={`${i.kind === "trump" ? "Trump post on Truth Social" : `News headline (${i.source})`}, ${new Date(i.at).toISOString().slice(0, 16).replace("T", " ")} UTC: ${i.headline}.${i.summary ? ` ${i.summary.slice(0, 600)}` : ""}${i.symbols.length ? ` Tickers tagged: ${i.symbols.join(", ")}.` : ""} Link: ${i.url}`} /></span>
           </div>

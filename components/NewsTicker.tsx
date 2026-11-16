@@ -52,24 +52,24 @@ export default function NewsTicker() {
   const duration = Math.max(40, Math.round(chars / 7));
 
   const row = (copy: number) => shown.map((i) => (
-    <a key={`${copy}-${i.id}`} className={`ticker-item${isNew(i.id) ? " is-new" : ""}`} href={i.url} target="_blank" rel="noreferrer" tabIndex={copy ? -1 : 0} aria-hidden={copy ? true : undefined} title={`${i.source} · ${new Date(i.at).toLocaleString("en-US", { timeZone: "America/New_York" })} ET`}>
-      {isNew(i.id) && <span className="ticker-new">NEW</span>}
-      <span className="ticker-time">{time(i.at)}</span>
-      {i.symbols.length > 0 && <span className="ticker-sym">{i.symbols.join(" ")}</span>}
-      <span className="ticker-headline">{i.headline}</span>
-      {i.why && <span className="ticker-why">{i.why}</span>}
+    <a key={`${copy}-${i.id}`} className={`newsbar-item${isNew(i.id) ? " is-new" : ""}`} href={i.url} target="_blank" rel="noreferrer" tabIndex={copy ? -1 : 0} aria-hidden={copy ? true : undefined} title={`${i.source} · ${new Date(i.at).toLocaleString("en-US", { timeZone: "America/New_York" })} ET`}>
+      {isNew(i.id) && <span className="newsbar-new">NEW</span>}
+      <span className="newsbar-time">{time(i.at)}</span>
+      {i.symbols.length > 0 && <span className="newsbar-sym">{i.symbols.join(" ")}</span>}
+      <span className="newsbar-headline">{i.headline}</span>
+      {i.why && <span className="newsbar-why">{i.why}</span>}
     </a>
   ));
 
   return (
-    <div className="ticker" role="region" aria-label="Breaking news">
-      <div className="ticker-label"><span className="ticker-dot" />BREAKING</div>
-      <div className="ticker-viewport">
-        {items === null ? <span className="ticker-empty">{error ? "News feed not reachable; retrying…" : "Loading breaking news…"}</span>
-          : shown.length === 0 ? <span className="ticker-empty">No breaking stories in the last 3 hours.</span>
-          : <div className="ticker-track" style={{ ["--ticker-duration" as string]: `${duration}s` }}>{row(0)}{row(1)}</div>}
+    <div className="newsbar" role="region" aria-label="Breaking news">
+      <div className="newsbar-label"><span className="newsbar-dot" />BREAKING</div>
+      <div className="newsbar-viewport">
+        {items === null ? <span className="newsbar-empty">{error ? "News feed not reachable; retrying…" : "Loading breaking news…"}</span>
+          : shown.length === 0 ? <span className="newsbar-empty">No breaking stories in the last 3 hours.</span>
+          : <div className="newsbar-track" style={{ ["--newsbar-duration" as string]: `${duration}s` }}>{row(0)}{row(1)}</div>}
       </div>
-      <a className="ticker-more" href="/news">All news →</a>
+      <a className="newsbar-more" href="/news">All news →</a>
     </div>
   );
 }

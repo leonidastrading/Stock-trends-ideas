@@ -45,7 +45,8 @@ export async function newsFeed(now = new Date()): Promise<FeedItem[]> {
   const bare = (h: string) => h.replace(/^\s*reported\s+\w+(\s+week)?\s*,\s*/i, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   const originals = new Set(news.filter((n) => !n.repostedAt).map((n) => bare(n.headline)));
   const bySym = new Map<string, number[]>();
-  for (const c of cards) for (const t of c.card.tickers) bySym.set(t.symbol, [...(bySym.get(t.symbol) ?? []), c.id]);
+  // One card per stock: its latest (a stock with many cards would otherwise list them all on every headline).
+  for (const c of cards) for (const t of c.card.tickers) if (c.id > (bySym.get(t.symbol)?.[0] ?? 0)) bySym.set(t.symbol, [c.id]);
   const items = [
     // A re-post ("Reported Sunday, …") is dropped when the original is in the feed; otherwise shown at the news's own date.
     ...news.filter((n) => !n.repostedAt || !originals.has(bare(n.headline))).map((n) => ({ id: `n${n.id}`, at: n.ts, headline: n.headline, summary: n.summary, source: n.source || "news", url: n.url, symbols: n.symbols.slice(0, 8), kind: "news" as const, ...(n.repostedAt ? { repostedAt: n.repostedAt } : {}) })),
@@ -68,7 +69,7 @@ export interface BreakingItem { id: string; at: string; headline: string; url: s
  */
 export function breakingNews(items: FeedItem[], now: Date, max = 30, minShown = 10): BreakingItem[] {
   const recent = items.filter((i) => !i.repostedAt && now.getTime() - Date.parse(i.at) <= 3 * 3600_000 && Date.parse(i.at) <= now.getTime() + 60_000);
-  const why = (i: FeedItem) => (i.kind === "trump" ? "Trump" : i.kind === "rumor" ? "from rumors" : i.event ? i.event : i.cardIds.length ? "on your cards" : i.buzz >= 3 ? `${i.buzz} stories` : "");
+  const why = (i: FeedItem) => (i.kind === "trump" ? "Trump" : i.kind === "rumor" ? "from rumors" : i.event ? i.event : i.cardIds.length && i.symbols.length <= 4 ? "on your cards" : i.buzz >= 3 ? `${i.buzz} stories` : "");
   const strong = recent.filter((i) => why(i));
   const pick = strong.length >= minShown ? strong : [...strong, ...recent.filter((i) => !why(i)).sort((a, b) => b.at.localeCompare(a.at)).slice(0, minShown - strong.length)];
   return pick.sort((a, b) => b.at.localeCompare(a.at)).slice(0, max).map((i) => ({ id: i.id, at: i.at, headline: i.headline, url: i.url, symbols: i.symbols.slice(0, 3), source: i.source, why: why(i), kind: i.kind }));

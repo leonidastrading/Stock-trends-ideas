@@ -277,23 +277,23 @@ a.button.primary { background: var(--accent); border-color: var(--accent); color
 .paper-result { font-size: 1rem; margin-bottom: 2px; }
 
 /* The running breaking-news ticker under the menu. */
-.ticker { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 10px; height: 34px; overflow: hidden; border-bottom: 1px solid var(--border); background: var(--surface-1); font-size: 13.5px; }
-.ticker-label { flex: none; display: flex; align-items: center; gap: 6px; height: 100%; padding: 0 10px 0 14px; font-weight: 800; letter-spacing: 0.06em; color: #fff; background: #e5484d; font-size: 11.5px; }
-.ticker-dot { width: 7px; height: 7px; border-radius: 50%; background: #fff; animation: ticker-pulse 1.4s ease-in-out infinite; }
-.ticker-viewport { flex: 1; overflow: hidden; height: 100%; mask-image: linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 24px), transparent); }
-.ticker-track { display: inline-flex; align-items: center; height: 100%; white-space: nowrap; will-change: transform; animation: ticker-scroll var(--ticker-duration, 120s) linear infinite; }
-.ticker:hover .ticker-track, .ticker:focus-within .ticker-track { animation-play-state: paused; }
-.ticker-item { display: inline-flex; align-items: center; gap: 6px; padding: 0 22px 0 0; color: var(--text-primary); text-decoration: none; }
-.ticker-item:hover .ticker-headline { text-decoration: underline; }
-.ticker-item + .ticker-item::before { content: "◆"; color: var(--text-secondary); font-size: 8px; margin-right: 16px; }
-.ticker-time { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-.ticker-sym { font-weight: 700; color: var(--warn); }
-.ticker-why { font-size: 11px; border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; color: var(--text-secondary); }
-.ticker-new { font-size: 10.5px; font-weight: 800; color: #fff; background: #e5484d; border-radius: 4px; padding: 0 5px; }
-.ticker-item.is-new .ticker-headline { font-weight: 700; }
-.ticker-empty { color: var(--text-secondary); padding-left: 4px; }
-.ticker-more { flex: none; padding: 0 12px; font-size: 12px; color: var(--text-secondary); }
-@keyframes ticker-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-@keyframes ticker-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-@media (prefers-reduced-motion: reduce) { .ticker-track { animation: none; } .ticker-viewport { overflow-x: auto; } .ticker-dot { animation: none; } }
-@media (max-width: 640px) { .ticker-more { display: none; } .ticker-label { padding: 0 8px; } }
+.newsbar { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 10px; height: 34px; overflow: hidden; border-bottom: 1px solid var(--border); background: var(--surface-1); font-size: 13.5px; }
+.newsbar-label { flex: none; display: flex; align-items: center; gap: 6px; height: 100%; padding: 0 10px 0 14px; font-weight: 800; letter-spacing: 0.06em; color: #fff; background: #e5484d; font-size: 11.5px; }
+.newsbar-dot { width: 7px; height: 7px; border-radius: 50%; background: #fff; animation: newsbar-pulse 1.4s ease-in-out infinite; }
+.newsbar-viewport { flex: 1; overflow: hidden; height: 100%; mask-image: linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 24px), transparent); }
+.newsbar-track { display: inline-flex; align-items: center; height: 100%; white-space: nowrap; will-change: transform; animation: newsbar-scroll var(--newsbar-duration, 120s) linear infinite; }
+.newsbar:hover .newsbar-track, .newsbar:focus-within .newsbar-track { animation-play-state: paused; }
+.newsbar-item { display: inline-flex; align-items: center; gap: 6px; padding: 0 22px 0 0; color: var(--text-primary); text-decoration: none; }
+.newsbar-item:hover .newsbar-headline { text-decoration: underline; }
+.newsbar-item + .newsbar-item::before { content: "◆"; color: var(--text-secondary); font-size: 8px; margin-right: 16px; }
+.newsbar-time { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.newsbar-sym { font-weight: 700; color: var(--warn); }
+.newsbar-why { font-size: 11px; border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; color: var(--text-secondary); }
+.newsbar-new { font-size: 10.5px; font-weight: 800; color: #fff; background: #e5484d; border-radius: 4px; padding: 0 5px; }
+.newsbar-item.is-new .newsbar-headline { font-weight: 700; }
+.newsbar-empty { color: var(--text-secondary); padding-left: 4px; }
+.newsbar-more { flex: none; padding: 0 12px; font-size: 12px; color: var(--text-secondary); }
+@keyframes newsbar-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes newsbar-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .newsbar-track { animation: none; } .newsbar-viewport { overflow-x: auto; } .newsbar-dot { animation: none; } }
+@media (max-width: 640px) { .newsbar-more { display: none; } .newsbar-label { padding: 0 8px; } }
