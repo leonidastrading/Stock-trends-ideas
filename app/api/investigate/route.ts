@@ -47,9 +47,29 @@ export async function POST(request: Request) {
     text = `Link: ${url}\n\n${text}`;
   }
   if (text.length < 2) return NextResponse.json({ ok: false, errors: ["type a ticker, a name or a question, paste a story, or give a link"] }, { status: 422 });
-  // Just a ticker, a name or a short question: ask the scout to work out what it is first.
-  if (text.length < 80 && !url) text = `Investigate "${text}". It may be a ticker, a company, a person, a program or a topic: work out what it most likely is (say if it is ambiguous, e.g. a ticker that is also a foreign listing or an acronym), then follow the money around it: federal contracts, lobbying, PAC and campaign money, and the listed companies exposed.`;
+  // A listed ticker typed alone (or with $) is the stock: say so, with its name and the scout's latest card.
+  const stock = !url && text.length <= 12 ? await stockFor(text) : null;
+  if (stock) text = stock;
+  // Just a name or a short question: ask the scout to work out what it is first.
+  else if (text.length < 80 && !url) text = `Investigate "${text}". It may be a ticker, a company, a person, a program or a topic: work out what it most likely is (say if it is ambiguous, e.g. a ticker that is also a foreign listing or an acronym), then follow the money around it: federal contracts, lobbying, PAC and campaign money, and the listed companies exposed.`;
   const id = await startInvestigation(text);
   after(() => runInvestigation(id, defaultDeps()).catch((err) => console.error(`investigation ${id} failed: ${err instanceof Error ? err.message : String(err)}`)));
   return NextResponse.json({ ok: true, id }, { status: 202 });
+}
+
+/** The investigation brief for a typed ticker that is a listed stock, or null. */
+async function stockFor(typed: string): Promise<string | null> {
+  const sym = typed.trim().replace(/^\$/, "").toUpperCase();
+  if (!/^[A-Z]{1,5}(\.[A-Z])?$/.test(sym)) return null;
+  const { listings } = await import("@/lib/scout/symbol-search");
+  const store = await import("@/lib/scout/store");
+  const [list, cards] = await Promise.all([listings().catch(() => []), store.cardsForSymbol(sym, 1).catch(() => [])]);
+  const listing = list.find((l) => l.s === sym);
+  if (!listing && !cards.length) return null;
+  const card = cards[0];
+  return [
+    `Investigate the stock ${sym}${listing ? ` (${listing.n}, ${listing.x})` : ""}. The user means this listed company, not an acronym or anything else with the same letters.`,
+    card ? `The scout's latest card on it (#${card.id}, ${card.createdAt.slice(0, 10)}): ${card.title}. ${card.card.observation.slice(0, 1500)}` : "",
+    `Follow the money around this company: who its customers and backers are, federal contracts and grants it or its customers get, lobbying and PAC money around its business, its large holders and insiders, and the listed companies exposed to it (suppliers, customers, competitors).`,
+  ].filter(Boolean).join("\n\n");
 }
