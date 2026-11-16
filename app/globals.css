@@ -242,3 +242,6 @@ a.button.primary { background: var(--accent); border-color: var(--accent); color
 .thesis.collapsed { gap: 0; }
 .earnings-card { margin-bottom: 10px; }
 .earnings-card > div { margin-top: 4px; max-width: 110ch; }
+.nav-link { position: relative; }
+.nav-badge { display: inline-block; min-width: 16px; height: 16px; margin-left: 4px; padding: 0 4px; border-radius: 999px; background: #e5484d; color: #fff; font-size: 10.5px; font-weight: 700; line-height: 16px; text-align: center; vertical-align: 2px; text-decoration: none; animation: badge-in .25s ease-out; }
+@keyframes badge-in { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }

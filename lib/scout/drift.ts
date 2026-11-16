@@ -205,6 +205,16 @@ export async function scanDrift(data: MarketData, now = new Date()): Promise<{ a
     const sd = await import("../market/short").then(({ shortData }) => shortData(setups.slice(0, 25).map((s) => s.symbol))).catch(() => new Map());
     for (const s of setups) s.short = sd.get(s.symbol) ?? null;
   }
+  // When each setup first appeared (for the "new" badge on the Drift tab).
+  try {
+    const seen = (await store.cacheGet<Record<string, string>>("drift:first-seen"))?.data ?? {};
+    const nowIso = now.toISOString(), cutoff = new Date(now.getTime() - 40 * 86400_000).toISOString();
+    const next: Record<string, string> = Object.fromEntries(Object.entries(seen).filter(([, at]) => at > cutoff));
+    for (const s of setups) next[`${s.symbol}|${s.eventDate}`] ??= nowIso;
+    await store.cachePut("drift:first-seen", next);
+  } catch {
+    /* the badge is optional */
+  }
   return { asOf: spy.at(-1)?.date ?? today, scanned: by.size, setups };
 }
 

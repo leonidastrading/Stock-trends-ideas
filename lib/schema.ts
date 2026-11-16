@@ -351,6 +351,7 @@ CREATE TABLE IF NOT EXISTS congress_trades (
   PRIMARY KEY (doc_id, ord)
 );
 CREATE INDEX IF NOT EXISTS congress_trades_filed_idx ON congress_trades (filed);
+ALTER TABLE congress_trades ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
 CREATE INDEX IF NOT EXISTS congress_trades_symbol_idx ON congress_trades (symbol);
 CREATE OR REPLACE TRIGGER congress_trades_ro BEFORE UPDATE OR DELETE ON congress_trades FOR EACH ROW EXECUTE FUNCTION forbid_change();
 

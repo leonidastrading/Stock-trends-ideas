@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import "./globals.css";
 import BackToTop from "@/components/BackToTop";
+import NavBar from "@/components/NavBar";
 
 export const metadata: Metadata = {
   title: "Trend scout",
@@ -12,26 +12,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <nav>
-          <span className="brand">Trend scout</span>
-          <Link href="/">Home</Link>
-          <Link href="/ideas">Ideas</Link>
-          <Link href="/news">News</Link>
-          <Link href="/drift">Drift</Link>
-          <Link href="/rumors">Rumors</Link>
-          <Link href="/investigate">Investigate</Link>
-          <Link href="/map">Map</Link>
-          <Link href="/chat">Chat</Link>
-          <Link href="/notice">I noticed something</Link>
-          <Link href="/inbox">Inbox</Link>
-          <Link href="/filings">Filings</Link>
-          <Link href="/congress">Congress</Link>
-          <Link href="/watchlist">Watch-list</Link>
-          <Link href="/scoreboard">Scoreboard</Link>
-          <Link href="/scoring">Scoring</Link>
-          <Link href="/chatter">Chatter test</Link>
-          <Link href="/settings">Settings</Link>
-        </nav>
+        <NavBar />
         <main>{children}</main>
         <BackToTop />
       </body>
