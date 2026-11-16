@@ -13,6 +13,7 @@ import { namesMatch, notCommon } from "@/lib/scout/identity";
 import * as store from "@/lib/scout/store";
 import type { Feedback as FeedbackRow, StoredCard, StoredReview, Track } from "@/lib/scout/store";
 import { daysBetween, fmtEt, toEt } from "@/lib/time";
+import { paperResult } from "@/lib/scout/paper-result";
 
 const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
@@ -32,6 +33,9 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
     else after(() => lookup);
   }
   const q = await quote(c.primaryTicker);
+  // The paper result so far: the stock against SPY since the entry (open tracks use the live price).
+  const spyNow = track?.entryPrice && !track.exitDate ? await quote("SPY").catch(() => null) : null;
+  const result = track ? paperResult(track, q?.price ?? null, spyNow?.price ?? null) : null;
   const company = k.tickers.find((t) => t.symbol === c.primaryTicker)?.company ?? null;
   // Warn when the symbol trades as something other than the company's stock (a reused ticker).
   const wrong = !!info?.name && (info.tradable === false || !!notCommon(info.name) || (!!company && !namesMatch(company, info.name)));
@@ -88,7 +92,9 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
         {k.expression && <><dt>How to trade it</dt><dd>{k.expression} <span className="small muted">(timing note, not a recommendation; tracked in shares)</span></dd></>}
         {k.unknowns.length > 0 && <><dt>Unknowns</dt><dd>{k.unknowns.join("; ")}</dd></>}
         {c.gateNotes.length > 0 && <><dt>Gate notes</dt><dd className="small secondary">{c.gateNotes.join(" · ")}</dd></>}
-        {track && <><dt>Paper track</dt><dd className="small">{trackLine(track)}</dd></>}
+        {track && <><dt>Paper track</dt><dd className="small">
+          {result && <div className={`paper-result ${result.ret >= 0 ? "pos" : "neg"}`}><b>{result.closed ? "Result" : "So far"}: {pct(result.ret * 100)}</b>{result.spy !== null && <span className="muted"> · SPY {pct(result.spy * 100)} · </span>}{result.spy !== null && <b className={result.ret - result.spy >= 0 ? "pos" : "neg"}>{pct((result.ret - result.spy) * 100)} vs SPY</b>}<span className="muted"> · {c.direction === "short" ? "short" : "long"}, {result.days} day{result.days === 1 ? "" : "s"}{result.closed ? "" : " (live price)"}</span></div>}
+          {trackLine(track)}</dd></>}
         {review && <><dt>After the catalyst</dt><dd className="small"><b className={VERDICT[review.verdict]?.[1] ?? ""}>{VERDICT[review.verdict]?.[0] ?? review.verdict}</b> <span className="muted">({fmtEt(review.createdAt)}{review.moveSinceEntryPct !== null ? `; trade ${review.moveSinceEntryPct >= 0 ? "+" : ""}${review.moveSinceEntryPct}% since entry` : ""})</span> — {review.summary}{review.evidence.length ? <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>{review.evidence.map((e, i) => <li key={i} className="muted">{e.date} [{e.source}] {e.headline}</li>)}</ul> : null}</dd></>}
       </dl>
       <div>
