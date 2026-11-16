@@ -171,7 +171,7 @@ export function insiderLine(b: store.InsiderBuyRow): string {
   return `${b.owner} (${b.role}) bought ${Math.round(b.shares ?? 0).toLocaleString("en-US")} shares at $${b.price} = ${usd(b.value ?? 0)} on ${b.txDate ?? b.filed}${b.pctIncrease !== null ? `, +${b.pctIncrease}% to their holding` : ""}; ${tags.join("; ")}`;
 }
 
-const INSIDER_EVIDENCE = "The evidence: Cohen, Malloy & Pomorski (2012) split insider trades into routine (the same calendar month in prior years; over half of all trades), which earn about zero, and opportunistic, which earn about 0.82% a month (value-weighted abnormal) building for about six months with no reversal. The most informative opportunistic traders are local, non-executive insiders at poorly governed, geographically concentrated firms: check the governance (insider-controlled board, dual-class shares, a combined CEO and chair, past restatements) and whether the business is concentrated in one region. Lopez-Lira & Tang find markets underreact to insider-transaction headlines, so the drift is still there after the news. Also strongest when several insiders buy, after a decline, in small and mid caps, and when the purchase is large against the holding. Horizon about six months: set the time limit near 180 days unless a nearer catalyst decides it.";
+const INSIDER_EVIDENCE = "The evidence: Cohen, Malloy & Pomorski (2012) split insider trades into routine (the same calendar month in prior years; over half of all trades), which earn about zero, and opportunistic, which earn about 0.82% a month (value-weighted abnormal) building for about six months with no reversal. The most informative opportunistic traders are local, non-executive insiders at poorly governed, geographically concentrated firms: check the governance (insider-controlled board, dual-class shares, a combined CEO and chair, past restatements) and whether the business is concentrated in one region. Lopez-Lira & Tang find markets underreact to insider-transaction headlines, so the drift is still there after the news. Also strongest when several insiders buy, after a decline, in small and mid caps, and when the purchase is large against the holding. Horizon about six months: set the time limit near 180 days unless a nearer catalyst decides it. Use the background below: each buyer's earlier trades at the company and the stock's 52-week range. Say whether this is a first buy, an add after a winning buy, or averaging down on a losing one (weaker: cost-basis repair, defending the stake or a control agenda are other motives), and describe the timing only as the range numbers allow.";
 
 /** Pure: the day's candidate signals from stored buys and alerts, strongest first. */
 export function pickSignals(buys: store.InsiderBuyRow[], alerts: store.FilingAlert[], today: string, flags: store.OptionsFlag[] = [], congress: store.CongressTradeRow[] = []): FilingSignal[] {
@@ -239,7 +239,14 @@ export async function runFilingResearch(deps: ResearchDeps, maxNow: number = FIL
   const signals = pickSignals(buys, alerts, today, flags, congress).filter((s) => ![...recent].some((t) => t.startsWith(s.term.toLowerCase().split(" ").slice(0, 2).join(" "))));
   const out = { signals: signals.length, researched: [] as Array<{ term: string; outcome: string; reason?: string; cardId?: number }>, error: null as string | null };
   for (const s of signals.slice(0, room)) {
-    const r = await researchCandidate({ origin: "scout", term: s.term, kindHint: "event", tickersHint: [s.symbol], observation: null, trigger: s.trigger, context: `${s.context}\nProposed direction: ${s.direction} ${s.symbol}.` }, deps);
+    // Insider buys: each buyer's earlier trades at the company and where the stock is in its range.
+    let background = "";
+    if (s.kind === "insider" || s.kind === "insider+congress") {
+      const mine = buys.filter((b) => b.symbol === s.symbol && daysBetween(b.filed, today) <= FILINGS.clusterDays);
+      background = await import("./insider-history").then(({ insiderBackground }) => insiderBackground(s.symbol, mine, { data: deps.data, ua: deps.env.SEC_USER_AGENT?.trim(), today, fetchImpl: deps.fetchImpl }, Date.now() + 45_000))
+        .then((t) => `\nBackground:\n${t}`).catch((err) => `\nBackground: not available (${err instanceof Error ? err.message.slice(0, 100) : String(err)}).`);
+    }
+    const r = await researchCandidate({ origin: "scout", term: s.term, kindHint: "event", tickersHint: [s.symbol], observation: null, trigger: s.trigger, context: `${s.context}${background}\nProposed direction: ${s.direction} ${s.symbol}.` }, deps);
     out.researched.push(r.outcome === "card" ? { term: s.term, outcome: `card: ${r.card.status}`, cardId: r.card.id } : { term: s.term, outcome: r.outcome, reason: r.reason });
     if (r.outcome === "capped") {
       out.error = r.reason;
