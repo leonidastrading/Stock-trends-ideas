@@ -280,7 +280,7 @@ a.button.primary { background: var(--accent); border-color: var(--accent); color
 .newsbar { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 10px; height: 34px; overflow: hidden; border-bottom: 1px solid var(--border); background: var(--surface-1); font-size: 13.5px; }
 .newsbar-label { flex: none; display: flex; align-items: center; gap: 6px; height: 100%; padding: 0 10px 0 14px; font-weight: 800; letter-spacing: 0.06em; color: #fff; background: #e5484d; font-size: 11.5px; }
 .newsbar-dot { width: 7px; height: 7px; border-radius: 50%; background: #fff; animation: newsbar-pulse 1.4s ease-in-out infinite; }
-.newsbar-viewport { flex: 1; overflow: hidden; height: 100%; mask-image: linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 24px), transparent); }
+.newsbar-viewport { flex: 1; padding-left: 4px; overflow: hidden; height: 100%; mask-image: linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 24px), transparent); }
 .newsbar-track { display: inline-flex; align-items: center; height: 100%; white-space: nowrap; will-change: transform; animation: newsbar-scroll var(--newsbar-duration, 120s) linear infinite; }
 .newsbar:hover .newsbar-track, .newsbar:focus-within .newsbar-track { animation-play-state: paused; }
 .newsbar-item { display: inline-flex; align-items: center; gap: 6px; padding: 0 22px 0 0; color: var(--text-primary); text-decoration: none; }

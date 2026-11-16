@@ -48,8 +48,8 @@ export default function NewsTicker() {
   // New stories first, then newest first (the server's order).
   const shown = (items ?? []).slice().sort((a, b) => Number(isNew(b.id)) - Number(isNew(a.id)));
   const chars = shown.reduce((n, i) => n + i.headline.length + 30, 0);
-  // About 70 characters a second, whatever the number of stories.
-  const duration = Math.max(40, Math.round(chars / 7));
+  // About 100 characters a second, whatever the number of stories.
+  const duration = Math.max(28, Math.round(chars / 10));
 
   const row = (copy: number) => shown.map((i) => (
     <a key={`${copy}-${i.id}`} className={`newsbar-item${isNew(i.id) ? " is-new" : ""}`} href={i.url} target="_blank" rel="noreferrer" tabIndex={copy ? -1 : 0} aria-hidden={copy ? true : undefined} title={`${i.source} · ${new Date(i.at).toLocaleString("en-US", { timeZone: "America/New_York" })} ET`}>
@@ -63,7 +63,6 @@ export default function NewsTicker() {
 
   return (
     <div className="newsbar" role="region" aria-label="Breaking news">
-      <div className="newsbar-label"><span className="newsbar-dot" />BREAKING</div>
       <div className="newsbar-viewport">
         {items === null ? <span className="newsbar-empty">{error ? "News feed not reachable; retrying…" : "Loading breaking news…"}</span>
           : shown.length === 0 ? <span className="newsbar-empty">No breaking stories in the last 3 hours.</span>
