@@ -24,3 +24,12 @@ describe("stock profile: market cap and short interest", () => {
     expect(buildProfile(null, null, "FINRA: no report", 11.55)).toMatchObject({ marketCap: null, capSource: null, shortError: "FINRA: no report" });
   });
 });
+
+describe("card profiles: bands for scoring", async () => {
+  const { sizeBand, shortBand } = await import("@/lib/scout/card-profiles");
+  const p = (marketCap: number | null, shortPctFloat: number | null, shortPctOut: number | null = null) => ({ cardId: 1, symbol: "X", capturedAt: "", marketCap, capBucket: null, shortPctFloat, shortPctOut, daysToCover: null, squeeze: null, shortAsOf: null, late: false });
+  it("puts each card in a size band and a short-interest band", () => {
+    expect([sizeBand(p(6.6e9, null)), sizeBand(p(1.2e9, null)), sizeBand(p(40e6, null)), sizeBand(p(4e12, null)), sizeBand(undefined)]).toEqual(["mid cap ($2–10B)", "small cap ($300M–2B)", "nano or micro cap (under $300M)", "mega cap ($200B+)", "size unknown"]);
+    expect([shortBand(p(null, 9.2)), shortBand(p(null, null, 25)), shortBand(p(null, 3)), shortBand(p(null, null))]).toEqual(["5–10% short", "20%+ short", "under 5% short", "short interest unknown"]);
+  });
+});

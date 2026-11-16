@@ -5,6 +5,7 @@ import { loadIdeas } from "@/lib/scout/ideas-load";
 import { buildReport, groupStats, type GroupStats } from "@/lib/scout/scoring";
 import * as store from "@/lib/scout/store";
 import { toEt } from "@/lib/time";
+import { cardProfiles, SHORT_BANDS, shortBand, SIZE_BANDS, sizeBand } from "@/lib/scout/card-profiles";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -38,7 +39,7 @@ function StatsTable({ title, rows, note }: { title: string; rows: Array<[string,
 export default async function ScoringPage({ searchParams }: { searchParams: Promise<{ v?: string }> }) {
   if (!hasDatabase()) return <SetupNotice />;
   const sp = await searchParams;
-  const [versions, cards, tracks, candidates] = await Promise.all([store.listVersions(), store.allCards(), store.allTracks(), store.candidatesSince(3650)]);
+  const [versions, cards, tracks, candidates, profiles] = await Promise.all([store.listVersions(), store.allCards(), store.allTracks(), store.candidatesSince(3650), cardProfiles().catch(() => new Map())]);
   const termByCard = new Map(candidates.filter((c) => c.cardId).map((c) => [c.cardId!, c.term]));
   const vid = Number(sp.v) || versions[versions.length - 1]?.id || 0;
   const vCards = cards.filter((c) => c.versionId === vid);
@@ -72,6 +73,8 @@ export default async function ScoringPage({ searchParams }: { searchParams: Prom
       <StatsTable title="By kind" rows={Object.entries(report.byKind).map(([k, s]) => [KIND_LABEL[k as Kind] ?? k, s])} />
       <StatsTable title="Promoted versus late" rows={[["Promoted", report.byStatus.promoted], ["Late (already obvious)", report.byStatus.late]]} note="If late ideas do as well as promoted ones, the lateness gate is not helping." />
       <StatsTable title="By score band" rows={[["High (novelty × materiality ≥ 49)", report.byBand.high], ["Low (< 49)", report.byBand.low]]} note="Do high-novelty, high-materiality cards do better than low ones?" />
+      <StatsTable title="By company size (market cap when the card was written)" rows={SIZE_BANDS.map((b) => [b, groupStats(ideas.filter((i) => sizeBand(profiles.get(i.cardId)) === b))])} note={`Do the scout's calls work better in small or large companies? ${[...profiles.values()].filter((p) => p.late).length} older cards were measured after the fact (when this started), not on the day.`} />
+      <StatsTable title="By short interest (% of float when the card was written)" rows={SHORT_BANDS.map((b) => [b, groupStats(ideas.filter((i) => shortBand(profiles.get(i.cardId)) === b))])} note="Do longs on heavily shorted stocks squeeze, and do shorts on crowded shorts fail? Short interest is reported twice a month, so it lags by about two weeks." />
 
       <section className="card">
         <h2>Ideas</h2>

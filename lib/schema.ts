@@ -473,6 +473,21 @@ CREATE TABLE IF NOT EXISTS rumors (
   mainstream jsonb
 );
 CREATE INDEX IF NOT EXISTS rumors_created_idx ON rumors (created_at);
+-- Market cap and short interest per card, frozen once, for splitting results by size and by short interest.
+CREATE TABLE IF NOT EXISTS card_profiles (
+  card_id integer PRIMARY KEY,
+  symbol text NOT NULL,
+  captured_at timestamptz NOT NULL DEFAULT now(),
+  market_cap double precision,
+  cap_bucket text,
+  short_pct_float double precision,
+  short_pct_out double precision,
+  days_to_cover double precision,
+  squeeze text,
+  short_as_of text,
+  late boolean NOT NULL DEFAULT false
+);
+CREATE OR REPLACE TRIGGER card_profiles_ro BEFORE UPDATE OR DELETE ON card_profiles FOR EACH ROW EXECUTE FUNCTION forbid_change();
 -- Did the rumor come true? One row per daily check (never edited); the latest is its status.
 CREATE TABLE IF NOT EXISTS rumor_checks (
   id serial PRIMARY KEY,
