@@ -23,7 +23,8 @@ export default function ChatWindow({ past, tickers, cardIds = {} }: { past: Past
   const [startedAt, setStartedAt] = useState<string | null>(null);
   const [briefing, setBriefing] = useState<number | null>(null);
   const [msgs, setMsgs] = useState<Msg[]>([]);
-  const { known, cards } = useTickers(msgs.filter((m) => m.role === "assistant").map((m) => m.content), tickers, cardIds);
+  // Your messages (and any card attached to them) count as context for telling acronyms from tickers.
+  const { known, cards } = useTickers(msgs.filter((m) => m.role === "assistant").map((m) => m.content), tickers, cardIds, msgs.filter((m) => m.role === "user").map((m) => m.content));
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);

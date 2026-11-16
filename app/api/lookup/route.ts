@@ -21,7 +21,8 @@ export async function GET(request: Request) {
     const { latestCardIds } = await import("@/lib/scout/store");
     const cards = Object.fromEntries(await latestCardIds(want).catch(() => new Map<string, number>()));
     // A stock with a card counts as a ticker even when the stock list is not loaded.
-    return NextResponse.json({ ok: true, listed: [...new Set([...listed, ...Object.keys(cards)])], cards });
+    const names = Object.fromEntries(list.filter((l) => listed.includes(l.s)).map((l) => [l.s, l.n]));
+    return NextResponse.json({ ok: true, listed: [...new Set([...listed, ...Object.keys(cards)])], cards, names });
   }
   if (sp.has("suggest")) return NextResponse.json({ ok: true, suggestions: suggest(list, sp.get("suggest") ?? "", 8) });
   const typed = (sp.get("symbol") ?? "").slice(0, 80);
