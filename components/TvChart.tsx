@@ -12,11 +12,14 @@ export default function TvChart({ symbol, tvSymbol, height = 680 }: { symbol: st
   const box = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const [show, setShow] = useState(false);
+  // Phones: each chart is a whole TradingView app; several at once can make Safari reload the page, so tap to load.
+  const [onTap, setOnTap] = useState(false);
 
   // Load when near the screen (a collapsed card's chart is hidden, so it waits until the card is opened).
   useEffect(() => {
     const el = box.current;
     if (!el) return;
+    if (window.matchMedia("(max-width: 640px)").matches) { setOnTap(true); return; }
     if (!("IntersectionObserver" in window)) { setShow(true); return; }
     const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { setShow(true); io.disconnect(); } }, { rootMargin: "300px 0px" });
     io.observe(el);
@@ -44,8 +47,9 @@ export default function TvChart({ symbol, tvSymbol, height = 680 }: { symbol: st
   }, [show, tvSymbol]);
 
   return (
-    <div className="tv-chart" ref={box} style={{ height }}>
+    <div className={`tv-chart${onTap && !show ? " tv-chart-tap" : ""}`} ref={box} style={{ height: onTap && !show ? undefined : height }}>
       {show ? <div className="tradingview-widget-container" ref={host} style={{ height: "100%", width: "100%" }} aria-label={`${symbol} daily chart (TradingView)`} />
+        : onTap ? <div className="tv-chart-placeholder"><button type="button" onClick={() => setShow(true)}>Show {symbol} daily chart</button></div>
         : <div className="tv-chart-placeholder small muted">Daily chart of {symbol} loads as you scroll…</div>}
     </div>
   );

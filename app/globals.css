@@ -328,4 +328,6 @@ main { overflow-wrap: break-word; }
 .tv-chart { width: 100%; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface-0); }
 .tv-chart-placeholder { display: flex; align-items: center; justify-content: center; height: 100%; }
 .card.thesis.collapsed .card-chart { display: none; }
-@media (max-width: 640px) { .tv-chart { height: 520px !important; } }
+@media (max-width: 640px) { .tv-chart:not(.tv-chart-tap) { height: 520px !important; } .tv-chart-tap { height: auto; padding: 10px; } }
+
+.link-button { background: none; border: 0; padding: 0 2px; color: var(--accent); text-decoration: underline; cursor: pointer; font-size: inherit; }
