@@ -2,6 +2,8 @@ import { KIND_LABEL, SCOUT, type Kind } from "@/config/scout";
 import Direction from "@/components/Direction";
 import CardAsk from "@/components/CardAsk";
 import CardCollapse from "@/components/CardCollapse";
+import CapShort from "@/components/CapShort";
+import { Suspense } from "react";
 import Feedback from "@/components/Feedback";
 import { after } from "next/server";
 import { marketDataFromEnv } from "@/lib/alpaca";
@@ -53,6 +55,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
               {q.changePct !== null && <span className={q.changePct >= 0 ? "pos" : "neg"}> {pct(q.changePct, 2)} {sessionLabel(q)}</span>}
             </span>
           ) : null}
+          {hasDatabase() && <Suspense fallback={null}><CapShort symbol={c.primaryTicker} price={q?.price ?? null} /></Suspense>}
           {c.direction === "short" && q && (q.price < SCOUT.minShortPrice || (q.changePct ?? 0) >= 15) ? (
             <span className="tag not_promoted" style={{ marginLeft: 8 }} title="Cheap or fast-rising stocks are often hard and costly to borrow and can squeeze far past a stop; losses on a short are open-ended.">
               ⚠ dangerous to short: {q.price < SCOUT.minShortPrice ? `under $${SCOUT.minShortPrice}` : `up ${q.changePct}% ${sessionLabel(q)}`}; defined-risk puts or no trade

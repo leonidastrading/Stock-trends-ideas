@@ -18,6 +18,8 @@ export interface ShortData {
   /** % of the float and of shares outstanding sold short (need Schwab's share counts). */
   pctFloat?: number | null;
   pctOutstanding: number | null;
+  /** Shares outstanding (Schwab), when connected. */
+  sharesOutstanding?: number | null;
   squeeze: "high" | "elevated" | "normal" | null;
   source: string;
 }
@@ -127,7 +129,7 @@ export async function shortData(symbols: string[], fetchImpl?: typeof fetch): Pr
     const sh = shares.get(symbol);
     const pct = (d: number | null | undefined) => (base!.interest !== null && d ? Math.round((base!.interest / d) * 1000) / 10 : null);
     const pctFloat = pct(sh?.float), pctOutstanding = pct(sh?.out);
-    out.set(symbol, { ...base, pctFloat, pctOutstanding, squeeze: squeezeFrom(pctFloat ?? pctOutstanding, base.daysToCover), source: sh?.float || sh?.out ? `${base.source}; float from Schwab` : base.source });
+    out.set(symbol, { ...base, pctFloat, pctOutstanding, sharesOutstanding: sh?.out ?? null, squeeze: squeezeFrom(pctFloat ?? pctOutstanding, base.daysToCover), source: sh?.float || sh?.out ? `${base.source}; float from Schwab` : base.source });
   }
   return out;
 }
