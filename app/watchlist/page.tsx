@@ -10,7 +10,8 @@ export const runtime = "nodejs";
 export default async function WatchlistPage() {
   if (!hasDatabase()) return <SetupNotice />;
   await store.seedWatchlist();
-  const items = await store.watchlist();
+  // Newest first in every group.
+  const items = (await store.watchlist()).sort((a, b) => b.addedAt.localeCompare(a.addedAt));
   const groups: Array<[string, typeof items]> = [["Proposed by the scout (waiting for you: auto-approve is off in Settings)", items.filter((i) => i.status === "proposed")], ["Active", items.filter((i) => i.status === "active")], ["Retired", items.filter((i) => i.status === "retired")]];
   return (
     <>
@@ -20,6 +21,7 @@ export default async function WatchlistPage() {
       {groups.map(([title, rows]) => rows.length > 0 && (
         <section className="card" key={title}>
           <h2>{title}</h2>
+          <p className="small muted" style={{ marginTop: -4 }}>Newest first · {rows.length} term{rows.length === 1 ? "" : "s"}</p>
           <div className="table-wrap">
             <table>
               <thead><tr><th>Term</th><th>Kind</th><th>Tickers</th><th>Added</th><th>By</th><th></th></tr></thead>
