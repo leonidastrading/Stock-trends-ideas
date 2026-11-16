@@ -24,6 +24,7 @@ const schema = z.object({
   earningsCapUsd: z.number().min(0).max(100).default(1.5),
   rumorCheckCapUsd: z.number().min(0).max(100).default(0.5),
   invalidationCapUsd: z.number().min(0).max(100).default(0.5),
+  themesCapUsd: z.number().min(0).max(100).default(1),
 });
 
 /** Changing the model or effort starts a new version; results are reported per version. */

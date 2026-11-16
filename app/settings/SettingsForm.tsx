@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export interface FormSettings { enabled: boolean; model: string; effort: string; dailyCapUsd: number; maxCandidatesPerScan: number; discoveryPerScan: number; emailDigest: boolean; notifyPromoted: boolean; notifyStories: boolean; notifyReviews: boolean; autoApproveTerms: boolean; swingSize: number; swingSpeculativeSize: number; earningsCapUsd: number; rumorCheckCapUsd: number; invalidationCapUsd: number }
+export interface FormSettings { enabled: boolean; model: string; effort: string; dailyCapUsd: number; maxCandidatesPerScan: number; discoveryPerScan: number; emailDigest: boolean; notifyPromoted: boolean; notifyStories: boolean; notifyReviews: boolean; autoApproveTerms: boolean; swingSize: number; swingSpeculativeSize: number; earningsCapUsd: number; rumorCheckCapUsd: number; invalidationCapUsd: number; themesCapUsd: number }
 
 export default function SettingsForm({ initial }: { initial: FormSettings }) {
   const [s, setS] = useState(initial);
@@ -35,6 +35,7 @@ export default function SettingsForm({ initial }: { initial: FormSettings }) {
         <label className="field"><span className="field-label">Earnings desk AI budget ($ a day)</span><input type="number" min="0" step="0.25" value={s.earningsCapUsd} onChange={(e) => setS({ ...s, earningsCapUsd: Number(e.target.value) })} /><span className="field-hint">Its own share of the daily cap, so earnings cards never starve the rest of the scout. Cards over it wait for the next day; setups are tracked either way.</span></label>
         <label className="field"><span className="field-label">Rumor checks AI budget ($ a day)</span><input type="number" min="0" step="0.25" value={s.rumorCheckCapUsd} onChange={(e) => setS({ ...s, rumorCheckCapUsd: Number(e.target.value) })} /><span className="field-hint">The daily check of whether rumors from the last 30 days came true. Rumors with no matching news cost nothing; the rest are judged in batches.</span></label>
         <label className="field"><span className="field-label">Invalidation watch AI budget ($ a day)</span><input type="number" min="0" step="0.25" value={s.invalidationCapUsd} onChange={(e) => setS({ ...s, invalidationCapUsd: Number(e.target.value) })} /><span className="field-hint">Every open card's invalidation conditions are checked against the live price and headlines about every 3 hours; a card whose condition is met is marked INVALIDATED and its paper trade exits at the next open.</span></label>
+        <label className="field"><span className="field-label">Themes AI budget ($ a day)</span><input type="number" min="0" step="0.25" value={s.themesCapUsd} onChange={(e) => setS({ ...s, themesCapUsd: Number(e.target.value) })} /><span className="field-hint">The daily top 3 ideas your inbox, websites and Stocktwits agree on: one reading a day (plus any Refresh now).</span></label>
         <label className="field"><span className="field-label">Weekly digest email</span><span className="inline"><input type="checkbox" checked={s.emailDigest} onChange={(e) => setS({ ...s, emailDigest: e.target.checked })} /> send on Mondays (needs Resend)</span></label>
       </div>
       <div className="actions"><button className="primary" type="submit" disabled={busy}>Save</button>{msg && <span className="small secondary">{msg}</span>}</div>

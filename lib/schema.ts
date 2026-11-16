@@ -473,6 +473,16 @@ CREATE TABLE IF NOT EXISTS rumors (
   mainstream jsonb
 );
 CREATE INDEX IF NOT EXISTS rumors_created_idx ON rumors (created_at);
+-- Themes: once a day, the top 3 ideas most sources talk about and agree on (with prices at the time), never edited.
+CREATE TABLE IF NOT EXISTS theme_runs (
+  id serial PRIMARY KEY,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  et_date date NOT NULL,
+  themes jsonb NOT NULL,
+  sources jsonb,
+  cost_usd double precision
+);
+CREATE OR REPLACE TRIGGER theme_runs_ro BEFORE UPDATE OR DELETE ON theme_runs FOR EACH ROW EXECUTE FUNCTION forbid_change();
 -- Watching open cards for their invalidation: one row per check (never edited); the latest is the card's state.
 CREATE TABLE IF NOT EXISTS invalidation_checks (
   id serial PRIMARY KEY,

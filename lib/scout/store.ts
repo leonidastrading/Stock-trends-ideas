@@ -33,11 +33,13 @@ export interface ScoutSettings {
   rumorCheckCapUsd: number;
   /** Watching open cards for their invalidation: its own AI budget. */
   invalidationCapUsd: number;
+  /** Themes (the daily top 3 consensus ideas): its own AI budget. */
+  themesCapUsd: number;
 }
 
 export const DEFAULT_SETTINGS: ScoutSettings = {
   enabled: true, model: SCOUT.defaultModel, effort: SCOUT.defaultEffort, dailyCapUsd: SCOUT.defaultDailyCapUsd, maxCandidatesPerScan: SCOUT.maxCandidatesPerScan, discoveryPerScan: SCOUT.discoveryPerScan, emailDigest: true, notifyPromoted: true, notifyStories: true, notifyReviews: true, autoApproveTerms: true,
-  swingSize: 2000, swingSpeculativeSize: 1000, earningsCapUsd: 1.5, rumorCheckCapUsd: 0.5, invalidationCapUsd: 0.5,
+  swingSize: 2000, swingSpeculativeSize: 1000, earningsCapUsd: 1.5, rumorCheckCapUsd: 0.5, invalidationCapUsd: 0.5, themesCapUsd: 1,
 };
 
 export async function loadSettings(): Promise<ScoutSettings> {

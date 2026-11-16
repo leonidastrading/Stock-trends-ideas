@@ -14,9 +14,10 @@ async function premarket() {
   const started = Date.now();
   try {
     const { checkInvalidations } = await import("@/lib/scout/invalidation");
-    const invalidation = await checkInvalidations({ data: marketDataFromEnv(), callModel: callResearchModel, now: new Date(), env: process.env }, started + 270_000, { everyHours: 0, perCall: 60 });
-    await store.finishRun(run, "ok", { invalidation });
-    return { status: "ok" as const, invalidation };
+    const invalidation = await checkInvalidations({ data: marketDataFromEnv(), callModel: callResearchModel, now: new Date(), env: process.env }, started + 170_000, { everyHours: 0, perCall: 60 });
+    const themes = await import("@/lib/scout/themes").then(({ themesIfDue }) => themesIfDue({ data: marketDataFromEnv(), callModel: callResearchModel, now: new Date() })).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+    await store.finishRun(run, "ok", { invalidation, themes });
+    return { status: "ok" as const, invalidation, themes };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     await store.finishRun(run, "error", null, msg);

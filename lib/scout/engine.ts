@@ -242,6 +242,10 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
   if (left() > 90_000) {
     out.rumors = await import("./rumors").then(({ pollRumors }) => pollRumors({ ...defaultDeps(now), fetchImpl }, 2, fetchImpl ?? fetch, deadline - 30_000)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
   } else out.rumors = "later: not enough time";
+  // Themes: the top 3 ideas the sources agree on, once a weekday from 7 AM ET.
+  if (left() > 90_000) {
+    out.themes = await import("./themes").then(({ themesIfDue }) => themesIfDue({ data, callModel: callResearchModel, now, fetchImpl })).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+  } else out.themes = "later: not enough time";
   // Open cards: is any card's own invalidation met? (about every 3 hours each, on the live price and headlines)
   if (left() > 70_000) {
     out.invalidation = await import("./invalidation").then(({ checkInvalidations }) => checkInvalidations({ data, callModel: callResearchModel, now, env: process.env }, deadline - 30_000)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
