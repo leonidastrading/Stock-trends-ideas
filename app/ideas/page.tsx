@@ -17,7 +17,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const STATUS_RANK: Record<string, number> = { promoted: 0, late: 1, not_promoted: 2 };
-const SORTS = [{ value: "best", label: "Best first" }, { value: "newest", label: "Newest" }, { value: "catalyst", label: "Catalyst soonest" }];
+const SORTS = [{ value: "best", label: "Best first" }, { value: "newest", label: "Newest" }, { value: "confidence", label: "Highest confidence" }, { value: "catalyst", label: "Catalyst soonest" }];
+const CONFS = [50, 60, 70, 80];
 const PAGE = 10;
 
 /** Where a card came from, in words: the desk or person, and the story / document / signal behind it. */
@@ -26,7 +27,7 @@ function fromLine(player: Player, term: string): string {
   return `${PLAYER_LABEL[player]}${what && what !== term || player === "scout_trend" || player === "you" ? ` · ${what}` : ""}`;
 }
 
-type SP = { days?: string; source?: string; status?: string; sort?: string; page?: string; card?: string };
+type SP = { days?: string; source?: string; status?: string; sort?: string; conf?: string; page?: string; card?: string };
 
 export default async function IdeasPage({ searchParams }: { searchParams: Promise<SP> }) {
   if (!hasDatabase()) return <SetupNotice />;
@@ -35,7 +36,8 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   const source = (PLAYERS as readonly string[]).includes(sp.source ?? "") ? (sp.source as Player) : "";
   const status = sp.status && sp.status in STATUS_RANK ? sp.status : "";
   const sort = SORTS.some((s) => s.value === sp.sort) ? sp.sort! : "best";
-  const params: Record<string, string | undefined> = { days: days === 7 ? undefined : String(days), source: source || undefined, status: status || undefined, sort: sort === "best" ? undefined : sort, page: sp.page };
+  const conf = CONFS.includes(Number(sp.conf)) ? Number(sp.conf) : 0;
+  const params: Record<string, string | undefined> = { days: days === 7 ? undefined : String(days), source: source || undefined, status: status || undefined, sort: sort === "best" ? undefined : sort, conf: conf ? String(conf) : undefined, page: sp.page };
 
   const [cards, candidates, tracks, fb, recent] = await Promise.all([store.cardsSince(days), store.candidatesSince(days), store.allTracks(), store.latestFeedback(), store.cardsSince(120)]);
   const reviews = await store.allReviews();
@@ -53,8 +55,10 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   // One list of every card in the window: filtered by source and status, sorted, 10 a page.
   const wantedId = Number(sp.card);
   const bySource = cards.filter((c) => (!repeats.has(c.id) || c.id === wantedId) && (!source || playerFor(c) === source));
-  const rows = bySource.filter((c) => !status || c.status === status).sort((a, b) =>
+  const byConf = bySource.filter((c) => c.card.confidence >= conf);
+  const rows = byConf.filter((c) => !status || c.status === status).sort((a, b) =>
     sort === "newest" ? b.createdAt.localeCompare(a.createdAt)
+      : sort === "confidence" ? b.card.confidence - a.card.confidence || b.rankScore - a.rankScore
       : sort === "catalyst" ? (a.catalystDate && a.catalystDate >= today ? a.catalystDate : "9999").localeCompare(b.catalystDate && b.catalystDate >= today ? b.catalystDate : "9999") || b.rankScore - a.rankScore
         : STATUS_RANK[a.status] - STATUS_RANK[b.status] || b.rankScore - a.rankScore || b.createdAt.localeCompare(a.createdAt));
   const wanted = Number(sp.card);
@@ -64,12 +68,13 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   const sourceCounts = new Map<string, number>();
   const shownCards = cards.filter((c) => !repeats.has(c.id));
   for (const c of shownCards) sourceCounts.set(playerFor(c), (sourceCounts.get(playerFor(c)) ?? 0) + 1);
-  const statusCount = (v: string) => bySource.filter((c) => !v || c.status === v).length;
+  const statusCount = (v: string) => byConf.filter((c) => !v || c.status === v).length;
+  const confCount = (n: number) => bySource.filter((c) => (!status || c.status === status) && c.card.confidence >= n).length;
 
   return (
     <>
       <h1>Ideas</h1>
-      <RememberFilters keys={["days", "sort", "status", "source"]} />
+      <RememberFilters keys={["days", "sort", "status", "source", "conf"]} />
       <TickerSearch />
       <details className="card notice small section">
         <summary><b>How this page works</b></summary>
@@ -85,6 +90,9 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
       </div>
       <div className="toolbar">
         <FilterLinks params={params} name="status" value={status} reset={["page", "card"]} options={[{ value: "", label: "Any status", count: statusCount("") }, { value: "promoted", label: "Promoted", count: statusCount("promoted") }, { value: "late", label: "Late", count: statusCount("late") }, { value: "not_promoted", label: "Not promoted", count: statusCount("not_promoted") }]} />
+      </div>
+      <div className="toolbar">
+        <FilterLinks params={params} name="conf" value={conf ? String(conf) : ""} reset={["page", "card"]} options={[{ value: "", label: "Any confidence", count: confCount(0) }, ...CONFS.map((n) => ({ value: String(n), label: `Confidence ${n}+`, count: confCount(n) }))]} />
       </div>
       <div className="toolbar">
         <FilterLinks params={params} name="source" value={source} reset={["page", "card"]} options={[{ value: "", label: "All sources", count: shownCards.length }, ...PLAYERS.filter((p) => sourceCounts.get(p)).map((p) => ({ value: p, label: PLAYER_LABEL[p].replace(/^Scout · /, ""), count: sourceCounts.get(p) }))]} />
