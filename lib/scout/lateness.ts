@@ -31,6 +31,10 @@ export async function measureLateness(data: MarketData | null, symbol: string, n
   try {
     const items = await data.getNews([symbol], new Date(now.getTime() - 30 * 86400000), now, 300);
     out.newsStories30d = coverage(items).mainstream;
+    // The stock's usual coverage: mainstream stories per 30 days over the 90 days before that. A big company is always
+    // in the news; only a jump above its own normal says the story is already obvious.
+    const before = await data.getNews([symbol], new Date(now.getTime() - 120 * 86400000), new Date(now.getTime() - 30 * 86400000), 1000);
+    out.newsBaseline30d = Math.round((coverage(before).mainstream / 3) * 10) / 10;
   } catch {
     /* unmeasured */
   }

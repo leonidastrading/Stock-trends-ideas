@@ -139,3 +139,18 @@ describe("no shorts under $5", async () => {
     expect(isPennyShort({ direction: "long", gateNotes: [] }, 1.1)).toBe(false);
   });
 });
+
+describe("news lateness: compared with the stock's own normal coverage", async () => {
+  const { applyGates } = await import("@/lib/scout/card");
+  const m = (o: Partial<MeasuredLateness>): MeasuredLateness => ({ newsStories30d: 3, stockMove30dPct: 2, stockMove90dPct: 5, hasPrices: true, lastClose: 248, stockMove5dPct: 1, ...o });
+  it("a big company's usual flood of stories is not late; a jump above its normal is", () => {
+    const normal = applyGates(sampleCard(), m({ newsStories30d: 60, newsBaseline30d: 55 }));
+    expect(normal.status).toBe("promoted");
+    expect(normal.notes.join(" ")).toMatch(/60 mainstream stories in 30 days, but that is normal for this stock \(about 55 a month\): not counted as late/);
+    const spike = applyGates(sampleCard(), m({ newsStories30d: 60, newsBaseline30d: 12 }));
+    expect(spike.status).toBe("late");
+    expect(spike.notes.join(" ")).toMatch(/2x its usual 12 a month/);
+    // No baseline measured: the old rule (over 20 is late).
+    expect(applyGates(sampleCard(), m({ newsStories30d: 25 })).status).toBe("late");
+  });
+});

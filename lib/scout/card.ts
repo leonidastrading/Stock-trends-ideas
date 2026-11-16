@@ -132,6 +132,8 @@ export interface MeasuredLateness {
   /** Latest close and the move over the last 5 sessions (short-squeeze checks). */
   lastClose?: number | null;
   stockMove5dPct?: number | null;
+  /** Mainstream stories per 30 days over the 90 days before (the stock's normal coverage). */
+  newsBaseline30d?: number | null;
 }
 
 export type CardStatus = "promoted" | "late" | "not_promoted";
@@ -182,9 +184,13 @@ export function applyGates(input: Card, measured: MeasuredLateness, opts: GateOp
   if (measured.stockMove30dPct === null) notes.push("stock move not measured (price data unavailable); model's own figure kept");
 
   const late30 = lateness.stock_move_30d_pct > SCOUT.lateStockMove30dPct;
-  const lateNews = lateness.news_stories_30d > SCOUT.lateNewsStories30d;
+  // News gate: heavy coverage that is also well above the stock's own normal (big companies are always covered).
+  const baseline = measured.newsBaseline30d ?? null;
+  const heavy = lateness.news_stories_30d > SCOUT.lateNewsStories30d;
+  const lateNews = heavy && (baseline === null || lateness.news_stories_30d >= SCOUT.lateNewsVsUsual * Math.max(baseline, 1));
+  if (heavy && !lateNews) notes.push(`${lateness.news_stories_30d} mainstream stories in 30 days, but that is normal for this stock (about ${baseline} a month): not counted as late`);
   if (late30) notes.push(`stock up ${lateness.stock_move_30d_pct.toFixed(1)}% in 30 days (gate: ${SCOUT.lateStockMove30dPct}%)`);
-  if (lateNews) notes.push(`${lateness.news_stories_30d} mainstream stories in 30 days (gate: ${SCOUT.lateNewsStories30d})`);
+  if (lateNews) notes.push(`${lateness.news_stories_30d} mainstream stories in 30 days (gate: ${SCOUT.lateNewsStories30d}${baseline !== null ? `, and ${SCOUT.lateNewsVsUsual}x its usual ${baseline} a month` : ""})`);
   if (input.lateness.already_obvious && !late30 && !lateNews) notes.push("model itself judged the idea already obvious");
   lateness.already_obvious = late30 || lateNews || input.lateness.already_obvious;
 

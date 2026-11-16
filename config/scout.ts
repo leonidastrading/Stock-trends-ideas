@@ -40,6 +40,8 @@ export const SCOUT = {
   /** Lateness: either of these marks the idea already obvious. */
   lateStockMove30dPct: 30,
   lateNewsStories30d: 20,
+  /** …and at least this multiple of the stock's own usual coverage (stories per 30 days over the 90 days before). */
+  lateNewsVsUsual: 2,
   /** Shorts: never promoted under this price (often hard to borrow, costly, squeeze-prone)... */
   minShortPrice: 5,
   /** ...or after a run-up this large (30 days / 5 days): squeeze risk. */

@@ -38,7 +38,7 @@ export default function TvChart({ symbol, tvSymbol, height = 680 }: { symbol: st
     s.async = true;
     s.type = "text/javascript";
     s.text = JSON.stringify({
-      symbol: tvSymbol, interval: "D", timezone: "America/New_York", theme: dark ? "dark" : "light", style: "1", locale: "en",
+      symbol: tvSymbol, interval: "D", range: "12M", timezone: "America/New_York", theme: dark ? "dark" : "light", style: "1", locale: "en",
       autosize: true, allow_symbol_change: false, hide_side_toolbar: true, hide_volume: false, save_image: false, calendar: false, details: false, hotlist: false,
       withdateranges: true, support_host: "https://www.tradingview.com",
     });
