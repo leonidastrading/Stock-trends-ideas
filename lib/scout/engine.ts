@@ -242,6 +242,10 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
   if (left() > 90_000) {
     out.rumors = await import("./rumors").then(({ pollRumors }) => pollRumors({ ...defaultDeps(now), fetchImpl }, 2, fetchImpl ?? fetch, deadline - 30_000)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
   } else out.rumors = "later: not enough time";
+  // Rumors that came true: each rumor from the last 30 days is checked again about once a day.
+  if (left() > 80_000) {
+    out.rumorChecks = await import("./rumor-check").then(({ checkRumors }) => checkRumors({ data, callModel: callResearchModel, now, fetchImpl, env: process.env }, deadline - 30_000)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+  } else out.rumorChecks = "later: not enough time";
   // Congress trades: new House transaction reports (at most a minute per call), then their buys priced against SPY.
   if (left() > 60_000) {
     try {

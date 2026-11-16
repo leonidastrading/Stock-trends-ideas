@@ -29,11 +29,13 @@ export interface ScoutSettings {
   swingSpeculativeSize: number;
   /** The earnings desk's own daily AI budget (inside the overall cap); cards beyond it wait for the next day. */
   earningsCapUsd: number;
+  /** The daily check of whether rumors came true: its own AI budget. */
+  rumorCheckCapUsd: number;
 }
 
 export const DEFAULT_SETTINGS: ScoutSettings = {
   enabled: true, model: SCOUT.defaultModel, effort: SCOUT.defaultEffort, dailyCapUsd: SCOUT.defaultDailyCapUsd, maxCandidatesPerScan: SCOUT.maxCandidatesPerScan, discoveryPerScan: SCOUT.discoveryPerScan, emailDigest: true, notifyPromoted: true, notifyStories: true, notifyReviews: true, autoApproveTerms: true,
-  swingSize: 2000, swingSpeculativeSize: 1000, earningsCapUsd: 1.5,
+  swingSize: 2000, swingSpeculativeSize: 1000, earningsCapUsd: 1.5, rumorCheckCapUsd: 0.5,
 };
 
 export async function loadSettings(): Promise<ScoutSettings> {

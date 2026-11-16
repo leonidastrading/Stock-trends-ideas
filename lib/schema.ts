@@ -473,6 +473,16 @@ CREATE TABLE IF NOT EXISTS rumors (
   mainstream jsonb
 );
 CREATE INDEX IF NOT EXISTS rumors_created_idx ON rumors (created_at);
+-- Did the rumor come true? One row per daily check (never edited); the latest is its status.
+CREATE TABLE IF NOT EXISTS rumor_checks (
+  id serial PRIMARY KEY,
+  rumor_id integer NOT NULL,
+  checked_at timestamptz NOT NULL DEFAULT now(),
+  status text NOT NULL,
+  evidence jsonb NOT NULL DEFAULT '[]'::jsonb,
+  note text
+);
+CREATE INDEX IF NOT EXISTS rumor_checks_rumor_idx ON rumor_checks (rumor_id, checked_at);
 ALTER TABLE sites ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'ideas';
 
 -- Investigations: "follow the money" behind a story (plan, public records pulled, report).

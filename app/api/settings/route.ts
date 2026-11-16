@@ -22,6 +22,7 @@ const schema = z.object({
   swingSize: z.number().min(100).max(100_000).default(2000),
   swingSpeculativeSize: z.number().min(100).max(100_000).default(1000),
   earningsCapUsd: z.number().min(0).max(100).default(1.5),
+  rumorCheckCapUsd: z.number().min(0).max(100).default(0.5),
 });
 
 /** Changing the model or effort starts a new version; results are reported per version. */

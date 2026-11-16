@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export interface FormSettings { enabled: boolean; model: string; effort: string; dailyCapUsd: number; maxCandidatesPerScan: number; discoveryPerScan: number; emailDigest: boolean; notifyPromoted: boolean; notifyStories: boolean; notifyReviews: boolean; autoApproveTerms: boolean; swingSize: number; swingSpeculativeSize: number; earningsCapUsd: number }
+export interface FormSettings { enabled: boolean; model: string; effort: string; dailyCapUsd: number; maxCandidatesPerScan: number; discoveryPerScan: number; emailDigest: boolean; notifyPromoted: boolean; notifyStories: boolean; notifyReviews: boolean; autoApproveTerms: boolean; swingSize: number; swingSpeculativeSize: number; earningsCapUsd: number; rumorCheckCapUsd: number }
 
 export default function SettingsForm({ initial }: { initial: FormSettings }) {
   const [s, setS] = useState(initial);
@@ -33,6 +33,7 @@ export default function SettingsForm({ initial }: { initial: FormSettings }) {
         <label className="field"><span className="field-label">Swing ideas: size per idea ($)</span><input type="number" min="100" step="100" value={s.swingSize} onChange={(e) => setS({ ...s, swingSize: Number(e.target.value) })} /><span className="field-hint">Paper money per card sent to the Swing ideas log. $2,000 fits 50 ideas in a $100k paper account.</span></label>
         <label className="field"><span className="field-label">Swing ideas: speculative size ($)</span><input type="number" min="100" step="100" value={s.swingSpeculativeSize} onChange={(e) => setS({ ...s, swingSpeculativeSize: Number(e.target.value) })} /><span className="field-hint">For cards with confidence under 50, which Swing counts as speculative and caps in total ($5,000). $1,000 fits five.</span></label>
         <label className="field"><span className="field-label">Earnings desk AI budget ($ a day)</span><input type="number" min="0" step="0.25" value={s.earningsCapUsd} onChange={(e) => setS({ ...s, earningsCapUsd: Number(e.target.value) })} /><span className="field-hint">Its own share of the daily cap, so earnings cards never starve the rest of the scout. Cards over it wait for the next day; setups are tracked either way.</span></label>
+        <label className="field"><span className="field-label">Rumor checks AI budget ($ a day)</span><input type="number" min="0" step="0.25" value={s.rumorCheckCapUsd} onChange={(e) => setS({ ...s, rumorCheckCapUsd: Number(e.target.value) })} /><span className="field-hint">The daily check of whether rumors from the last 30 days came true. Rumors with no matching news cost nothing; the rest are judged in batches.</span></label>
         <label className="field"><span className="field-label">Weekly digest email</span><span className="inline"><input type="checkbox" checked={s.emailDigest} onChange={(e) => setS({ ...s, emailDigest: e.target.checked })} /> send on Mondays (needs Resend)</span></label>
       </div>
       <div className="actions"><button className="primary" type="submit" disabled={busy}>Save</button>{msg && <span className="small secondary">{msg}</span>}</div>

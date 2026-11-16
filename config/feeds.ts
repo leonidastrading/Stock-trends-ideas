@@ -32,5 +32,6 @@ export const FEEDS: Feed[] = [
   { name: "Senate lobbying disclosures", host: "lda.senate.gov", what: "who paid lobbyists, on which issues, which agencies they lobbied", when: "per investigation", usedBy: "Investigate" },
   { name: "FEC campaign finance", host: "api.open.fec.gov", what: "PAC and campaign spending, including contributions to candidates", when: "per investigation", usedBy: "Investigate", key: "FEC_API_KEY" },
   { name: "Rumors", host: "(your files and sites)", what: "dumps from conspiracy forums and fringe sites (rumors/ folder, Rumors tab, or websites marked for rumors), filtered for market-relevant claims", when: "on each file, or daily per site", usedBy: "Rumors tab (checked only on request)" },
+  { name: "Google News search", host: "news.google.com", what: "headlines matching each rumor's key words (public RSS search), to see whether it came true", when: "daily, per rumor from the last 30 days", usedBy: "Rumors tab (came true / denied)" },
   { name: "Your websites", host: "(the list below)", what: "new articles on sites you add here, read for trade ideas", when: "once a day per site", usedBy: "Scout · your websites" },
 ];

@@ -160,7 +160,7 @@ export function chunks(text: string, size = RUMORS.chunkChars, max = RUMORS.maxC
 // ---------------------------------------------------------------- mainstream check
 
 const STOP = new Set("the a an and or of to in on for with by is are was were be been that this it its as at from has have had will would could may might about into over after before their they them than then there these those which who what when where why how not no yes all any more most other some such only own same so very can just also new says said claims claim posters article alleges allegedly reportedly rumor rumors stock shares company".split(" "));
-const words = (s: string) => new Set(s.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w.length > 2 && !STOP.has(w)));
+export const words = (s: string) => new Set(s.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w.length > 2 && !STOP.has(w)));
 
 export interface Mainstream { headlines7d: number; matches: Array<{ at: string; headline: string; url: string }> }
 

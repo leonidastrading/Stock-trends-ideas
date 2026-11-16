@@ -15,7 +15,7 @@ export async function badgeCounts(since: Partial<Record<BadgeTab, string>>, now 
   const jobs: Array<Promise<void>> = [];
   const add = (t: BadgeTab, f: (s: string) => Promise<number>) => { const s = ok(t); if (s) jobs.push(f(s).then((v) => { out[t] = Math.min(100, v); }).catch(() => undefined)); };
   add("ideas", (s) => n(`SELECT count(*) AS n FROM cards WHERE created_at > $1`, s));
-  add("rumors", (s) => n(`SELECT count(*) AS n FROM rumors WHERE created_at > $1`, s));
+  add("rumors", async (s) => (await n(`SELECT count(*) AS n FROM rumors WHERE created_at > $1`, s)) + (await n(`SELECT count(DISTINCT rumor_id) AS n FROM rumor_checks WHERE status = 'confirmed' AND checked_at > $1`, s)));
   add("investigate", (s) => n(`SELECT count(*) AS n FROM investigations WHERE status = 'done' AND created_at > $1`, s));
   add("inbox", (s) => n(`SELECT count(*) AS n FROM inbox_files WHERE read_at > $1`, s));
   add("filings", async (s) => (await n(`SELECT count(*) AS n FROM insider_buys WHERE created_at > $1`, s)) + (await n(`SELECT count(*) AS n FROM filing_alerts WHERE created_at > $1`, s)));
