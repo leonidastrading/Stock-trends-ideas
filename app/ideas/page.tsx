@@ -14,14 +14,22 @@ import { toEt } from "@/lib/time";
 import RememberFilters from "@/components/RememberFilters";
 import { marketDataFromEnv } from "@/lib/alpaca";
 import { isPennyShort } from "@/lib/scout/card";
-import { profilesForCards, SHORT_MINS, shortPct, SIZE_KEYS, sizeKey } from "@/lib/scout/card-profiles";
+import { profilesForCards, shortPct, SIZE_KEYS, sizeKey } from "@/lib/scout/card-profiles";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const STATUS_RANK: Record<string, number> = { promoted: 0, late: 1, not_promoted: 2 };
 const SORTS = [{ value: "best", label: "Best first" }, { value: "newest", label: "Newest" }, { value: "confidence", label: "Highest confidence" }, { value: "catalyst", label: "Catalyst soonest" }];
-const CONFS = [50, 60, 70, 80];
+/** Filter groups that do not overlap, so their counts add up to the total. */
+const CONF_BANDS = [
+  { key: "lt50", label: "Confidence under 50", lo: 0, hi: 50 }, { key: "50", label: "50–59", lo: 50, hi: 60 }, { key: "60", label: "60–69", lo: 60, hi: 70 },
+  { key: "70", label: "70–79", lo: 70, hi: 80 }, { key: "80", label: "80+", lo: 80, hi: Infinity },
+] as const;
+const SHORT_BANDS = [
+  { key: "lt5", label: "Short under 5% of float", lo: 0, hi: 5 }, { key: "5", label: "5–10%", lo: 5, hi: 10 }, { key: "10", label: "10–20%", lo: 10, hi: 20 },
+  { key: "20", label: "20%+", lo: 20, hi: Infinity }, { key: "unknown", label: "short interest unknown", lo: NaN, hi: NaN },
+] as const;
 const PAGE = 10;
 
 /** Where a card came from, in words: the desk or person, and the story / document / signal behind it. */
@@ -39,11 +47,11 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   const source = (PLAYERS as readonly string[]).includes(sp.source ?? "") ? (sp.source as Player) : "";
   const status = sp.status && sp.status in STATUS_RANK ? sp.status : "";
   const sort = SORTS.some((s) => s.value === sp.sort) ? sp.sort! : "best";
-  const conf = CONFS.includes(Number(sp.conf)) ? Number(sp.conf) : 0;
-  const cap = SIZE_KEYS.some((s) => s.key === sp.cap) ? sp.cap! : "";
+  const conf = CONF_BANDS.some((b) => b.key === sp.conf) ? sp.conf! : "";
+  const cap = SIZE_KEYS.some((s) => s.key === sp.cap) || sp.cap === "unknown" ? sp.cap! : "";
   const dir = sp.dir === "long" || sp.dir === "short" ? sp.dir : "";
-  const shortMin = (SHORT_MINS as readonly number[]).includes(Number(sp.short)) ? Number(sp.short) : 0;
-  const params: Record<string, string | undefined> = { days: days === 7 ? undefined : String(days), source: source || undefined, status: status || undefined, sort: sort === "best" ? undefined : sort, conf: conf ? String(conf) : undefined, cap: cap || undefined, short: shortMin ? String(shortMin) : undefined, dir: dir || undefined, page: sp.page };
+  const shortBand = SHORT_BANDS.some((b) => b.key === sp.short) ? sp.short! : "";
+  const params: Record<string, string | undefined> = { days: days === 7 ? undefined : String(days), source: source || undefined, status: status || undefined, sort: sort === "best" ? undefined : sort, conf: conf || undefined, cap: cap || undefined, short: shortBand || undefined, dir: dir || undefined, page: sp.page };
 
   const [cards, candidates, tracks, fb, recent] = await Promise.all([store.cardsSince(days), store.candidatesSince(days), store.allTracks(), store.latestFeedback(), store.cardsSince(120)]);
   const [reviews, profiles] = await Promise.all([store.allReviews(), profilesForCards(cards)]);
@@ -53,8 +61,19 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   const shortPx = shortSyms.length ? await (marketDataFromEnv()?.getSnapshots?.(shortSyms) ?? Promise.resolve({} as Record<string, { price: number }>)).catch(() => ({} as Record<string, { price: number }>)) : {};
   const penny = new Set(cards.filter((c) => isPennyShort(c, shortPx[c.primaryTicker]?.price)).map((c) => c.id));
   // Size and short-interest filters: the card's market cap and % of float short (frozen when written, else today's).
-  const capOk = (c: store.StoredCard, k = cap) => !k || sizeKey(profiles.get(c.id)?.marketCap) === k;
-  const shortOk = (c: store.StoredCard, m = shortMin) => !m || (shortPct(profiles.get(c.id)) ?? -1) >= m;
+  const capOk = (c: store.StoredCard, k = cap) => !k || (sizeKey(profiles.get(c.id)?.marketCap) ?? "unknown") === k;
+  const shortOk = (c: store.StoredCard, k = shortBand) => {
+    if (!k) return true;
+    const v = shortPct(profiles.get(c.id));
+    if (k === "unknown") return v === null;
+    const b = SHORT_BANDS.find((x) => x.key === k)!;
+    return v !== null && v >= b.lo && v < b.hi;
+  };
+  const confOk = (c: store.StoredCard, k = conf) => {
+    if (!k) return true;
+    const b = CONF_BANDS.find((x) => x.key === k)!;
+    return c.card.confidence >= b.lo && c.card.confidence < b.hi;
+  };
   const dirOk = (c: store.StoredCard, d = dir) => !d || c.direction === d;
   const opp = opposingCalls(recent, tracks);
   const t = new Map(tracks.map((x) => [x.cardId, x]));
@@ -70,7 +89,7 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   // One list of every card in the window: filtered by source and status, sorted, 10 a page.
   const wantedId = Number(sp.card);
   const bySource = cards.filter((c) => (!repeats.has(c.id) || c.id === wantedId) && (!source || playerFor(c) === source) && (showPenny || !penny.has(c.id) || c.id === wantedId));
-  const byConf = bySource.filter((c) => c.card.confidence >= conf && capOk(c) && shortOk(c) && dirOk(c));
+  const byConf = bySource.filter((c) => confOk(c) && capOk(c) && shortOk(c) && dirOk(c));
   const rows = byConf.filter((c) => !status || c.status === status).sort((a, b) =>
     sort === "newest" ? b.createdAt.localeCompare(a.createdAt)
       : sort === "confidence" ? b.card.confidence - a.card.confidence || b.rankScore - a.rankScore
@@ -84,10 +103,10 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   const shownCards = cards.filter((c) => !repeats.has(c.id));
   for (const c of shownCards) sourceCounts.set(playerFor(c), (sourceCounts.get(playerFor(c)) ?? 0) + 1);
   const statusCount = (v: string) => byConf.filter((c) => !v || c.status === v).length;
-  const confCount = (n: number) => bySource.filter((c) => (!status || c.status === status) && c.card.confidence >= n && capOk(c) && shortOk(c) && dirOk(c)).length;
-  const capCount = (k: string) => bySource.filter((c) => (!status || c.status === status) && c.card.confidence >= conf && capOk(c, k) && shortOk(c) && dirOk(c)).length;
-  const shortCount = (m: number) => bySource.filter((c) => (!status || c.status === status) && c.card.confidence >= conf && capOk(c) && shortOk(c, m) && dirOk(c)).length;
-  const dirCount = (d: string) => bySource.filter((c) => (!status || c.status === status) && c.card.confidence >= conf && capOk(c) && shortOk(c) && dirOk(c, d)).length;
+  const confCount = (n: string) => bySource.filter((c) => (!status || c.status === status) && confOk(c, n) && capOk(c) && shortOk(c) && dirOk(c)).length;
+  const capCount = (k: string) => bySource.filter((c) => (!status || c.status === status) && confOk(c) && capOk(c, k) && shortOk(c) && dirOk(c)).length;
+  const shortCount = (m: string) => bySource.filter((c) => (!status || c.status === status) && confOk(c) && capOk(c) && shortOk(c, m) && dirOk(c)).length;
+  const dirCount = (d: string) => bySource.filter((c) => (!status || c.status === status) && confOk(c) && capOk(c) && shortOk(c) && dirOk(c, d)).length;
 
   return (
     <>
@@ -111,13 +130,13 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
         <FilterLinks params={params} name="status" value={status} reset={["page", "card"]} options={[{ value: "", label: "Any status", count: statusCount("") }, { value: "promoted", label: "Promoted", count: statusCount("promoted") }, { value: "late", label: "Late", count: statusCount("late") }, { value: "not_promoted", label: "Not promoted", count: statusCount("not_promoted") }]} />
       </div>
       <div className="toolbar">
-        <FilterLinks params={params} name="conf" value={conf ? String(conf) : ""} reset={["page", "card"]} options={[{ value: "", label: "Any confidence", count: confCount(0) }, ...CONFS.map((n) => ({ value: String(n), label: `Confidence ${n}+`, count: confCount(n) }))]} />
+        <FilterLinks params={params} name="conf" value={conf} reset={["page", "card"]} options={[{ value: "", label: "Any confidence", count: confCount("") }, ...CONF_BANDS.map((b) => ({ value: b.key, label: b.label, count: confCount(b.key) }))]} />
       </div>
       <div className="toolbar">
-        <FilterLinks params={params} name="cap" value={cap} reset={["page", "card"]} options={[{ value: "", label: "Any size", count: capCount("") }, ...SIZE_KEYS.map((s) => ({ value: s.key, label: s.label, count: capCount(s.key) }))]} />
+        <FilterLinks params={params} name="cap" value={cap} reset={["page", "card"]} options={[{ value: "", label: "Any size", count: capCount("") }, ...SIZE_KEYS.map((s) => ({ value: s.key, label: s.label, count: capCount(s.key) })), { value: "unknown", label: "size unknown", count: capCount("unknown") }]} />
       </div>
       <div className="toolbar">
-        <FilterLinks params={params} name="short" value={shortMin ? String(shortMin) : ""} reset={["page", "card"]} options={[{ value: "", label: "Any short interest", count: shortCount(0) }, ...SHORT_MINS.map((m) => ({ value: String(m), label: `Short ${m}%+ of float`, count: shortCount(m) }))]} />
+        <FilterLinks params={params} name="short" value={shortBand} reset={["page", "card"]} options={[{ value: "", label: "Any short interest", count: shortCount("") }, ...SHORT_BANDS.map((b) => ({ value: b.key, label: b.label, count: shortCount(b.key) }))]} />
       </div>
       <div className="toolbar">
         <FilterLinks params={params} name="source" value={source} reset={["page", "card"]} options={[{ value: "", label: "All sources", count: shownCards.length }, ...PLAYERS.filter((p) => sourceCounts.get(p)).map((p) => ({ value: p, label: PLAYER_LABEL[p].replace(/^Scout · /, ""), count: sourceCounts.get(p) }))]} />
