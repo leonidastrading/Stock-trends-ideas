@@ -28,11 +28,10 @@ export async function badgeCounts(since: Partial<Record<BadgeTab, string>>, now 
     const seen = (await store.cacheGet<Record<string, string>>("drift:first-seen").catch(() => null))?.data ?? {};
     return earn + Object.values(seen).filter((at) => at > s).length;
   });
+  // The News feed's shared copy (no extra calls): new headlines since the tab was last opened.
   add("news", async (s) => {
-    const data = marketDataFromEnv();
-    if (!data) return 0;
-    const from = new Date(Math.max(Date.parse(s), now.getTime() - 24 * 3600_000));
-    return (await data.getNews([], from, now, 100)).filter((x) => new Date(x.ts) > new Date(s)).length;
+    const { newsFeed } = await import("./newsfeed");
+    return (await newsFeed(now)).filter((x) => x.kind === "news" && !x.repostedAt && Date.parse(x.at) > Date.parse(s)).length;
   });
   await Promise.all(jobs);
   return out;

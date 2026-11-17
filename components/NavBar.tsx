@@ -14,7 +14,7 @@ const LINKS: Array<{ href: string; label: string; badge?: string }> = [
 /** Pages that belong to a tab (the Drift tab also covers the earnings view). */
 const TAB_OF: Record<string, string> = { "/earnings": "drift" };
 const KEY = "scout-seen";
-const POLL_MS = 45_000;
+const POLL_MS = 90_000;
 
 const readSeen = (): Record<string, string> => { try { return JSON.parse(localStorage.getItem(KEY) ?? "{}"); } catch { return {}; } };
 const writeSeen = (s: Record<string, string>) => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* storage unavailable */ } };

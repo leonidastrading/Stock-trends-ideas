@@ -46,7 +46,8 @@ export default function NewsFeed({ initial }: { initial: FeedItem[] }) {
         setError(err instanceof Error ? err.message : String(err));
       }
     };
-    const id = setInterval(poll, POLL_MS);
+    let lastPoll = Date.now();
+    const id = setInterval(() => { if (!document.hidden || Date.now() - lastPoll > 120_000) { lastPoll = Date.now(); void poll(); } }, POLL_MS);
     const clock = setInterval(() => tick((n) => n + 1), 30_000);
     const seen = () => { if (!document.hidden) { unseen.current = 0; document.title = "News · Trend scout"; } };
     document.addEventListener("visibilitychange", seen);

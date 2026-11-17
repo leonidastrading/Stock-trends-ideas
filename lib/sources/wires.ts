@@ -106,19 +106,37 @@ function hashId(s: string): number {
   return 9e12 + Math.abs(h); // far from Alpaca's ids
 }
 
-/** The fast sources' last-day items. Never throws. */
+let cikMemo: { at: number; map: Map<string, string> } | null = null;
+/** CIK → ticker, from the SEC's company list, kept in memory for a day (the list is about 1 MB). */
+async function tickerByCik(ua: string, fetchImpl?: typeof fetch): Promise<Map<string, string>> {
+  if (cikMemo && Date.now() - cikMemo.at < 24 * 3600_000 && !fetchImpl) return cikMemo.map;
+  const map = new Map((await secTickerList(ua, fetchImpl)).map((x) => [x.cik, x.ticker]));
+  if (!fetchImpl) cikMemo = { at: Date.now(), map };
+  return map;
+}
+
+let fastMemo: { at: number; items: NewsItem[] } | null = null;
+
+/** The fast sources' last-day items, shared for 15 seconds by every caller on this server. Never throws. */
 export async function fastNews(env: NodeJS.ProcessEnv = process.env, fetchImpl?: typeof fetch, now = new Date()): Promise<NewsItem[]> {
+  if (!fetchImpl && fastMemo && Date.now() - fastMemo.at < 15_000) return fastMemo.items;
+  const items = await fastNewsFresh(env, fetchImpl, now);
+  if (!fetchImpl) fastMemo = { at: Date.now(), items };
+  return items;
+}
+
+async function fastNewsFresh(env: NodeJS.ProcessEnv, fetchImpl: typeof fetch | undefined, now: Date): Promise<NewsItem[]> {
   const since = now.getTime() - 24 * 3600_000;
   const jobs: Array<Promise<NewsItem[]>> = WIRES.map((w) => getText(w.url, { headers: UA, fetchImpl, cacheMs: 10_000, timeoutMs: 6000, retries: 0 }).then((x) => wireItems(x, w.name, w.url)).catch(() => []));
   jobs.push(getText(HALTS, { headers: UA, fetchImpl, cacheMs: 10_000, timeoutMs: 6000, retries: 0 }).then(haltItems).catch(() => []));
   const ua = env.SEC_USER_AGENT?.trim();
   if (ua) {
     jobs.push((async () => {
-      const [xml, list] = await Promise.all([
+      const [xml, map] = await Promise.all([
         getText(SEC_CURRENT, { headers: { "user-agent": ua, accept: "application/atom+xml" }, fetchImpl, cacheMs: 10_000, timeoutMs: 6000, retries: 0 }),
-        secTickerList(ua, fetchImpl),
+        tickerByCik(ua, fetchImpl),
       ]);
-      return secItems(xml, new Map(list.map((x) => [x.cik, x.ticker])));
+      return secItems(xml, map);
     })().catch(() => []));
   }
   const key = env.FINNHUB_API_KEY?.trim();

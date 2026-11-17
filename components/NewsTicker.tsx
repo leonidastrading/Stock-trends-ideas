@@ -36,7 +36,7 @@ export default function NewsTicker() {
       }
     };
     poll();
-    const t = setInterval(() => (document.hidden ? undefined : poll()), 15_000);
+    const t = setInterval(() => (document.hidden ? undefined : poll()), 30_000);
     const v = () => { if (!document.hidden) poll(); };
     document.addEventListener("visibilitychange", v);
     const clock = setInterval(() => tick((n) => n + 1), 60_000);
