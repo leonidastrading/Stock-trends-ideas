@@ -48,6 +48,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
     <CardCollapse id={c.id}>
       <div>
         <div className="inline">
+          <a className="tag card-number" href={`/ideas?days=365&card=${c.id}#card-${c.id}`} title="Link to this card">#{c.id}</a>
           <span className={`tag ${c.status}`}>{c.status.replace("_", " ")}</span>
           <span className="tag">{KIND_LABEL[c.kind as Kind] ?? c.kind}</span>
           <span className="tag">{c.origin === "human" ? "human-originated" : "scout"}</span>

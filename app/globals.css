@@ -357,3 +357,7 @@ main { overflow-wrap: break-word; }
 .notice-recent { list-style: none; margin: 0; padding: 0; }
 .notice-recent li { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--border); }
 .notice-recent li:last-child { border-bottom: 0; }
+
+/* The card's number at the start of its header: a link to the card. */
+.tag.card-number { font-weight: 700; color: var(--text-primary); text-decoration: none; }
+.tag.card-number:hover { text-decoration: underline; }
