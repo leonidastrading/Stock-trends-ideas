@@ -37,13 +37,18 @@ export async function newsFeed(now = new Date()): Promise<FeedItem[]> {
   if (Date.now() - cache.at < 30_000 && cache.items.length) return cache.items;
   const data = marketDataFromEnv();
   const since = new Date(now.getTime() - 24 * 3600_000);
-  const [news, posts, cards, fromRumors] = await Promise.all([
+  const [alpaca, fast, posts, cards, fromRumors] = await Promise.all([
     data ? data.getNews([], since, now, 200).catch(() => [] as NewsItem[]) : Promise.resolve([] as NewsItem[]),
+    // Press-release wires, the SEC's live 8-Ks and Finnhub: fast even when Alpaca's stream lags.
+    import("../sources/wires").then(({ fastNews }) => fastNews(process.env, undefined, now)).catch(() => [] as NewsItem[]),
     store.truthPostsSince(since.toISOString(), true).catch(() => []),
     store.cardsSince(30).catch(() => []),
     import("./rumor-check").then(({ alreadyNewsSince }) => alreadyNewsSince(new Date(now.getTime() - 3 * 86400_000))).catch(() => []),
   ]);
   const bare = (h: string) => h.replace(/^\s*reported\s+\w+(\s+week)?\s*,\s*/i, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  // The same story from two sources: keep the first one seen (Alpaca's, then the fast sources').
+  const seen = new Set(alpaca.map((n) => bare(n.headline)));
+  const news = [...alpaca, ...fast.filter((n) => { const k = bare(n.headline); if (seen.has(k)) return false; seen.add(k); return true; })];
   const originals = new Set(news.filter((n) => !n.repostedAt).map((n) => bare(n.headline)));
   const bySym = new Map<string, number[]>();
   // One card per stock: its latest (a stock with many cards would otherwise list them all on every headline).

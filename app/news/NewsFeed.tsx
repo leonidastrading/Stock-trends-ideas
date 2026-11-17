@@ -68,6 +68,13 @@ export default function NewsFeed({ initial }: { initial: FeedItem[] }) {
         </span>
         <span className="small muted">Live: checks every 30 seconds · last {checked.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}{error ? <span className="warn"> · {error}</span> : null}</span>
       </div>
+      {items.length > 0 && (() => {
+        // How fresh each source is: a lagging feed shows at a glance.
+        const newest = new Map<string, string>();
+        for (const i of items) if (!i.repostedAt && i.kind === "news" && (!newest.has(i.source) || i.at > newest.get(i.source)!)) newest.set(i.source, i.at);
+        const list = [...newest].sort((a, b) => b[1].localeCompare(a[1])).slice(0, 6);
+        return <p className="small muted" style={{ margin: "0 0 8px" }}>Newest by source: {list.map(([src, at], k) => <span key={src}>{k ? " · " : ""}{src} {when(at)}</span>)}</p>;
+      })()}
       {shown.length === 0 && <p className="small muted">{mine ? "No headlines on your cards' stocks in the last 24 hours." : "No headlines yet (the news stream needs the Alpaca keys)."}</p>}
       {shown.map((i) => (
         <article key={i.id} className={`news-item card${fresh.has(i.id) ? " fresh" : ""}`} onMouseEnter={() => fresh.has(i.id) && setFresh((f) => { const g = new Set(f); g.delete(i.id); return g; })}>
