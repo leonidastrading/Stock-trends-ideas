@@ -33,6 +33,14 @@ export function moveOver(bars: DailyBar[], sessions: number): number | null {
   return from > 0 ? (s[s.length - 1].c / from - 1) * 100 : null;
 }
 
+/** Pure: the stock's normal daily move: the average absolute close-to-close change over the last `n` sessions, in %. */
+export function avgDailyMove(bars: DailyBar[], n = 20): number | null {
+  const s = bars.slice().sort((a, b) => a.date.localeCompare(b.date)).slice(-(n + 1));
+  if (s.length < 6) return null;
+  const moves = s.slice(1).map((b, i) => Math.abs(b.c / s[i].c - 1) * 100);
+  return moves.reduce((a, b) => a + b, 0) / moves.length;
+}
+
 /** Pure: the live block for one stock. */
 export function liveLines(symbol: string, snap: { price: number; prevClose: number | null; at: string | null } | undefined, bars: DailyBar[], news: NewsItem[]): string {
   const lines: string[] = [];
@@ -43,7 +51,10 @@ export function liveLines(symbol: string, snap: { price: number; prevClose: numb
     const last = bars.slice().sort((a, b) => a.date.localeCompare(b.date)).at(-1)!;
     lines.push(`${symbol} last close $${last.c.toFixed(2)} on ${last.date} (no live quote).`);
   } else lines.push(`${symbol}: no price data.`);
-  if (bars.length > 5) lines.push(`Moves: ${pct(moveOver(bars, 5))} over 5 sessions, ${pct(moveOver(bars, 21))} over 1 month, ${pct(moveOver(bars, 63))} over 3 months.`);
+  if (bars.length > 5) {
+    const normal = avgDailyMove(bars);
+    lines.push(`Moves: ${pct(moveOver(bars, 5))} over 5 sessions, ${pct(moveOver(bars, 21))} over 1 month, ${pct(moveOver(bars, 63))} over 3 months.${normal !== null ? ` Normal daily move: about ${normal.toFixed(1)}% (average over 20 sessions).` : ""}`);
+  }
   const mine = news.filter((n) => n.symbols.includes(symbol)).sort((a, b) => b.ts.localeCompare(a.ts)).slice(0, 12);
   lines.push(mine.length ? `Headlines, last 7 days (newest first):\n${mine.map((n) => `- ${fmtEt(n.ts)} ET [${n.source || "news"}] ${n.headline}${n.repostedAt ? " (re-posted older news)" : ""}`).join("\n")}` : "No headlines in the last 7 days.");
   return lines.join("\n");

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DailyBar, NewsItem } from "@/lib/alpaca";
-import { liveContext, liveLines, tickersAsked } from "@/lib/scout/live-context";
+import { avgDailyMove, liveContext, liveLines, tickersAsked } from "@/lib/scout/live-context";
 
 const listed = new Set(["RDDT", "NVDA", "ON", "ALL", "NOW", "URGN", "CGON", "IT"]);
 
@@ -33,5 +33,13 @@ describe("live data for chat questions", () => {
     expect(t).toMatch(/RDDT price \$150\.00 \(−6\.3% vs the previous close\)/);
     expect(t).toMatch(/No headlines in the last 7 days/);
     expect(await liveContext(null, ["RDDT"])).toBeNull();
+  });
+});
+
+describe("normal daily move (for telling noise from a real break)", () => {
+  it("averages the absolute daily change over the last 20 sessions", () => {
+    const bars: DailyBar[] = Array.from({ length: 30 }, (_, i) => ({ symbol: "CAR", date: `2026-10-${String(i + 1).padStart(2, "0")}`, o: 1, h: 1, l: 1, c: i % 2 ? 102 : 100, v: 1 }));
+    expect(avgDailyMove(bars)).toBeCloseTo(1.98, 1); // alternating +2% / -1.96%
+    expect(avgDailyMove(bars.slice(0, 4))).toBeNull();
   });
 });
