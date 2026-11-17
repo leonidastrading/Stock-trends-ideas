@@ -1,6 +1,5 @@
 /** "New since you last looked" counts for the menu's badges. Each tab's count is what was added after the time it was last seen. */
 import { query as q } from "../db";
-import { marketDataFromEnv } from "../alpaca";
 import * as store from "./store";
 
 export const BADGE_TABS = ["ideas", "news", "drift", "rumors", "themes", "investigate", "inbox", "filings", "congress", "watchlist"] as const;
