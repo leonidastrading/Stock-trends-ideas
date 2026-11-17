@@ -314,6 +314,10 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
   let items: NewsItem[];
   try {
     items = await deps.data.getNews([], daysAgo(deps.now, 1), deps.now, 1500);
+    // The fast sources too (press wires, SEC 8-Ks, Nasdaq halts, Finnhub): stories are not held back when Alpaca's stream lags.
+    const fast = await import("../sources/wires").then(({ fastNews }) => fastNews(deps.env, deps.fetchImpl, deps.now)).catch(() => [] as NewsItem[]);
+    const seen = new Set(items.map((n) => n.headline.toLowerCase()));
+    items = [...items, ...fast.filter((n) => !seen.has(n.headline.toLowerCase()))];
   } catch (err) {
     report.error = `news stream: ${err instanceof Error ? err.message : String(err)}`;
     return report;
