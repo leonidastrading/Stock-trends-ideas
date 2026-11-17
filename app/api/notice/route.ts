@@ -54,3 +54,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, errors: [err instanceof Error ? err.message : String(err)] }, { status: 500 });
   }
 }
+
+/** Read an uploaded image (base64, already shrunk in the browser) and return what to fill the form with. */
+export async function PUT(request: Request) {
+  if (!checkBasicAuth(request.headers.get("authorization"))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!hasDatabase()) return NextResponse.json({ ok: false, errors: ["database not connected"] }, { status: 503 });
+  const { IMAGE_TYPES, observationFrom, readImage } = await import("@/lib/scout/image-read");
+  const body = z.object({ mediaType: z.enum(IMAGE_TYPES), data: z.string().min(100).max(6_000_000), note: z.string().max(2000).default("") }).safeParse(await request.json().catch(() => null));
+  if (!body.success) return NextResponse.json({ ok: false, errors: ["send a JPEG, PNG, GIF or WebP image (under about 4 MB)"] }, { status: 422 });
+  try {
+    const r = await readImage({ mediaType: body.data.mediaType, data: body.data.data }, body.data.note, { callModel: defaultDeps().callModel, now: new Date() });
+    return NextResponse.json({ ok: true, reading: r, observation: observationFrom(r, body.data.note), term: r.term, tickers: r.tickers });
+  } catch (err) {
+    return NextResponse.json({ ok: false, errors: [err instanceof Error ? err.message : String(err)] }, { status: 500 });
+  }
+}

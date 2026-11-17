@@ -7,6 +7,7 @@ import { EARN_PROMPT, EARN_SCHEMA } from "./earnings";
 import { RUMOR_CHECK_PROMPT, RUMOR_CHECK_SCHEMA } from "./rumor-check";
 import { INVALIDATION_PROMPT, INVALIDATION_SCHEMA } from "./invalidation";
 import { THEMES_PROMPT, THEMES_SCHEMA } from "./themes";
+import { IMAGE_PROMPT, IMAGE_SCHEMA } from "./image-read";
 import { INVESTIGATE_PLAN_PROMPT, INVESTIGATE_PLAN_SCHEMA, INVESTIGATE_REPORT_PROMPT, INVESTIGATE_REPORT_SCHEMA } from "./investigate";
 import Anthropic from "@anthropic-ai/sdk";
 import { callCost } from "@/config/scout";
@@ -26,8 +27,8 @@ export interface ModelReply {
   costUsd: number | null;
 }
 
-export type Purpose = "research" | "triage" | "stories" | "review" | "inbox" | "inbox_digest" | "truth" | "rumors" | "investigate_plan" | "investigate_report" | "earnings_card" | "rumor_check" | "invalidation" | "themes";
-export type CallModel = (args: { model: string; effort: Effort; user: string; purpose?: Purpose }) => Promise<ModelReply>;
+export type Purpose = "research" | "triage" | "stories" | "review" | "inbox" | "inbox_digest" | "truth" | "rumors" | "investigate_plan" | "investigate_report" | "earnings_card" | "rumor_check" | "invalidation" | "themes" | "image_read";
+export type CallModel = (args: { model: string; effort: Effort; user: string; purpose?: Purpose; images?: Array<{ mediaType: string; data: string }> }) => Promise<ModelReply>;
 
 const PROMPTS: Record<Purpose, { system: string; schema: Record<string, unknown> }> = {
   research: { system: SYSTEM_PROMPT, schema: CARD_JSON_SCHEMA as unknown as Record<string, unknown> },
@@ -39,6 +40,7 @@ const PROMPTS: Record<Purpose, { system: string; schema: Record<string, unknown>
   truth: { system: TRUTH_PROMPT, schema: TRUTH_SCHEMA as unknown as Record<string, unknown> },
   rumors: { system: RUMORS_PROMPT, schema: RUMORS_SCHEMA as unknown as Record<string, unknown> },
   investigate_plan: { system: INVESTIGATE_PLAN_PROMPT, schema: INVESTIGATE_PLAN_SCHEMA as unknown as Record<string, unknown> },
+  image_read: { system: IMAGE_PROMPT, schema: IMAGE_SCHEMA as unknown as Record<string, unknown> },
   themes: { system: THEMES_PROMPT, schema: THEMES_SCHEMA as unknown as Record<string, unknown> },
   invalidation: { system: INVALIDATION_PROMPT, schema: INVALIDATION_SCHEMA as unknown as Record<string, unknown> },
   rumor_check: { system: RUMOR_CHECK_PROMPT, schema: RUMOR_CHECK_SCHEMA as unknown as Record<string, unknown> },
@@ -49,14 +51,15 @@ const PROMPTS: Record<Purpose, { system: string; schema: Record<string, unknown>
 /** Models that accept the server-side refusal fallback. */
 export const FALLBACK_MODELS = new Set(["claude-fable-5-2", "claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5"]);
 
-export const callResearchModel: CallModel = async ({ model, effort, user, purpose = "research" }) => {
+export const callResearchModel: CallModel = async ({ model, effort, user, purpose = "research", images }) => {
   const client = new Anthropic(); // ANTHROPIC_API_KEY from the environment
   const { system, schema } = PROMPTS[purpose];
   const base = {
     model,
     max_tokens: 16000,
     system: [{ type: "text" as const, text: system, cache_control: { type: "ephemeral" as const } }],
-    messages: [{ role: "user" as const, content: user }],
+    // Images (base64) go before the text, as the API recommends.
+    messages: [{ role: "user" as const, content: images?.length ? [...images.map((im) => ({ type: "image" as const, source: { type: "base64" as const, media_type: im.mediaType as "image/jpeg", data: im.data } })), { type: "text" as const, text: user }] : user }],
     output_config: { effort, format: { type: "json_schema" as const, schema } },
   };
   let resp: Anthropic.Beta.BetaMessage;

@@ -1,7 +1,8 @@
-import CardView from "@/components/CardView";
+import Direction from "@/components/Direction";
+import { paperResult } from "@/lib/scout/paper-result";
+import { fmtEt } from "@/lib/time";
 import SetupNotice from "@/components/SetupNotice";
 import { hasDatabase } from "@/lib/db";
-import { opposingCalls, upcomingCatalysts } from "@/lib/scout/calendar";
 import * as store from "@/lib/scout/store";
 import ImportForm from "./ImportForm";
 import NoticeForm from "./NoticeForm";
@@ -11,10 +12,8 @@ export const runtime = "nodejs";
 
 export default async function NoticePage() {
   if (!hasDatabase()) return <SetupNotice />;
-  const [cards, tracks, spend, fb] = await Promise.all([store.cardsSince(90), store.allTracks(), store.spendByDay(1), store.latestFeedback()]);
-  const opp = opposingCalls(cards, tracks);
-  const reviews = await store.allReviews();
-  const human = cards.filter((c) => c.origin === "human").slice(0, 10);
+  const [cards, tracks, spend] = await Promise.all([store.cardsSince(90), store.allTracks(), store.spendByDay(1)]);
+  const human = cards.filter((c) => c.origin === "human").slice(0, 15);
   const t = new Map(tracks.map((x) => [x.cardId, x]));
   return (
     <>
@@ -27,8 +26,28 @@ export default async function NoticePage() {
       <section className="card"><NoticeForm /></section>
       <section className="card small">Documents from other bots (GitHub inbox or JSON) and their track record are on the <a href="/inbox">Inbox</a> tab.</section>
       <section className="card"><h2>Import the daily stream file</h2><ImportForm /></section>
-      {human.length > 0 && <h2>Your recent cards</h2>}
-      {human.map((c) => <CardView key={c.id} c={c} track={t.get(c.id) ?? null} feedback={fb.get(`card:${c.id}`) ?? null} opposing={opp.get(c.id)} review={reviews.get(c.id) ?? null} />)}
+      {human.length > 0 && (
+        <section className="card">
+          <h2>Your recent cards</h2>
+          <p className="small muted">The full cards are on <a href="/ideas?source=you&amp;days=90&amp;sort=newest">Ideas</a> (filtered to yours).</p>
+          <ul className="notice-recent">
+            {human.map((c) => {
+              const tr = t.get(c.id);
+              const r = tr ? paperResult(tr, null, null) : null;
+              return (
+                <li key={c.id}>
+                  <span className="small muted">{fmtEt(c.createdAt)}</span>
+                  <Direction direction={c.direction} ticker={c.primaryTicker} size="small" />
+                  <a href={`/ideas?days=365&card=${c.id}#card-${c.id}`}>{c.title}</a>
+                  <span className={`tag ${c.status}`}>{c.status.replace("_", " ")}</span>
+                  {r && r.closed && <span className={`small ${r.ret >= 0 ? "pos" : "neg"}`}>{r.ret >= 0 ? "+" : "−"}{Math.abs(r.ret * 100).toFixed(1)}%</span>}
+                  {tr?.invalidatedAt && <span className="tag neg">invalidated</span>}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
     </>
   );
 }

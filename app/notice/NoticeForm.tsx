@@ -5,6 +5,26 @@ import { useState } from "react";
 
 const KINDS = ["", "consumer", "platform", "second_order", "rerating", "event"];
 
+/** Shrink an image in the browser (longest side 1600 px, JPEG): fast to upload and well under the server's size limit. */
+async function toJpeg(file: Blob): Promise<{ data: string; preview: string }> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(new Error("that file is not an image the browser can open")); i.src = url; });
+    const scale = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.naturalWidth * scale);
+    c.height = Math.round(img.naturalHeight * scale);
+    const ctx = c.getContext("2d")!;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    const preview = c.toDataURL("image/jpeg", 0.85);
+    return { data: preview.split(",")[1], preview };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 export default function NoticeForm() {
   const [f, setF] = useState({ observation: "", term: "", kind: "", tickers: "" });
   const [busy, setBusy] = useState(false);
@@ -12,6 +32,30 @@ export default function NoticeForm() {
   const [result, setResult] = useState<{ cardId: number; status: string } | null>(null);
   const [extracted, setExtracted] = useState<Array<{ term: string; tickers: string[]; direction: string | null }> | null>(null);
   const long = f.observation.length > 1500;
+  const [img, setImg] = useState<{ preview: string; state: "reading" | "done" | string } | null>(null);
+
+  // An image (picked, pasted or dropped): the scout reads it and fills in the form for you to check.
+  async function readImage(file: Blob) {
+    setErrors([]);
+    setResult(null);
+    let shrunk: { data: string; preview: string };
+    try { shrunk = await toJpeg(file); } catch (err) { return setErrors([err instanceof Error ? err.message : String(err)]); }
+    setImg({ preview: shrunk.preview, state: "reading" });
+    const res = await fetch("/api/notice", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ mediaType: "image/jpeg", data: shrunk.data, note: f.observation.length < 300 ? f.observation : "" }) });
+    const j = await res.json().catch(() => ({ errors: [`HTTP ${res.status}`] }));
+    if (!res.ok || !j.ok) return setImg({ preview: shrunk.preview, state: (j.errors ?? ["could not read the image"]).join("; ") });
+    setF((old) => ({ ...old, observation: j.observation, term: old.term || j.term || "", tickers: old.tickers || (j.tickers ?? []).join(", ") }));
+    setImg({ preview: shrunk.preview, state: "done" });
+  }
+  function onPaste(e: React.ClipboardEvent) {
+    const item = [...e.clipboardData.items].find((i) => i.type.startsWith("image/"));
+    const file = item?.getAsFile();
+    if (file) { e.preventDefault(); void readImage(file); }
+  }
+  function onDrop(e: React.DragEvent) {
+    const file = [...e.dataTransfer.files].find((x) => x.type.startsWith("image/"));
+    if (file) { e.preventDefault(); void readImage(file); }
+  }
   const set = (k: keyof typeof f, v: string) => setF({ ...f, [k]: v });
 
   async function submit(e: React.FormEvent) {
@@ -30,7 +74,22 @@ export default function NoticeForm() {
   }
 
   return (
-    <form onSubmit={submit}>
+    <form onSubmit={submit} onPaste={onPaste} onDrop={onDrop} onDragOver={(e) => e.preventDefault()}>
+      <div className="notice-image">
+        <label className="notice-image-pick">
+          <input type="file" accept="image/*" onChange={(e) => { const file = e.target.files?.[0]; if (file) void readImage(file); e.target.value = ""; }} />
+          <span>📷 Upload an image</span>
+        </label>
+        <span className="small secondary">A chart, a screenshot of a post or article, or a photo. Or paste a screenshot (Ctrl/Cmd+V) or drop it here. The scout reads it and fills in the form below for you to check before researching.</span>
+        {img && (
+          <div className="notice-image-preview">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={img.preview} alt="Your uploaded image" />
+            <span className={`small ${img.state === "done" ? "pos" : img.state === "reading" ? "muted" : "neg"}`}>{img.state === "reading" ? "Reading the image… about 15 seconds" : img.state === "done" ? "Read. Check the text below, then press Research it." : img.state}</span>
+            <button type="button" className="link-button small" onClick={() => setImg(null)}>remove</button>
+          </div>
+        )}
+      </div>
       <label className="field"><span className="field-label">What did you notice? One or two sentences, or paste a whole article or page and the scout pulls the ideas out of it.</span>
         <textarea required rows={3} value={f.observation} onChange={(e) => set("observation", e.target.value)} placeholder="Clients keep asking for X. Everyone at the course has Y." /></label>
       <div className="fields" style={{ marginTop: 10 }}>
