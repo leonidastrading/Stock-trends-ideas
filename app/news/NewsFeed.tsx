@@ -6,7 +6,7 @@ import { chartUrl } from "@/config/links";
 import type { FeedItem } from "@/lib/scout/newsfeed";
 import { useStoredState } from "@/components/useStoredState";
 
-const POLL_MS = 30_000;
+const POLL_MS = 15_000;
 const when = (iso: string) => {
   const mins = Math.round((Date.now() - Date.parse(iso)) / 60000);
   if (mins < 1) return "just now";
@@ -66,7 +66,7 @@ export default function NewsFeed({ initial }: { initial: FeedItem[] }) {
           <button className={`chip${view === "latest" ? " active" : ""}`} onClick={() => setView("latest")}>Latest</button>
           <button className={`chip${mine ? " active" : ""}`} onClick={() => setMine(!mine)}>On my cards only</button>
         </span>
-        <span className="small muted">Live: checks every 30 seconds · last {checked.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}{error ? <span className="warn"> · {error}</span> : null}</span>
+        <span className="small muted">Live: checks every 15 seconds · last {checked.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}{error ? <span className="warn"> · {error}</span> : null}</span>
       </div>
       {items.length > 0 && (() => {
         // How fresh each source is: a lagging feed shows at a glance.

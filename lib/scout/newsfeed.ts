@@ -9,7 +9,7 @@ import * as store from "./store";
 import { isPennyShort } from "./card";
 
 /** Extra event words for the News tab only (operational shocks the story desk's list does not name). */
-const NEWS_EVENT = /\b(ground stop|grounded|grounding|delist\w*|cyberattack|ransomware|explosion|evacuat\w*|derail\w*|shutdown|layoffs?|job cuts|guidance raise|raises guidance|misses estimates|beats estimates)\b/i;
+export const NEWS_EVENT = /\b(ground stop|grounded|grounding|delist\w*|cyberattack|ransomware|explosion|evacuat\w*|derail\w*|shutdown|layoffs?|job cuts|guidance raise|raises guidance|misses estimates|beats estimates)\b/i;
 
 export interface FeedItem { id: string; at: string; headline: string; summary: string; source: string; url: string; symbols: string[]; event: string | null; cardIds: number[]; buzz: number; score: number; kind: "news" | "trump" | "rumor"; repostedAt?: string }
 
@@ -34,7 +34,7 @@ const cache = { at: 0, items: [] as FeedItem[] };
 
 /** The last 24 hours, newest data at most 30 seconds old. */
 export async function newsFeed(now = new Date()): Promise<FeedItem[]> {
-  if (Date.now() - cache.at < 30_000 && cache.items.length) return cache.items;
+  if (Date.now() - cache.at < 10_000 && cache.items.length) return cache.items;
   const data = marketDataFromEnv();
   const since = new Date(now.getTime() - 24 * 3600_000);
   const [alpaca, fast, posts, cards, fromRumors] = await Promise.all([

@@ -1,0 +1,21 @@
+import { NextResponse } from "next/server";
+import { checkCronSecret } from "@/lib/auth";
+import { marketDataFromEnv } from "@/lib/alpaca";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+/**
+ * Phone alerts for breaking news on your stocks: halts, SEC filings, press releases and event headlines on any stock
+ * with a recent card or on the watch-list. Meant for cron-job.org every minute (bearer CRON_SECRET); cheap, no AI.
+ */
+export async function GET(request: Request) {
+  if (!checkCronSecret(request.headers.get("authorization"))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  try {
+    const { runNewsAlerts } = await import("@/lib/scout/news-alerts");
+    return NextResponse.json({ status: "ok", result: await runNewsAlerts({ data: marketDataFromEnv(), now: new Date() }) });
+  } catch (err) {
+    return NextResponse.json({ status: "error", error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+  }
+}

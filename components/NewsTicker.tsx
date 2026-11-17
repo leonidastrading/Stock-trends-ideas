@@ -8,7 +8,7 @@ interface Item { id: string; at: string; headline: string; url: string; symbols:
 const time = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
 const NEW_FOR_MS = 15 * 60_000;
 
-/** The running breaking-news ticker under the menu: the last 3 hours' breaking stories, checked every 30 seconds. */
+/** The running breaking-news ticker under the menu: the last 3 hours' breaking stories, checked every 15 seconds. */
 export default function NewsTicker() {
   const [items, setItems] = useState<Item[] | null>(null);
   const [error, setError] = useState(false);
@@ -36,7 +36,7 @@ export default function NewsTicker() {
       }
     };
     poll();
-    const t = setInterval(() => (document.hidden ? undefined : poll()), 30_000);
+    const t = setInterval(() => (document.hidden ? undefined : poll()), 15_000);
     const v = () => { if (!document.hidden) poll(); };
     document.addEventListener("visibilitychange", v);
     const clock = setInterval(() => tick((n) => n + 1), 60_000);

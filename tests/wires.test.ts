@@ -45,3 +45,35 @@ describe("fast news sources", () => {
     expect(await fastNews({} as NodeJS.ProcessEnv, fetchImpl, new Date("2026-11-20T21:30:00Z"))).toEqual([]);
   });
 });
+
+describe("trading halts and phone alerts", async () => {
+  const { etToIso, haltItems } = await import("@/lib/sources/wires");
+  const { pickAlerts } = await import("@/lib/scout/news-alerts");
+  const HALT = `<rss xmlns:ndaq="http://www.nasdaqtrader.com/"><channel><item><title>XYZ</title><ndaq:HaltDate>11/17/2026</ndaq:HaltDate><ndaq:HaltTime>15:58:02</ndaq:HaltTime><ndaq:IssueSymbol>URGN</ndaq:IssueSymbol><ndaq:IssueName>UroGen Pharma Ltd</ndaq:IssueName><ndaq:Market>NASDAQ</ndaq:Market><ndaq:ReasonCode>T1</ndaq:ReasonCode><ndaq:ResumptionTradeTime></ndaq:ResumptionTradeTime></item></channel></rss>`;
+
+  it("converts Eastern time, winter and summer", () => {
+    expect(etToIso("11/17/2026", "15:58:02")).toBe("2026-11-17T20:58:02.000Z");
+    expect(etToIso("07/01/2026", "09:30:00")).toBe("2026-07-01T13:30:00.000Z");
+  });
+
+  it("reads Nasdaq's halt feed", () => {
+    expect(haltItems(HALT)[0]).toMatchObject({ headline: "Trading halted: URGN (UroGen Pharma Ltd), news pending", symbols: ["URGN"], source: "Nasdaq halts", ts: "2026-11-17T20:58:02.000Z" });
+  });
+
+  it("alerts new halts, filings, releases and event headlines on your stocks, once, most urgent first", () => {
+    const now = new Date("2026-11-17T21:05:00Z");
+    const n = (o: Record<string, unknown>) => ({ id: 1, ts: "2026-11-17T21:00:00Z", headline: "h", summary: "", symbols: ["NVDA"], source: "fiscal.ai", url: "https://x/1", ...o });
+    const items = [
+      n({ headline: "NVIDIA beats estimates", url: "https://x/a" }),
+      n({ headline: "NVIDIA CORP files 8-K: results of operations (earnings)", source: "SEC 8-K", url: "https://sec/1" }),
+      ...haltItems(HALT),
+      n({ headline: "Nvidia stock is popular", url: "https://x/b" }), // no event word
+      n({ headline: "Apple beats estimates", symbols: ["AAPL"], url: "https://x/c" }), // not yours
+      n({ headline: "Old news beats", ts: "2026-11-17T19:00:00Z", url: "https://x/d" }), // too old
+    ];
+    const picks = pickAlerts(items, new Set(["NVDA", "URGN"]), new Set(), now);
+    expect(picks.map((p) => p.why)).toEqual(["halt", "filing", "beats estimates"]);
+    expect(picks).toHaveLength(3);
+    expect(pickAlerts(items, new Set(["NVDA", "URGN"]), new Set(picks.map((p) => p.key)), now)).toHaveLength(0);
+  });
+});
