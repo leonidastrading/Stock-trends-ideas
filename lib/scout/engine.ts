@@ -259,6 +259,10 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
   if (left() > 70_000) {
     out.invalidation = await import("./invalidation").then(({ checkInvalidations }) => checkInvalidations({ data, callModel: callResearchModel, now, env: process.env }, deadline - 30_000)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
   } else out.invalidation = "later: not enough time";
+  // One-sentence thesis per card (display only), a few batches per call.
+  if (left() > 50_000) {
+    out.theses = await import("./thesis").then(({ writeTheses }) => writeTheses({ callModel: callResearchModel, now }, deadline - 30_000)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+  } else out.theses = "later: not enough time";
   // Market cap and short interest per card, frozen the day it is written (for scoring by size and short interest).
   if (left() > 60_000) {
     out.cardProfiles = await import("./card-profiles").then(({ captureCardProfiles }) => captureCardProfiles(now, deadline - 40_000)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);

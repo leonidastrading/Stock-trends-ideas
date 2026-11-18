@@ -17,9 +17,11 @@ import * as store from "@/lib/scout/store";
 import type { Feedback as FeedbackRow, StoredCard, StoredReview, Track } from "@/lib/scout/store";
 import { daysBetween, fmtEt, toEt } from "@/lib/time";
 import { paperResult } from "@/lib/scout/paper-result";
+import { fallbackThesis } from "@/lib/scout/thesis";
 
 // One read per page render, shared by every card on it.
 const recentBriefs = cache(() => store.cardBriefsSince(60).catch(() => [] as store.CardBrief[]));
+const allTheses = cache(() => import("@/lib/scout/thesis").then(({ cardTheses }) => cardTheses()).catch(() => new Map<number, string>()));
 
 const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
@@ -40,6 +42,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
   }
   const q = await quote(c.primaryTicker);
   const briefs = hasDatabase() ? await recentBriefs() : [];
+  const thesis = (hasDatabase() ? (await allTheses()).get(c.id) : undefined) ?? fallbackThesis(c);
   const otherCards = (sym: string) => briefs.filter((b) => b.id !== c.id && (b.primaryTicker === sym || b.tickers.includes(sym)));
   const filing = hasDatabase() ? await import("@/lib/scout/filing-watch").then(({ latestFilingWatch }) => latestFilingWatch([c.primaryTicker])).then((m) => m.get(c.primaryTicker) ?? null).catch(() => null) : null;
   // The paper result so far: the stock against SPY since the entry (open tracks use the live price).
@@ -98,6 +101,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
           {beforeExit ? <span className="tag warn" style={{ marginLeft: 6 }}>before this card&apos;s exit ({fmtDay(track!.deadlineDate)})</span> : null}
         </div>
         <h2 style={{ margin: "6px 0 2px" }}>{k.title}</h2>
+        <div className="thesis"><span className="thesis-label">Thesis</span> {thesis}</div>
         <div className="scores">
           <span>novelty <b>{k.scores.novelty}</b></span><span>materiality <b>{k.scores.materiality}</b></span><span>breadth <b>{k.scores.breadth_of_evidence}</b></span>
           <span>lateness <b>{k.scores.lateness}</b></span><span>confidence <b>{k.confidence}</b></span><span>rank <b>{c.rankScore}</b></span>

@@ -312,6 +312,13 @@ CREATE TABLE IF NOT EXISTS filing_watch (
   data jsonb
 );
 CREATE INDEX IF NOT EXISTS filing_watch_symbol_idx ON filing_watch (symbol, checked_at);
+-- One-sentence thesis per card (display only; never part of the card or its scoring).
+CREATE TABLE IF NOT EXISTS card_theses (
+  card_id integer PRIMARY KEY,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  thesis text NOT NULL
+);
+CREATE OR REPLACE TRIGGER card_theses_ro BEFORE UPDATE OR DELETE ON card_theses FOR EACH ROW EXECUTE FUNCTION forbid_change();
 CREATE OR REPLACE TRIGGER filing_watch_ro BEFORE UPDATE OR DELETE ON filing_watch FOR EACH ROW EXECUTE FUNCTION forbid_change();
 
 -- GitHub inbox: each file version (path + git sha) read once, with what came of it.
