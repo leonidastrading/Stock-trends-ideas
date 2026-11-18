@@ -109,9 +109,9 @@ export default async function RumorsPage({ searchParams }: { searchParams: Promi
       )}
       <div className="toolbar" id="rumors">
         <FilterLinks params={params} name="days" value={days === 7 ? "" : String(days)} reset={["page"]} options={[{ value: "", label: "7 days" }, { value: "30", label: "30 days" }, { value: "90", label: "90 days" }]} />
-        <FilterLinks params={params} name="tickers" value={withTickers ? "1" : ""} reset={["page"]} options={[{ value: "", label: "all" }, { value: "1", label: "with tickers" }]} />
-        <FilterLinks params={params} name="truth" value={truth} reset={["page"]} options={[{ value: "", label: "any status" }, { value: "confirmed", label: "✅ came true", count: tally("confirmed") }, { value: "partly", label: "partly true", count: tally("partly") }, { value: "denied", label: "denied", count: tally("denied") }, { value: "already_news", label: "already news", count: tally("already_news") }]} />
-        <FilterLinks params={params} name="cat" value={cat} reset={["page"]} options={[{ value: "", label: "every kind" }, ...CATEGORIES.filter((c) => counts.get(c)).map((c) => ({ value: c, label: c, count: counts.get(c) }))]} />
+        <FilterLinks params={params} name="tickers" value={withTickers ? "1" : ""} reset={["page"]} options={[{ value: "", label: "all", count: rumorsOnly.length }, { value: "1", label: "with tickers", count: rumorsOnly.filter((r) => r.tickers.length > 0).length }]} />
+        <FilterLinks params={params} name="truth" value={truth} reset={["page"]} options={[{ value: "", label: "any status", count: rumorsOnly.length }, { value: "confirmed", label: "✅ came true", count: tally("confirmed") }, { value: "partly", label: "partly true", count: tally("partly") }, { value: "denied", label: "denied", count: tally("denied") }, { value: "already_news", label: "already news", count: tally("already_news") }]} />
+        <FilterLinks params={params} name="cat" value={cat} reset={["page"]} options={[{ value: "", label: "every kind", count: rumorsOnly.length }, ...CATEGORIES.filter((c) => counts.get(c)).map((c) => ({ value: c, label: c, count: counts.get(c) }))]} />
       </div>
       {rows.length === 0 && <p className="small muted">No rumors in this window yet.</p>}
       {page.items.map((r) => {
