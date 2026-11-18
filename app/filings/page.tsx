@@ -7,7 +7,8 @@ import { OPTIONS_RULES } from "@/lib/scout/options-flow";
 import * as store from "@/lib/scout/store";
 import Ticker from "@/components/Ticker";
 import ResearchButton from "./ResearchButton";
-import { addDays, toEt } from "@/lib/time";
+import { addDays, fmtEt, toEt } from "@/lib/time";
+import { latestFilingWatch, WATCH_LABEL, type WatchRow } from "@/lib/scout/filing-watch";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -26,6 +27,10 @@ export default async function FilingsPage() {
   const buyNote = (b: store.InsiderBuyRow) => `Insider open-market purchase (SEC Form 4, filed ${b.filed}): ${b.owner ?? "an insider"} (${b.role ?? "insider"}) of ${b.issuerName ?? b.symbol} bought ${Math.round(b.shares ?? 0).toLocaleString("en-US")} shares at ${b.price === null ? "an unreported price" : `$${b.price}`} = ${usd(b.value)} on ${b.txDate ?? b.filed}${b.pctIncrease !== null ? `, adding ${b.pctIncrease}% to their holding` : ""}${b.routine === false ? ", outside their usual trading month (opportunistic)" : b.routine === true ? " (a routine purchase)" : ""}. Not under a 10b5-1 plan.`;
   const eightKs = alerts.filter((a) => a.kind === "8-K");
   const d13 = alerts.filter((a) => a.kind === "13D");
+  const nts = alerts.filter((a) => a.kind.startsWith("NT "));
+  const RANK = { red_flag: 0, past_due: 1, nt_filed: 2, late_vs_usual: 3, ok: 4 } as const;
+  const watch: WatchRow[] = [...(await latestFilingWatch().catch(() => new Map<string, WatchRow>())).values()].sort((a, b) => RANK[a.status] - RANK[b.status] || a.symbol.localeCompare(b.symbol));
+  const flagged = watch.filter((w) => w.status !== "ok");
   return (
     <>
       <h1>Filings</h1>
@@ -33,6 +38,19 @@ export default async function FilingsPage() {
         SEC filings the news evidence singles out, read from EDGAR&apos;s daily index the day after they are filed: <b>insider open-market purchases</b> (Form 4, code P, not under a 10b5-1 plan; &quot;opportunistic&quot; when outside the insider&apos;s usual calendar month), <b>new activist stakes</b> (Schedule 13D) and <b>8-Ks with bad-news items</b> (restatement, cyber incident, auditor change, impairment, restructuring, officer departure).
         Also: stocks that <b>both insiders and members of Congress</b> bought within 45 days (strongest), and <b>Congress clusters</b> (see the Congress tab). The strongest go to research as cards, at most four a day: restatements and cyber incidents first, then new 13Ds, then clustered or opportunistic insider buying.
         <div style={{ marginTop: 6 }}>Queue: {q.pending} to read · {q.done} read · {q.errors} errors · daily indexes loaded: {q.days.join(", ") || "none yet"}.</div>
+      </section>
+
+      <section className="card" id="watch">
+        <h2>Filing watch: card stocks</h2>
+        <p className="small muted">Every stock on an open paper trade or a card from the last two weeks, checked every 6 hours against its SEC filings: a 10-Q or 10-K <b>later than usual</b> (earnings are out and the company normally files the report within that many business days), a <b>late-filing notice</b> (NT 10-Q / NT 10-K), a report <b>past the SEC deadline</b>, or an 8-K saying past results can&apos;t be relied on (4.02) or the auditor changed (4.01). A change sends a phone alert and shows on the card. Late filers, especially during an accounting review, have tended to underperform afterwards.</p>
+        <div className="table-wrap"><table>
+          <thead><tr><th>Stock</th><th>Status</th><th>Details</th><th className="small">Since</th></tr></thead>
+          <tbody>
+            {flagged.map((w) => <tr key={w.symbol}><td><Ticker symbol={w.symbol} /></td><td><span className={`tag ${w.status === "late_vs_usual" ? "late" : "error"}`}>{WATCH_LABEL[w.status]}</span></td><td className="small">{w.message}</td><td className="small muted">{fmtEt(w.checkedAt)}</td></tr>)}
+            {flagged.length === 0 && <tr><td colSpan={4} className="muted small">Nothing late: {watch.length ? `all ${watch.length} card stocks checked are on time.` : "no checks yet (they run with the hourly upkeep)."}</td></tr>}
+          </tbody>
+        </table></div>
+        {watch.length > flagged.length && <details className="small"><summary>On time ({watch.length - flagged.length})</summary><ul>{watch.filter((w) => w.status === "ok").map((w) => <li key={w.symbol}><b>{w.symbol}</b>: {w.message}</li>)}</ul></details>}
       </section>
 
       <section className="card">
@@ -111,6 +129,17 @@ export default async function FilingsPage() {
           <tbody>
             {d13.map((a) => <tr key={a.accession}><td className="small">{a.filed}</td><td>{a.symbol ? <b>{a.symbol} </b> : null}<span className="small">{a.company}</span></td><td className="small">{a.filer}</td></tr>)}
             {d13.length === 0 && <tr><td colSpan={3} className="muted">None yet.</td></tr>}
+          </tbody>
+        </table></div>
+      </section>
+
+      <section className="card">
+        <h2>Late-filing notices (NT 10-Q / NT 10-K), all companies</h2>
+        <div className="table-wrap"><table>
+          <thead><tr><th>Filed</th><th>Company</th><th>Form</th></tr></thead>
+          <tbody>
+            {nts.map((a) => <tr key={a.accession}><td className="small">{a.filed}</td><td>{a.symbol ? <b>{a.symbol} </b> : null}<span className="small">{a.company}</span></td><td className="small">{a.kind}</td></tr>)}
+            {nts.length === 0 && <tr><td colSpan={3} className="muted">None yet.</td></tr>}
           </tbody>
         </table></div>
       </section>

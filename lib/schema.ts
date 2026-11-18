@@ -300,6 +300,20 @@ CREATE TABLE IF NOT EXISTS filing_alerts (
 );
 CREATE OR REPLACE TRIGGER filing_alerts_ro BEFORE UPDATE OR DELETE ON filing_alerts FOR EACH ROW EXECUTE FUNCTION forbid_change();
 
+-- Filing watch for card stocks: a row each time a stock's status changes (late 10-Q/10-K, late-filing notice, 4.01/4.02).
+CREATE TABLE IF NOT EXISTS filing_watch (
+  id serial PRIMARY KEY,
+  symbol text NOT NULL,
+  cik text,
+  checked_at timestamptz NOT NULL DEFAULT now(),
+  status text NOT NULL,
+  key text NOT NULL,
+  message text,
+  data jsonb
+);
+CREATE INDEX IF NOT EXISTS filing_watch_symbol_idx ON filing_watch (symbol, checked_at);
+CREATE OR REPLACE TRIGGER filing_watch_ro BEFORE UPDATE OR DELETE ON filing_watch FOR EACH ROW EXECUTE FUNCTION forbid_change();
+
 -- GitHub inbox: each file version (path + git sha) read once, with what came of it.
 CREATE TABLE IF NOT EXISTS inbox_files (
   path text NOT NULL,

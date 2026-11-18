@@ -637,7 +637,7 @@ export async function insiderBuysSince(from: string): Promise<InsiderBuyRow[]> {
   }));
 }
 
-export interface FilingAlert { accession: string; kind: "8-K" | "13D"; filed: string; cik: string | null; symbol: string | null; company: string | null; items: string[]; filer: string | null }
+export interface FilingAlert { accession: string; kind: "8-K" | "13D" | "NT 10-Q" | "NT 10-K"; filed: string; cik: string | null; symbol: string | null; company: string | null; items: string[]; filer: string | null }
 
 export async function addFilingAlert(a: FilingAlert): Promise<void> {
   await q(`INSERT INTO filing_alerts (accession, kind, filed, cik, symbol, company, items, filer) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (accession) DO NOTHING`, [a.accession, a.kind, a.filed, a.cik, a.symbol, a.company, a.items, a.filer]);

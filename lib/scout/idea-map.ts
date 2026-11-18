@@ -79,7 +79,7 @@ export async function ideaMap(now = new Date()): Promise<MapNode[]> {
     facts.push({ symbol: c.primaryTicker, source, note: cardNote(c, source, k?.term ?? c.title, k?.observation ?? null) });
   }
   for (const b of buys ?? []) if (b.symbol && b.routine !== true) facts.push({ symbol: b.symbol, source: "insider", note: `${b.role ?? "insider"} bought $${Math.round((b.value ?? 0) / 1000)}k` });
-  for (const a of alerts ?? []) if (a.symbol) facts.push({ symbol: a.symbol, source: "filings", note: a.kind === "13D" ? `new 13D by ${a.filer ?? "?"}` : `8-K ${a.items.map((i) => i.split(" ")[0]).join(", ")}` });
+  for (const a of alerts ?? []) if (a.symbol) facts.push({ symbol: a.symbol, source: "filings", note: a.kind === "13D" ? `new 13D by ${a.filer ?? "?"}` : a.kind.startsWith("NT ") ? `late-filing notice (${a.kind})` : `8-K ${a.items.map((i) => i.split(" ")[0]).join(", ")}` });
   for (const t of congress ?? []) if (t.tx === "buy" || t.tx === "sell") facts.push({ symbol: t.symbol, source: "congress", note: `${t.member} ${t.tx === "buy" ? "bought" : "sold"}` });
   for (const f of flags ?? []) facts.push({ symbol: f.symbol, source: "options", note: `new ${f.type}s $${f.strike} ${f.expiry.slice(5)}` });
   for (const p of posts ?? []) for (const s of p.read?.tickers ?? []) facts.push({ symbol: s, source: "truth", note: `${p.read!.direction}: ${p.read!.summary.slice(0, 80)}` });

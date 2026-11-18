@@ -294,6 +294,10 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
       out.filings = `failed: ${err instanceof Error ? err.message : String(err)}`;
     }
   } else out.filings = "later: not enough time";
+  // Filing watch on card stocks: late 10-Q/10-K, late-filing notices, restatements and auditor changes (every 6 hours each).
+  if (ua && left() > 25_000) {
+    out.filingWatch = await import("./filing-watch").then(({ runFilingWatch }) => runFilingWatch({ now, ua, env: process.env, fetchImpl }, deadline - 20_000)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
   if (left() > 20_000) {
     const { CHATTER_UNIVERSE } = await import("@/config/chatter");
     out.chatterSymbols = await refreshSymbolInfo(data, process.env, CHATTER_UNIVERSE.map((u) => u.symbol), now, 7 * 24, fetchImpl, deadline - 5_000).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);

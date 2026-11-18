@@ -32,7 +32,7 @@ export function parseFormIndex(text: string, forms: (form: string) => boolean): 
   return [...out.values()];
 }
 
-export const WANTED_FORMS = (f: string) => f === "4" || f === "8-K" || f === "SCHEDULE 13D" || f === "SC 13D";
+export const WANTED_FORMS = (f: string) => f === "4" || f === "8-K" || f === "SCHEDULE 13D" || f === "SC 13D" || f === "NT 10-Q" || f === "NT 10-K";
 
 export function indexUrl(date: string): string {
   const [y, m] = date.split("-").map(Number);

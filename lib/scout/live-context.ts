@@ -96,7 +96,12 @@ export async function liveContext(data: MarketData | null, symbols: string[], no
     data.getDailyBars(syms, addDays(today, -130), today).catch(() => [] as DailyBar[]),
     data.getNews(syms, new Date(now.getTime() - 7 * 86400_000), now, 80).catch(() => [] as NewsItem[]),
   ]);
-  const blocks = syms.map((s) => liveLines(s, (snaps as Record<string, { price: number; prevClose: number | null; at: string | null }>)[s], bars.filter((b) => b.symbol === s), news));
+  const watch = await import("./filing-watch").then(({ latestFilingWatch }) => latestFilingWatch(syms)).catch(() => new Map());
+  const blocks = syms.map((s) => {
+    const block = liveLines(s, (snaps as Record<string, { price: number; prevClose: number | null; at: string | null }>)[s], bars.filter((b) => b.symbol === s), news);
+    const w = watch.get(s);
+    return w && w.status !== "ok" ? `${block}\nSEC filings (checked ${fmtEt(w.checkedAt)} ET): ${w.message}` : block;
+  });
   return `LIVE DATA fetched ${fmtEt(now.toISOString())} ET, newer than the briefing. Use it for the current price, recent moves and recent news, and say when the briefing's figures are out of date.\n${blocks.join("\n\n")}`;
 }
 

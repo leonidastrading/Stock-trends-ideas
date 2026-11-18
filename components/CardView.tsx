@@ -35,6 +35,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
     else after(() => lookup);
   }
   const q = await quote(c.primaryTicker);
+  const filing = hasDatabase() ? await import("@/lib/scout/filing-watch").then(({ latestFilingWatch }) => latestFilingWatch([c.primaryTicker])).then((m) => m.get(c.primaryTicker) ?? null).catch(() => null) : null;
   // The paper result so far: the stock against SPY since the entry (open tracks use the live price).
   const spyNow = track?.entryPrice && !track.exitDate ? await quote("SPY").catch(() => null) : null;
   const result = track ? paperResult(track, q?.price ?? null, spyNow?.price ?? null) : null;
@@ -59,6 +60,13 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
             <div className="invalidated-label">✗ INVALIDATED</div>
             <div className="invalidated-note">{(track.invalidatedNote ?? "").replace(/^automatic: /, "") || "Marked by you."}</div>
             <div className="small">{track.invalidatedNote?.startsWith("automatic: ") ? "Found by the scout's invalidation watch" : "Marked by you"} · {fmtEt(track.invalidatedAt)} · {track.exitDate ? `paper trade exited ${track.exitDate}` : "paper trade exits at the next open"}</div>
+          </div>
+        )}
+        {filing && filing.status !== "ok" && (
+          <div className={`filing-banner ${filing.status === "late_vs_usual" ? "" : "severe"}`}>
+            <div className="filing-label">⚠ {filing.status === "red_flag" ? "SEC RED FLAG" : filing.status === "past_due" ? "REPORT PAST DUE" : filing.status === "nt_filed" ? "LATE-FILING NOTICE" : "REPORT LATER THAN USUAL"}</div>
+            <div>{filing.message}</div>
+            <div className="small">Filing watch · checked {fmtEt(filing.checkedAt)} ET{filing.cik ? <> · <a href={`https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${filing.cik}&type=&dateb=&owner=include&count=40`} target="_blank" rel="noreferrer">SEC filings</a></> : null}</div>
           </div>
         )}
         {track?.excluded && <div className="small neg" style={{ marginTop: 6 }}><b>Excluded from scoring: wrong security.</b> {track.excluded}</div>}

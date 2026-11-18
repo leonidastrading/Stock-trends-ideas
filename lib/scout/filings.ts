@@ -85,6 +85,10 @@ export async function processQueue(deadline: number, ua: string, fetchImpl?: typ
               await store.addFilingAlert({ accession: f.accession, kind: "8-K", filed: f.filed, cik, symbol: await tickerFor(cik), company: h.filer?.name ?? f.company, items: s.map((x) => `${x.item} ${x.label}`), filer: null });
               out.alerts++;
             }
+          } else if (f.form === "NT 10-Q" || f.form === "NT 10-K") {
+            const cik = h.filer?.cik ?? f.cik;
+            await store.addFilingAlert({ accession: f.accession, kind: f.form, filed: f.filed, cik, symbol: await tickerFor(cik), company: h.filer?.name ?? f.company, items: [`late-filing notice: the ${f.form.slice(3)} will be late`], filer: null });
+            out.alerts++;
           } else if (h.subject) {
             await store.addFilingAlert({ accession: f.accession, kind: "13D", filed: f.filed, cik: h.subject.cik, symbol: await tickerFor(h.subject.cik), company: h.subject.name, items: [], filer: h.filedBy?.name ?? null });
             out.alerts++;
@@ -199,7 +203,7 @@ export function pickSignals(buys: store.InsiderBuyRow[], alerts: store.FilingAle
         context: `SEC filing (8-K, filed ${a.filed}) by ${a.company}: ${a.items.join("; ")}. The news playbook: non-reliance (item 4.02) and material cybersecurity incidents (item 1.05) are among the clearest "follow the bad news" setups; bad news drifts for weeks to months, and the first cyber filing is usually incomplete. Check the company's size, the scope disclosed, and whether the move so far has priced it. Expected direction short unless the measurements say the market has already overreacted.`,
         trigger: [{ source: "edgar", metric: `8k_items:${a.symbol}`, value: research.length, baseline: null, changeVs12m: null, asOf: a.filed, note: `${a.company} 8-K filed ${a.filed}: ${a.items.join("; ")}` }],
       });
-    } else {
+    } else if (a.kind === "13D") {
       out.push({
         kind: "13D", symbol: a.symbol!, term: `filing: ${a.symbol} 13D ${a.filer ?? ""}`.trim(), strength: 2, direction: "long",
         context: `New Schedule 13D (activist or control stake) in ${a.company}, filed ${a.filed} by ${a.filer ?? "an investor"}. The evidence: 13D targets earn abnormal returns over the following weeks with no reversal over the year (Brav, Jiang, Partnoy & Thomas), though the announcement effect has shrunk as activism got crowded; hostile tactics and "sale of the company" agendas move prices most. Since 2024 13Ds are due within 5 business days, so more of the move prints at the filing. Say who the filer is, what they want, and whether the stake is passive in practice.`,
