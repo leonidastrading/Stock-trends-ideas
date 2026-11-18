@@ -3,6 +3,7 @@
  * fetched when the question is asked (the chat's briefing is a snapshot from when the chat started, and can be days old).
  */
 import type { DailyBar, MarketData, NewsItem } from "../alpaca";
+import { getText } from "../http";
 import { addDays, fmtEt, toEt } from "../time";
 
 /** Pure: card numbers a message names ("#208", "card 208", "cards #177 and #197"), at most 3. */
@@ -14,14 +15,33 @@ export function cardRefs(text: string, max = 3): number[] {
 /** Everyday words that are also tickers: not taken as a stock when typed in lower case. */
 const COMMON = new Set("a i am an and are as at be big but by can do for go has he her him his how if in is it its key low me my new no not now of on one or our out own see she so the to two up us was we what who why will with you all any are buy day did get got had has let may net off old per put run sell set top try use way well yes year also back been best both call come does down each even ever fast from give good have here high just keep last like long look made make many more most much must near next only open over part play plan real rest same says show some such sure take tell than that them then they this time very want were when will with work your card cards stock stocks price news idea ideas trade trades deal info data cost rate live life love home safe team wish hope fun joy peak true real cash earn earns beat beats miss gap gaps bull bear bulls bears call calls puts move moves week month today next past cut cuts low lows high highs buy sell hold fast slow big main nice cool hot gold oil bond rally dump pump moon".split(" "));
 
-/** Pure: the tickers a typed question names: $NVDA or NVDA in any case, if listed; everyday words only in capitals. */
-export function tickersAsked(text: string, listed: Set<string>, max = 4): string[] {
+let english: Set<string> | null = null;
+/** English words of 2-5 letters (data/english-short-words.txt, from the MIT-licensed an-array-of-english-words), loaded once. */
+export function englishWords(): Set<string> {
+  if (english) return english;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require("node:fs") as typeof import("node:fs");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const path = require("node:path") as typeof import("node:path");
+    english = new Set(fs.readFileSync(path.join(process.cwd(), "data", "english-short-words.txt"), "utf8").split("\n"));
+  } catch {
+    english = new Set();
+  }
+  return english;
+}
+
+/**
+ * Pure: the tickers a typed question names: $NVDA or NVDA in capitals, if listed; in lower case only when the word is
+ * not an English word ("rddt" yes, "path" or "jets" no).
+ */
+export function tickersAsked(text: string, listed: Set<string>, max = 4, words: Set<string> = englishWords()): string[] {
   const out: string[] = [];
   for (const m of text.matchAll(/(\$)?\b([A-Za-z]{2,5}(?:\.[A-Za-z])?)\b/g)) {
     const raw = m[2], sym = raw.toUpperCase();
     if (!listed.has(sym) || out.includes(sym)) continue;
     const typedAsTicker = !!m[1] || raw === sym;
-    if (!typedAsTicker && COMMON.has(raw.toLowerCase())) continue;
+    if (!typedAsTicker && (COMMON.has(raw.toLowerCase()) || words.has(raw.toLowerCase()))) continue;
     if (raw === sym && COMMON.has(raw.toLowerCase()) && raw.length <= 2) continue; // "AM", "IT" in capitals: still too ambiguous
     out.push(sym);
     if (out.length >= max) break;
@@ -78,4 +98,28 @@ export async function liveContext(data: MarketData | null, symbols: string[], no
   ]);
   const blocks = syms.map((s) => liveLines(s, (snaps as Record<string, { price: number; prevClose: number | null; at: string | null }>)[s], bars.filter((b) => b.symbol === s), news));
   return `LIVE DATA fetched ${fmtEt(now.toISOString())} ET, newer than the briefing. Use it for the current price, recent moves and recent news, and say when the briefing's figures are out of date.\n${blocks.join("\n\n")}`;
+}
+
+const SEARCH_STOP = new Set("a an and are as at be been but by can could did do does for from had has have how i if in into is it its just me my of on or our should so than that the their them then there these they this to was we were what when where which who why will with would you your about any anything check checked tell know think latest news today now recent recently please research idea ideas card cards scout stock stocks market markets going happening soon".split(" "));
+
+/** Pure: the words to search the news for, from a typed question (at most 8, in order). */
+export function searchTermsFor(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.replace(/https?:\/\/\S+/g, " ").matchAll(/[A-Za-z][A-Za-z0-9&'.-]*/g)) {
+    const w = m[0].replace(/[.'-]+$/, "");
+    if (w.length < 3 || SEARCH_STOP.has(w.toLowerCase())) continue;
+    if (!out.some((x) => x.toLowerCase() === w.toLowerCase())) out.push(w);
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+/** A Google News search on the question's key words (last 7 days), as a block for the chat, or null. */
+export async function newsSearch(text: string, fetchImpl?: typeof fetch): Promise<string | null> {
+  const terms = searchTermsFor(text);
+  if (terms.length < 2) return null;
+  const { parseGoogleNews } = await import("./rumor-check");
+  const xml = await getText(`https://news.google.com/rss/search?${new URLSearchParams({ q: `${terms.join(" ")} when:7d`, hl: "en-US", gl: "US", ceid: "US:en" })}`, { headers: { "user-agent": "Mozilla/5.0 (compatible; research-reader/1.0)", accept: "application/rss+xml, application/xml, text/xml, */*" }, fetchImpl, cacheMs: 5 * 60_000, timeoutMs: 8000, retries: 1 });
+  const items = parseGoogleNews(xml).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 10);
+  return `NEWS SEARCH (Google News, last 7 days, for: ${terms.join(" ")}), fetched now:\n${items.length ? items.map((n) => `- ${n.at.slice(0, 16).replace("T", " ")} UTC [${n.source || "news"}] ${n.headline} (${n.url})`).join("\n") : "No headlines found for these words."}`;
 }

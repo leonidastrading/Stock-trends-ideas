@@ -77,9 +77,13 @@ export async function POST(request: Request) {
     }
     symbols = [...new Set([...symbols, ...named])];
   }
-  // The price, moves and headlines as of now (the briefing is a snapshot from when the chat started).
-  const live = symbols.length ? await import("@/lib/scout/live-context").then(({ liveContext }) => liveContext(marketDataFromEnv(), symbols)).catch(() => null) : null;
-  if (live) message = message.includes(CARD_ATTACHED) || message.includes(ATTACHED) ? `${message}\n\n${live}` : `${message}${ATTACHED}${live}`;
+  // The price, moves and headlines as of now (the briefing is a snapshot from when the chat started), and a news search
+  // on the question's key words, so the chat can answer about events the scout has not logged.
+  const [live, search] = await Promise.all([
+    symbols.length ? import("@/lib/scout/live-context").then(({ liveContext }) => liveContext(marketDataFromEnv(), symbols)).catch(() => null) : Promise.resolve(null),
+    import("@/lib/scout/live-context").then(({ newsSearch }) => newsSearch(shownUserText(parsed.data.message))).catch(() => null),
+  ]);
+  for (const block of [live, search]) if (block) message = message.includes(CARD_ATTACHED) || message.includes(ATTACHED) ? `${message}\n\n${block}` : `${message}${ATTACHED}${block}`;
   // Your message is saved now; the reply is saved when it finishes, even if the page was closed meanwhile.
   await store.appendChat(t.id, [{ role: "user", content: message, at: new Date().toISOString() }]);
   const enc = new TextEncoder();
