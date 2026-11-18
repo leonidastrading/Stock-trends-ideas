@@ -20,15 +20,28 @@ export async function GET(request: Request, ctx: { params: Promise<{ symbol: str
   const today = toEt(new Date()).date;
   const ua = process.env.SEC_USER_AGENT?.trim();
   const [bars, earn, info] = await Promise.all([
-    panel<DailyBar[]>(`chartbars:${sym}`, 30, () => data.getDailyBars([sym], addDays(today, -760), today), 20_000),
+    panel<{ bars: DailyBar[]; raw: Array<[string, number, number]>; feed: string }>(`chartbars2:${sym}`, 30, async () => {
+      const from = addDays(today, -760);
+      // Whole-market bars (the free plan allows them up to 15 minutes ago), else IEX alone.
+      const [sip, raw, iex] = await Promise.all([
+        data.getDailyBars([sym], from, today, { feed: "sip" }).catch(() => null),
+        data.getDailyBars([sym], from, today, { feed: "sip", adjustment: "raw" }).catch(() => null),
+        data.getDailyBars([sym], addDays(today, -5), today),
+      ]);
+      const mine = (b: DailyBar[] | null) => (b ?? []).filter((x) => x.symbol === sym);
+      if (!sip?.length) return { bars: mine(await data.getDailyBars([sym], from, today)), raw: [], feed: "iex" };
+      const have = new Set(mine(sip).map((b) => b.date));
+      return { bars: [...mine(sip), ...mine(iex).filter((b) => !have.has(b.date))], raw: mine(raw).map((b) => [b.date, b.c, b.v] as [string, number, number]), feed: "sip" };
+    }, 25_000),
     ua ? panel<string[]>(`earndates:${sym}`, 12 * 60, async () => (await fetchEarningsDates(sym, addDays(today, -800), ua)) ?? [], 15_000) : Promise.resolve({ data: [] as string[], error: null }),
     store.symbolInfo([sym]).then((m) => m.get(sym) ?? null).catch(() => null),
   ]);
-  if (!bars.data?.length) return NextResponse.json({ error: bars.error ?? "no bars" }, { status: 502 });
+  if (!bars.data?.bars.length) return NextResponse.json({ error: bars.error ?? "no bars" }, { status: 502 });
   const next = info?.nextEarnings && info.nextEarnings >= today ? info.nextEarnings : null;
   return NextResponse.json({
     symbol: sym,
-    bars: bars.data.filter((b) => b.symbol === sym).map((b) => [b.date, b.o, b.h, b.l, b.c, b.v]),
+    bars: bars.data.bars.map((b) => [b.date, b.o, b.h, b.l, b.c, b.v]),
+    raw: bars.data.raw, feed: bars.data.feed,
     earnings: earn.data ?? [],
     next, nextBasis: next ? info?.nextBasis ?? null : null,
   }, { headers: { "cache-control": "private, max-age=300" } });

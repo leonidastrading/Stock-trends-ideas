@@ -155,8 +155,13 @@ export class AlpacaClient {
     }
   }
 
-  /** Daily bars (split-adjusted) for symbols in [start, end], all pages. */
-  async getDailyBars(symbols: readonly string[], start: string, end: string): Promise<DailyBar[]> {
+  /**
+   * Daily bars (split-adjusted unless asked) for symbols in [start, end], all pages. The free plan's default feed is
+   * IEX (a few percent of all trading); "sip" is the whole market, allowed on the free plan up to 15 minutes ago.
+   */
+  async getDailyBars(symbols: readonly string[], start: string, end: string, opts: BarOptions = {}): Promise<DailyBar[]> {
+    const feed = opts.feed ?? "iex";
+    const endAt = feed === "sip" ? new Date(Math.min(Date.parse(`${end}T23:59:59Z`), Date.now() - 16 * 60000)).toISOString() : `${end}T23:59:59Z`;
     const out: DailyBar[] = [];
     for (let i = 0; i < symbols.length; i += 100) {
       const chunk = symbols.slice(i, i + 100);
@@ -164,7 +169,7 @@ export class AlpacaClient {
       do {
         const resp = await this.get<{ bars: Record<string, Array<{ t: string; o: number; h: number; l: number; c: number; v: number }>> | null; next_page_token?: string | null }>(
           DATA_HOST, "/v2/stocks/bars",
-          { symbols: chunk.join(","), timeframe: "1Day", start: `${start}T00:00:00Z`, end: `${end}T23:59:59Z`, adjustment: "split", feed: "iex", sort: "asc", limit: 10000, page_token: pageToken },
+          { symbols: chunk.join(","), timeframe: "1Day", start: `${start}T00:00:00Z`, end: endAt, adjustment: opts.adjustment ?? "split", feed, sort: "asc", limit: 10000, page_token: pageToken },
         );
         for (const [symbol, rows] of Object.entries(resp.bars ?? {})) for (const r of rows ?? []) out.push({ symbol, date: r.t.slice(0, 10), o: r.o, h: r.h, l: r.l, c: r.c, v: r.v });
         pageToken = resp.next_page_token ?? undefined;
@@ -255,9 +260,11 @@ export class AlpacaClient {
   }
 }
 
+export interface BarOptions { feed?: "iex" | "sip"; adjustment?: "split" | "raw" }
+
 /** Market-data interface the scout depends on; tests supply a fake. */
 export interface MarketData {
-  getDailyBars(symbols: readonly string[], start: string, end: string): Promise<DailyBar[]>;
+  getDailyBars(symbols: readonly string[], start: string, end: string, opts?: BarOptions): Promise<DailyBar[]>;
   getNews(symbols: string[], start: Date, end: Date, max?: number): Promise<NewsItem[]>;
   getCalendar(start: string, end: string): Promise<Session[]>;
   /** Optional: what a symbol currently is (asset metadata). */

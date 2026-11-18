@@ -131,7 +131,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
         <ul className="evidence">{k.evidence.map((e, i) => <li key={i}><span className="src">{e.source}</span>{e.metric}: {e.value} <span className="muted">({e.change_vs_12m} vs 12m, as of {e.as_of})</span></li>)}</ul>
       </div>
       <div className="card-chart">
-        <div className="small muted card-chart-head"><span>{c.primaryTicker} · daily chart (TradingView)</span><a href={chartUrl(c.primaryTicker)} target="_blank" rel="noreferrer">Open full chart →</a></div>
+        <div className="small muted card-chart-head"><span>{c.primaryTicker} · chart</span><a href={chartUrl(c.primaryTicker)} target="_blank" rel="noreferrer">Open full chart →</a></div>
         <StockChart symbol={c.primaryTicker} tvSymbol={tvSymbol(c.primaryTicker, info?.exchange)} entry={track ? { date: track.entryDate, price: track.entryPrice, direction: track.direction, exitDate: track.exitDate } : undefined} />
       </div>
       <div className="actions">{actions}<CardAsk cardId={c.id} symbol={c.primaryTicker} tickers={k.tickers.map((t) => t.symbol)} /></div>

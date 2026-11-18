@@ -49,7 +49,7 @@ td.num, th.num { text-align: right; }
 .neg { color: var(--neg); }
 .warn { color: var(--warn); }
 .tag { display: inline-block; font-size: 11px; color: var(--text-secondary); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; margin-right: 4px; white-space: nowrap; }
-.tag.promoted { color: var(--pos); border-color: var(--pos); }
+.tag.promoted { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .tag.late { color: var(--warn); border-color: var(--warn); }
 .tag.not_promoted, .tag.rejected, .tag.error, .tag.down { color: var(--neg); border-color: var(--neg); }
 .tag.ok { color: var(--pos); border-color: var(--pos); }
@@ -278,7 +278,7 @@ a.button.primary { background: var(--accent); border-color: var(--accent); color
 .paper-result { font-size: 1rem; margin-bottom: 2px; }
 
 /* The running breaking-news ticker under the menu. */
-.newsbar { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 10px; height: 34px; overflow: hidden; border-bottom: 1px solid var(--border); background: var(--surface-1); font-size: 13.5px; }
+.newsbar { display: flex; align-items: center; gap: 10px; height: 34px; overflow: hidden; border-bottom: 1px solid var(--border); background: var(--surface-1); font-size: 13.5px; }
 .newsbar-label { flex: none; display: flex; align-items: center; gap: 6px; height: 100%; padding: 0 10px 0 14px; font-weight: 800; letter-spacing: 0.06em; color: #fff; background: #e5484d; font-size: 11.5px; }
 .newsbar-dot { width: 7px; height: 7px; border-radius: 50%; background: #fff; animation: newsbar-pulse 1.4s ease-in-out infinite; }
 .newsbar-viewport { flex: 1; padding-left: 4px; overflow: hidden; height: 100%; mask-image: linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 24px), transparent); }
@@ -390,3 +390,24 @@ main { overflow-wrap: break-word; }
 .key-entry { background: var(--accent); }
 .scout-chart { position: relative; }
 .chart-legend { position: absolute; top: 4px; left: 8px; right: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.chart-sep { width: 1px; height: 16px; background: var(--border); margin: 0 2px; }
+.ma-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+.chart-host { position: absolute; top: 26px; right: 0; bottom: 0; left: 0; }
+.chart-overlay { position: absolute; top: 26px; right: 0; bottom: 26px; left: 0; pointer-events: none; overflow: hidden; }
+.earn-line { position: absolute; top: 14px; bottom: 0; width: 0; border-left: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); }
+.earn-line.next { border-left: 1px dashed color-mix(in srgb, var(--accent) 70%, transparent); }
+.earn-line span { position: absolute; top: -14px; left: 0; transform: translateX(-50%); font-size: 10px; font-weight: 700; color: color-mix(in srgb, var(--warn) 85%, transparent); white-space: nowrap; }
+.earn-line.next span { color: var(--accent); }
+.chart-foot { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; margin-top: 4px; }
+.chart-foot span[class^="key-"] { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-left: 8px; }
+.setup-list { margin-top: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; display: grid; gap: 4px; }
+
+/* The menu and the breaking-news strip stay at the top while scrolling. On phones the menu is one row that scrolls sideways. */
+.site-top { position: sticky; top: 0; z-index: 60; background: var(--surface-1); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); }
+@media (max-width: 640px) {
+  .site-top nav { flex-wrap: nowrap; overflow-x: auto; gap: 14px; padding: 8px 12px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .site-top nav::-webkit-scrollbar { display: none; }
+  .site-top nav > * { flex: 0 0 auto; white-space: nowrap; }
+}
+/* Links to a card or section land below the sticky menu. */
+html { scroll-padding-top: 120px; }
