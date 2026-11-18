@@ -29,7 +29,7 @@ function Verdict({ c }: { c: RumorCheck }) {
     <div className={`truth ${t.cls}`}>
       <div className="truth-label">{t.label}</div>
       {c.note && <div className="truth-note">{c.note}</div>}
-      {c.evidence.slice(0, 3).map((e, i) => <div key={i} className="truth-ev"><a href={e.url} target="_blank" rel="noreferrer">{e.headline}</a> <span className="small">· {e.source} · {e.at.slice(0, 10)}</span></div>)}
+      {c.evidence.slice(0, 3).map((e, i) => <div key={i} className="truth-ev"><a href={e.url} target="_blank" rel="noreferrer">{e.headline}</a> <span className="small">· {e.source} · {etLabel(e.at)}</span></div>)}
       <div className="small truth-when">checked {etLabel(c.checkedAt)}</div>
     </div>
   );
@@ -70,12 +70,11 @@ export default async function RumorsPage({ searchParams }: { searchParams: Promi
     const id = Number(/^rumor: .*?#(\d+)/.exec(c.term)?.[1]);
     if (id) checked.set(id, { cardId: c.cardId, outcome: c.cardId ? (status.get(c.cardId) ?? "card") : c.outcome });
   }
-  // Came-true rumors first, then the rest newest first.
-  const rank = (r: Rumor) => (verdicts.get(r.id)?.status === "confirmed" ? 0 : verdicts.get(r.id)?.status === "partly" ? 1 : 2);
+  // Newest first (the came-true ones are one tap away under their filter).
   // A claim already reported by a credible outlet when the scout read it is news, not a rumor: only under its own filter.
   const isNews = (r: Rumor) => verdicts.get(r.id)?.status === "already_news";
   const rows = all.filter((r) => (!cat || r.category === cat) && (!withTickers || r.tickers.length > 0) && (truth ? verdicts.get(r.id)?.status === truth : !isNews(r)))
-    .sort((a, b) => rank(a) - rank(b) || b.createdAt.localeCompare(a.createdAt));
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id);
   const tally = (s: string) => all.filter((r) => verdicts.get(r.id)?.status === s).length;
   const rumorsOnly = all.filter((r) => !isNews(r));
   const checkedCount = rumorsOnly.filter((r) => verdicts.has(r.id)).length;
@@ -87,7 +86,7 @@ export default async function RumorsPage({ searchParams }: { searchParams: Promi
     <>
       <h1>Rumors</h1>
       <RememberFilters keys={["days", "cat", "tickers", "truth"]} />
-      {tally("confirmed") > 0 && <div className="truth truth-confirmed truth-summary"><div className="truth-label">✅ {tally("confirmed")} rumor{tally("confirmed") === 1 ? "" : "s"} came true</div><div className="truth-note">{tally("partly") ? `${tally("partly")} partly true · ` : ""}{checkedCount} of {rumorsOnly.length} checked in this window. Shown first below.</div></div>}
+      {tally("confirmed") > 0 && <div className="truth truth-confirmed truth-summary"><div className="truth-label">✅ {tally("confirmed")} rumor{tally("confirmed") === 1 ? "" : "s"} came true</div><div className="truth-note">{tally("partly") ? `${tally("partly")} partly true · ` : ""}{checkedCount} of {rumorsOnly.length} checked in this window. <a href="?truth=confirmed#rumors">Show them</a>.</div></div>}
       {tally("already_news") > 0 && truth !== "already_news" && <p className="small muted">{tally("already_news")} claim{tally("already_news") === 1 ? " was" : "s were"} already mainstream news when the scout read {tally("already_news") === 1 ? "it" : "them"}, so {tally("already_news") === 1 ? "it is" : "they are"} on the News tab, not listed here (<a href="?truth=already_news">show</a>).</p>}
       <p className="small warn">Unverified claims from conspiracy forums and fringe sites. Listed as claims, not facts; nothing here is researched or traded unless you press Check it.</p>
       <details className="card section">
@@ -119,6 +118,7 @@ export default async function RumorsPage({ searchParams }: { searchParams: Promi
         const v = verdicts.get(r.id);
         return (
           <section key={r.id} className={`card rumor-item${v?.status === "confirmed" ? " rumor-true" : ""}`}>
+            <div className="rumor-when"><b>{etLabel(r.createdAt)}</b> <span className="muted">· rumor #{r.id} · from {r.source || r.docSource}</span></div>
             {v && v.status !== "open" && <Verdict c={v} />}
             <div>
               <span className="tag">{r.category}</span>{" "}
@@ -126,7 +126,7 @@ export default async function RumorsPage({ searchParams }: { searchParams: Promi
               {r.tickers.length > 0 && r.direction !== "none" && <span className={`small ${r.direction === "long" ? "pos" : "neg"}`}> {r.direction === "long" ? "▲ if true" : "▼ if true"}</span>}
             </div>
             <div>{r.claim}</div>
-            <div className="small muted">{SPEC[r.specificity] ?? ""} · {r.timeframe ? `timing: ${r.timeframe} · ` : ""}from {r.source || r.docSource} · {etLabel(r.createdAt)}</div>
+            <div className="small muted">{[SPEC[r.specificity], r.timeframe ? `timing: ${r.timeframe}` : ""].filter(Boolean).join(" · ")}</div>
             {r.mainstream && (
               <div className="small">
                 Mainstream news: {r.mainstream.headlines7d} headline{r.mainstream.headlines7d === 1 ? "" : "s"} on {r.tickers.join(", ")} this week

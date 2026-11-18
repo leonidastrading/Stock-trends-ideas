@@ -219,6 +219,7 @@ a.button { display: inline-block; border: 1px solid var(--border); border-radius
 a.button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .rumor-item { margin-bottom: 10px; }
 .rumor-item > div { margin-top: 3px; }
+.rumor-item > .rumor-when { margin-top: 0; margin-bottom: 4px; font-size: 0.9rem; }
 /* Did the rumor come true: big, bold and green when it did. */
 .truth { border-radius: 10px; padding: 10px 14px; margin: 2px 0 8px; border: 2px solid; }
 .truth .truth-label { font-weight: 900; font-size: 1.6rem; letter-spacing: 0.03em; line-height: 1.15; }
