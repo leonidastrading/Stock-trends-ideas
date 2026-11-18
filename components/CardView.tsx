@@ -4,8 +4,9 @@ import CardAsk from "@/components/CardAsk";
 import CardCollapse from "@/components/CardCollapse";
 import CapShort from "@/components/CapShort";
 import TvChart from "@/components/TvChart";
+import Ticker from "@/components/Ticker";
 import { chartUrl, tvSymbol } from "@/config/links";
-import { Suspense } from "react";
+import { cache, Suspense } from "react";
 import Feedback from "@/components/Feedback";
 import { after } from "next/server";
 import { marketDataFromEnv } from "@/lib/alpaca";
@@ -16,6 +17,9 @@ import * as store from "@/lib/scout/store";
 import type { Feedback as FeedbackRow, StoredCard, StoredReview, Track } from "@/lib/scout/store";
 import { daysBetween, fmtEt, toEt } from "@/lib/time";
 import { paperResult } from "@/lib/scout/paper-result";
+
+// One read per page render, shared by every card on it.
+const recentBriefs = cache(() => store.cardBriefsSince(60).catch(() => [] as store.CardBrief[]));
 
 const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
@@ -35,6 +39,8 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
     else after(() => lookup);
   }
   const q = await quote(c.primaryTicker);
+  const briefs = hasDatabase() ? await recentBriefs() : [];
+  const otherCards = (sym: string) => briefs.filter((b) => b.id !== c.id && (b.primaryTicker === sym || b.tickers.includes(sym)));
   const filing = hasDatabase() ? await import("@/lib/scout/filing-watch").then(({ latestFilingWatch }) => latestFilingWatch([c.primaryTicker])).then((m) => m.get(c.primaryTicker) ?? null).catch(() => null) : null;
   // The paper result so far: the stock against SPY since the entry (open tracks use the live price).
   const spyNow = track?.entryPrice && !track.exitDate ? await quote("SPY").catch(() => null) : null;
@@ -101,7 +107,8 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
         <dt>Observation</dt><dd>{k.observation}</dd>
         <dt>Why not priced</dt><dd>{k.why_not_priced}</dd>
         <dt>Tickers</dt>
-        <dd>{k.tickers.map((t, i) => <div key={t.symbol}><b className={c.direction === "long" ? "pos" : "neg"}>{c.direction === "long" ? "▲" : "▼"} {t.symbol}</b> {i === 0 ? <span className="tag">tracked on paper</span> : null} <span className="small muted">({t.sector.replace("_", " ")}{t.revenue_share_pct === null ? ", share unknown" : `, ${t.revenue_share_pct}% of revenue${t.share_is_estimate ? " (estimate)" : ""}`})</span> — {t.why}</div>)}</dd>
+        <dd>{k.tickers.map((t, i) => <div key={t.symbol}><b><Ticker symbol={t.symbol} className={c.direction === "long" ? "pos" : "neg"}>{c.direction === "long" ? "▲" : "▼"} {t.symbol}</Ticker></b> {i === 0 ? <span className="tag">tracked on paper</span> : null}
+          {otherCards(t.symbol.toUpperCase()).slice(0, 6).map((b) => <a key={b.id} className="tag card-number" style={{ marginLeft: 4 }} href={`/ideas?days=90&card=${b.id}#card-${b.id}`} title={`Card #${b.id}, ${b.direction} ${b.primaryTicker}, ${b.status.replace("_", " ")}, ${fmtEt(b.createdAt)}`}><span className={b.direction === "long" ? "pos" : "neg"}>{b.direction === "long" ? "▲" : "▼"}</span> #{b.id} <span className="muted">{fmtDay(toEt(new Date(b.createdAt)).date).replace(/, \d{4}$/, "")}</span></a>)} <span className="small muted">({t.sector.replace("_", " ")}{t.revenue_share_pct === null ? ", share unknown" : `, ${t.revenue_share_pct}% of revenue${t.share_is_estimate ? " (estimate)" : ""}`})</span> — {t.why}</div>)}</dd>
         <dt>Lateness</dt>
         <dd className={k.lateness.already_obvious ? "warn" : ""}>{pct(k.lateness.stock_move_30d_pct)} over 30 days, {pct(k.lateness.stock_move_90d_pct)} over 90 days, {k.lateness.news_stories_30d} mainstream stories in 30 days{k.lateness.already_obvious ? " — already obvious" : ""}</dd>
         <dt>Catalyst</dt><dd>{k.catalyst.what} <span className="muted">({k.catalyst.date})</span></dd>

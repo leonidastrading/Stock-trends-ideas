@@ -209,6 +209,14 @@ export async function cardsSince(days: number): Promise<StoredCard[]> {
   return (await q(`SELECT ${CARD_COLS} FROM cards WHERE created_at >= now() - ($1::int * interval '1 day') ORDER BY created_at DESC`, [days])).map(toCard);
 }
 
+export interface CardBrief { id: number; createdAt: string; status: string; direction: "long" | "short"; primaryTicker: string; tickers: string[] }
+
+/** Every card from the last `days` days, light (no full card), for "other cards on this ticker" links. */
+export async function cardBriefsSince(days: number): Promise<CardBrief[]> {
+  return (await q(`SELECT id, created_at, status, direction, primary_ticker, ARRAY(SELECT jsonb_array_elements(card->'tickers')->>'symbol') AS tickers FROM cards WHERE created_at >= now() - ($1::int * interval '1 day') ORDER BY created_at DESC`, [days]))
+    .map((r) => ({ id: Number(r.id), createdAt: iso(r.created_at)!, status: String(r.status), direction: r.direction as "long" | "short", primaryTicker: String(r.primary_ticker ?? ""), tickers: ((r.tickers as string[]) ?? []).map((s) => s.toUpperCase()) }));
+}
+
 export async function allCards(): Promise<StoredCard[]> {
   return (await q(`SELECT ${CARD_COLS} FROM cards ORDER BY created_at`)).map(toCard);
 }
