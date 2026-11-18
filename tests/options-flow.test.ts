@@ -16,7 +16,7 @@ describe("Cboe chain", () => {
   it("parses standard contracts and skips adjusted roots", () => {
     const c = parseChain(cboe("2026-11-13T15:59:59", [row("NVDA270115P00150000", 183265, 7.9, 8.15, 11828), row("B1VDA261120C00150000", 0, 0.59, 0.89), row("NVDA261218C00185000", 115487, 2, 2.1)]), "NVDA")!;
     expect(c).toMatchObject({ symbol: "NVDA", spot: 161.01, asOf: "2026-11-13" });
-    expect(c.contracts).toEqual([
+    expect(c.contracts).toMatchObject([
       { contract: "NVDA270115P00150000", type: "put", strike: 150, expiry: "2027-01-15", oi: 183265, volume: 11828, mid: 8.025 },
       { contract: "NVDA261218C00185000", type: "call", strike: 185, expiry: "2026-12-18", oi: 115487, volume: 0, mid: 2.05 },
     ]);

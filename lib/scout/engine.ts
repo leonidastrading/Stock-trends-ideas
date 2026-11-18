@@ -246,6 +246,15 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
   if (left() > 90_000) {
     out.themes = await import("./themes").then(({ themesIfDue }) => themesIfDue({ data, callModel: callResearchModel, now, fetchImpl })).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
   } else out.themes = "later: not enough time";
+  // Positioning: the CFTC report (read twice a day; it changes Fridays) and dealer gamma for the index ETFs (every 6 hours).
+  if (left() > 60_000) {
+    out.positioning = await import("../market/positioning").then(async ({ cotReadings, gammaFor }) => {
+      const { panel } = await import("../market/panels");
+      const cot = await panel("cot", 12 * 60, () => cotReadings(now, fetchImpl), 25_000);
+      const g = await Promise.all(["SPY", "QQQ", "IWM"].map((s) => gammaFor(s, now, fetchImpl).catch(() => null)));
+      return `COT ${cot.data ? `${(cot.data as unknown[]).length} markets` : `failed: ${cot.error}`}; gamma ${g.filter(Boolean).length}/3`;
+    }).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+  } else out.positioning = "later: not enough time";
   // Open cards: is any card's own invalidation met? (about every 3 hours each, on the live price and headlines)
   if (left() > 70_000) {
     out.invalidation = await import("./invalidation").then(({ checkInvalidations }) => checkInvalidations({ data, callModel: callResearchModel, now, env: process.env }, deadline - 30_000)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);

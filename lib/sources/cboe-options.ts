@@ -9,7 +9,7 @@ import { getText } from "../http";
 
 const BROWSER = { "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36", accept: "application/json" };
 
-export interface OptionContract { contract: string; type: "call" | "put"; strike: number; expiry: string; oi: number; volume: number; mid: number | null }
+export interface OptionContract { contract: string; type: "call" | "put"; strike: number; expiry: string; oi: number; volume: number; mid: number | null; iv?: number | null; gamma?: number | null }
 export interface Chain { symbol: string; spot: number; asOf: string; contracts: OptionContract[] }
 
 /** Pure: the standard contracts of one chain (root = the stock's symbol; adjusted roots such as B1VDA are skipped). */
@@ -25,6 +25,8 @@ export function parseChain(json: unknown, symbol: string): Chain | null {
     contracts.push({
       contract: String(o.option), type: m[4] === "C" ? "call" : "put", strike: Number(m[5]) / 1000, expiry: `20${m[1]}-${m[2]}-${m[3]}`,
       oi: Math.round(Number(o.open_interest ?? 0)), volume: Math.round(Number(o.volume ?? 0)), mid: ask > 0 ? (bid + ask) / 2 : Number(o.last_trade_price ?? 0) || null,
+      // iv is a decimal (0.20 = 20%); options expiring today can show 8+ (800%).
+      iv: Number(o.iv) > 0 ? Number(o.iv) : null, gamma: Number.isFinite(Number(o.gamma)) && o.gamma !== null && o.gamma !== undefined ? Number(o.gamma) : null,
     });
   }
   return { symbol, spot: d.current_price, asOf: String(d.last_trade_time ?? "").slice(0, 10), contracts };

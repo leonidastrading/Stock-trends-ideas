@@ -99,9 +99,13 @@ export async function researchCandidate(input: ResearchInput, deps: ResearchDeps
     await recordHealth(results);
   }
 
-  const optionsLine = await readOptions(deps, input.tickersHint[0]);
+  const [optionsLine, positioning] = await Promise.all([
+    readOptions(deps, input.tickersHint[0]),
+    input.tickersHint[0] ? import("../market/positioning").then(({ positioningFor }) => positioningFor(input.tickersHint[0], deps.now, deps.fetchImpl)).catch(() => null) : Promise.resolve(null),
+  ]);
   const prompt = buildUserPrompt({ origin: input.origin, term: input.term, kindHint: input.kindHint, tickersHint: input.tickersHint, observation: input.observation, context: input.context, today: et.date, results, trigger: input.trigger })
-    + (optionsLine ? `\n\nOptions pricing (for the "expression" note only; not evidence): ${optionsLine}` : "");
+    + (optionsLine ? `\n\nOptions pricing (for the "expression" note only; not evidence): ${optionsLine}` : "")
+    + (positioning ? `\n\nPositioning (who is already in the trade; say whether the call goes with or against it, and treat a crowded side as a risk, not proof): ${positioning.text}` : "");
 
   // Call the model; one retry on a parse/validation failure with the error fed back.
   let card: Card | null = null;

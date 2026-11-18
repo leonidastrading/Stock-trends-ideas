@@ -519,6 +519,7 @@ CREATE TABLE IF NOT EXISTS card_profiles (
   late boolean NOT NULL DEFAULT false
 );
 CREATE OR REPLACE TRIGGER card_profiles_ro BEFORE UPDATE OR DELETE ON card_profiles FOR EACH ROW EXECUTE FUNCTION forbid_change();
+ALTER TABLE card_profiles ADD COLUMN IF NOT EXISTS positioning jsonb;
 -- Did the rumor come true? One row per daily check (never edited); the latest is its status.
 CREATE TABLE IF NOT EXISTS rumor_checks (
   id serial PRIMARY KEY,
