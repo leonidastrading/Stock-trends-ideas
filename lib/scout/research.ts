@@ -152,7 +152,9 @@ export async function researchCandidate(input: ResearchInput, deps: ResearchDeps
     gated = applyGates(card, measured, { wholeCompany: !!input.context });
   } catch (err) {
     if (!(err instanceof NoEvidenceError)) throw err;
-    return { outcome: "rejected", reason: err.message, candidate: await store.addCandidate({ ...base, outcome: "rejected", reason: err.message }) };
+    // In plain words: what was missing, and for an idea typed in, what to try instead.
+    const reason = `no evidence: the scout's sources (news, search interest, filings, prices) found no dated facts that back this up, so no card${input.origin === "human" ? ". The text you give is a lead, not evidence: name a US-listed ticker and a short term to search for (e.g. \"neuromorphic chips\"), or paste an article that has the facts and dates" : ""}.`;
+    return { outcome: "rejected", reason, candidate: await store.addCandidate({ ...base, outcome: "rejected", reason }) };
   }
   if (identity.notes.length) gated = { ...gated, notes: [...identity.notes, ...gated.notes] };
   if (identity.noValidTicker) gated = { ...gated, status: "not_promoted" as const, notes: [...gated.notes, "not promoted: no ticker that is still the named company's stock"] };
