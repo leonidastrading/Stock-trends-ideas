@@ -5,8 +5,14 @@
 import type { DailyBar, MarketData, NewsItem } from "../alpaca";
 import { addDays, fmtEt, toEt } from "../time";
 
+/** Pure: card numbers a message names ("#208", "card 208", "cards #177 and #197"), at most 3. */
+export function cardRefs(text: string, max = 3): number[] {
+  const ids = [...text.matchAll(/(?:\bcards?\s*#?\s*|#)(\d{1,6})\b/gi)].map((m) => Number(m[1])).filter((n) => n > 0);
+  return [...new Set(ids)].slice(0, max);
+}
+
 /** Everyday words that are also tickers: not taken as a stock when typed in lower case. */
-const COMMON = new Set("a i am an and are as at be big but by can do for go has he her him his how if in is it its key low me my new no not now of on one or our out own see she so the to two up us was we what who why will with you all any are buy day did get got had has let may net off old per put run sell set top try use way well yes year also back been best both call come does down each even ever fast from give good have here high just keep last like long look made make many more most much must near next only open over part play plan real rest same says show some such sure take tell than that them then they this time very want were when will with work your".split(" "));
+const COMMON = new Set("a i am an and are as at be big but by can do for go has he her him his how if in is it its key low me my new no not now of on one or our out own see she so the to two up us was we what who why will with you all any are buy day did get got had has let may net off old per put run sell set top try use way well yes year also back been best both call come does down each even ever fast from give good have here high just keep last like long look made make many more most much must near next only open over part play plan real rest same says show some such sure take tell than that them then they this time very want were when will with work your card cards stock stocks price news idea ideas trade trades deal info data cost rate live life love home safe team wish hope fun joy peak true real cash earn earns beat beats miss gap gaps bull bear bulls bears call calls puts move moves week month today next past cut cuts low lows high highs buy sell hold fast slow big main nice cool hot gold oil bond rally dump pump moon".split(" "));
 
 /** Pure: the tickers a typed question names: $NVDA or NVDA in any case, if listed; everyday words only in capitals. */
 export function tickersAsked(text: string, listed: Set<string>, max = 4): string[] {

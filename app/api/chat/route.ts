@@ -45,10 +45,23 @@ export async function POST(request: Request) {
     message = cardQuestion(card, await store.getTrack(card.id).catch(() => null), message);
     symbols = [card.primaryTicker, ...card.card.tickers.map((x) => x.symbol)];
   } else {
-    // Tickers named in the question ($NVDA or NVDA) that are listed.
     const asked = shownUserText(parsed.data.message);
+    // Cards named in the question (#208, "card 208"): fetched now, so cards newer than the chat's briefing are seen.
+    const { cardRefs } = await import("@/lib/scout/live-context");
+    const refs = cardRefs(asked);
+    if (refs.length) {
+      const cards = await Promise.all(refs.map((id) => store.getCard(id).catch(() => null)));
+      const parts: string[] = [];
+      for (const [i, c] of cards.entries()) {
+        if (!c) { parts.push(`No card numbered #${refs[i]} exists.`); continue; }
+        symbols.push(c.primaryTicker);
+        parts.push(`Card #${c.id}, fetched now:\n${cardQuestion(c, await store.getTrack(c.id).catch(() => null), "").split(CARD_ATTACHED)[1]}`);
+      }
+      message = `${message}${CARD_ATTACHED}${parts.join("\n\n")}`;
+    }
+    // Tickers named in the question ($NVDA or NVDA) that are listed.
     const listed = new Set((await import("@/lib/scout/symbol-search").then(({ listings }) => listings()).catch(() => [])).map((l) => l.s));
-    symbols = (await import("@/lib/scout/live-context")).tickersAsked(asked, listed);
+    symbols = [...new Set([...symbols, ...(await import("@/lib/scout/live-context")).tickersAsked(asked, listed)])];
   }
   // The price, moves and headlines as of now (the briefing is a snapshot from when the chat started).
   const live = symbols.length ? await import("@/lib/scout/live-context").then(({ liveContext }) => liveContext(marketDataFromEnv(), symbols)).catch(() => null) : null;

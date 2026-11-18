@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DailyBar, NewsItem } from "@/lib/alpaca";
-import { avgDailyMove, liveContext, liveLines, tickersAsked } from "@/lib/scout/live-context";
+import { avgDailyMove, cardRefs, liveContext, liveLines, tickersAsked } from "@/lib/scout/live-context";
 
 const listed = new Set(["RDDT", "NVDA", "ON", "ALL", "NOW", "URGN", "CGON", "IT"]);
 
@@ -41,5 +41,15 @@ describe("normal daily move (for telling noise from a real break)", () => {
     const bars: DailyBar[] = Array.from({ length: 30 }, (_, i) => ({ symbol: "CAR", date: `2026-10-${String(i + 1).padStart(2, "0")}`, o: 1, h: 1, l: 1, c: i % 2 ? 102 : 100, v: 1 }));
     expect(avgDailyMove(bars)).toBeCloseTo(1.98, 1); // alternating +2% / -1.96%
     expect(avgDailyMove(bars.slice(0, 4))).toBeNull();
+  });
+});
+
+describe("cards named in a chat message", () => {
+  it("finds card numbers, and the word card is not the ticker CARD", () => {
+    expect(cardRefs("what do you think of card #208?")).toEqual([208]);
+    expect(cardRefs("compare cards #177 and #197, and card 208")).toEqual([177, 197, 208]);
+    expect(cardRefs("revenue grew 39.9% in Q2")).toEqual([]);
+    expect(tickersAsked("why did the scout write this card on ui", new Set(["CARD", "UI"]))).toEqual(["UI"]);
+    expect(tickersAsked("is $CARD cheap", new Set(["CARD"]))).toEqual(["CARD"]);
   });
 });
