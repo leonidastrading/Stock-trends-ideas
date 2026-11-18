@@ -3,7 +3,7 @@ import Direction from "@/components/Direction";
 import CardAsk from "@/components/CardAsk";
 import CardCollapse from "@/components/CardCollapse";
 import CapShort from "@/components/CapShort";
-import TvChart from "@/components/TvChart";
+import StockChart from "@/components/StockChart";
 import Ticker from "@/components/Ticker";
 import { chartUrl, tvSymbol } from "@/config/links";
 import { cache, Suspense } from "react";
@@ -101,7 +101,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
           {beforeExit ? <span className="tag warn" style={{ marginLeft: 6 }}>before this card&apos;s exit ({fmtDay(track!.deadlineDate)})</span> : null}
         </div>
         <h2 style={{ margin: "6px 0 2px" }}>{k.title}</h2>
-        <div className="thesis"><span className="thesis-label">Thesis</span> {thesis}</div>
+        <div className={`card-thesis card-thesis-${c.direction}`}><span className="card-thesis-label">{c.direction === "long" ? "▲" : "▼"} Thesis</span> {thesis}</div>
         <div className="scores">
           <span>novelty <b>{k.scores.novelty}</b></span><span>materiality <b>{k.scores.materiality}</b></span><span>breadth <b>{k.scores.breadth_of_evidence}</b></span>
           <span>lateness <b>{k.scores.lateness}</b></span><span>confidence <b>{k.confidence}</b></span><span>rank <b>{c.rankScore}</b></span>
@@ -132,7 +132,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
       </div>
       <div className="card-chart">
         <div className="small muted card-chart-head"><span>{c.primaryTicker} · daily chart (TradingView)</span><a href={chartUrl(c.primaryTicker)} target="_blank" rel="noreferrer">Open full chart →</a></div>
-        <TvChart symbol={c.primaryTicker} tvSymbol={tvSymbol(c.primaryTicker, info?.exchange)} />
+        <StockChart symbol={c.primaryTicker} tvSymbol={tvSymbol(c.primaryTicker, info?.exchange)} entry={track ? { date: track.entryDate, price: track.entryPrice, direction: track.direction, exitDate: track.exitDate } : undefined} />
       </div>
       <div className="actions">{actions}<CardAsk cardId={c.id} symbol={c.primaryTicker} tickers={k.tickers.map((t) => t.symbol)} /></div>
       <Feedback target={`card:${c.id}`} initial={feedback ? { vote: feedback.vote, note: feedback.note } : null} />

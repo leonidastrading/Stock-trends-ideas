@@ -372,5 +372,21 @@ main { overflow-wrap: break-word; }
 .cot-bar { position: relative; display: inline-block; width: 120px; height: 8px; margin-right: 6px; border-radius: 4px; vertical-align: middle; background: linear-gradient(90deg, var(--neg) 0 10%, rgba(128,128,128,0.25) 10% 90%, var(--pos) 90% 100%); }
 .cot-bar span { position: absolute; top: -3px; width: 4px; height: 14px; margin-left: -2px; border-radius: 2px; background: var(--text-primary); }
 
-.thesis { margin: 4px 0 6px; padding: 6px 10px; border-left: 3px solid var(--accent, #3b82f6); background: rgba(59, 130, 246, 0.08); border-radius: 4px; font-size: 1.02rem; line-height: 1.4; }
-.thesis-label { font-weight: 800; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.06em; margin-right: 6px; opacity: 0.8; }
+/* One-sentence thesis under a card's title: tinted green for longs, red for shorts. */
+.card-thesis { margin: 6px 0 8px; padding: 9px 12px; border: 1px solid var(--border); border-left-width: 4px; border-radius: 6px; font-size: 1.05rem; font-weight: 500; line-height: 1.45; color: var(--text-primary); }
+.card-thesis-long { border-color: color-mix(in srgb, var(--pos) 35%, transparent); border-left-color: var(--pos); background: color-mix(in srgb, var(--pos) 11%, transparent); }
+.card-thesis-short { border-color: color-mix(in srgb, var(--neg) 35%, transparent); border-left-color: var(--neg); background: color-mix(in srgb, var(--neg) 11%, transparent); }
+.card-thesis-label { font-weight: 800; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.06em; margin-right: 8px; }
+.card-thesis-long .card-thesis-label { color: var(--pos); }
+.card-thesis-short .card-thesis-label { color: var(--neg); }
+
+.chart-tabs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; }
+.chart-tabs button { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+.chart-tabs button.active { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.chart-key { margin-left: 6px; display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.chart-key span[class^="key-"] { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-left: 6px; }
+.key-earn { background: color-mix(in srgb, var(--warn) 45%, transparent); }
+.key-next { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+.key-entry { background: var(--accent); }
+.scout-chart { position: relative; }
+.chart-legend { position: absolute; top: 4px; left: 8px; right: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-secondary); font-variant-numeric: tabular-nums; }

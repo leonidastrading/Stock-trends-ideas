@@ -7,7 +7,7 @@ import { themeRuns, themeSends, type Theme, type ThemeRun } from "@/lib/scout/th
 import { swingConfigured } from "@/lib/scout/swing";
 import { fmtEt } from "@/lib/time";
 import { ThemeResearch, ThemeSend, ThemesRefresh } from "./ThemeButtons";
-import TvChart from "@/components/TvChart";
+import StockChart from "@/components/StockChart";
 import { tvSymbol } from "@/config/links";
 import * as store from "@/lib/scout/store";
 
@@ -77,7 +77,7 @@ export default async function ThemesPage() {
             <div className="small warn" style={{ marginTop: 4 }}><b>Crowding:</b> {t.crowding}</div>
             <div className="small" style={{ marginTop: 4 }}><b>What would break it:</b> {t.breaks_it}</div>
             {s.each.some((e) => e.move !== null) && <div className="small muted" style={{ marginTop: 4 }}>Since published: {s.each.map((e) => `${e.s} ${pct(e.move)}${t.prices?.[e.s] ? ` (from $${t.prices[e.s].toFixed(2)})` : ""}`).join(" · ")}</div>}
-            {t.tickers[0] && <div style={{ marginTop: 10 }}><TvChart symbol={t.tickers[0]} tvSymbol={tvSymbol(t.tickers[0], info.get(t.tickers[0])?.exchange)} height={520} /></div>}
+            {t.tickers[0] && <div style={{ marginTop: 10 }}><StockChart symbol={t.tickers[0]} tvSymbol={tvSymbol(t.tickers[0], info.get(t.tickers[0])?.exchange)} height={520} /></div>}
             <div className="small rumor-actions" style={{ marginTop: 8 }}>
               <ThemeSend run={latest.id} index={i} ticker={t.tickers[0]} side={t.direction} sent={sends.has(`${latest.id}:${i}`)} configured={sw} />
               <ThemeResearch run={latest.id} index={i} />
