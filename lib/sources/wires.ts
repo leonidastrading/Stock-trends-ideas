@@ -13,6 +13,12 @@ export const WIRES = [
   { name: "PR Newswire", url: "https://www.prnewswire.com/rss/news-releases-list.rss" },
 ];
 const HALTS = "https://www.nasdaqtrader.com/rss.aspx?feed=tradehalts";
+/** World news outlets: wars, sanctions, elections, disasters (usually no ticker). */
+export const WORLD = [
+  { name: "BBC", url: "https://feeds.bbci.co.uk/news/world/rss.xml" },
+  { name: "BBC", url: "https://feeds.bbci.co.uk/news/business/rss.xml" },
+  { name: "Al Jazeera", url: "https://www.aljazeera.com/xml/rss/all.xml" },
+];
 const SEC_CURRENT = "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&company=&dateb=&owner=include&start=0&count=60&output=atom";
 const UA = { "user-agent": "Mozilla/5.0 (compatible; research-reader/1.0)", accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, */*" };
 
@@ -35,6 +41,15 @@ export function wireItems(xml: string, source: string, base: string): NewsItem[]
     const sym = tickerInRelease(`${a.title} ${a.summary}`);
     if (!sym || !a.published) return [];
     return [{ id: hashId(a.url), ts: a.published, headline: a.title, summary: a.summary.slice(0, 600), symbols: [sym], source, url: a.url }];
+  });
+}
+
+/** Pure: a world outlet's feed as news items (a ticker only when the story names one the release way). */
+export function worldItems(xml: string, source: string, base: string): NewsItem[] {
+  return parseFeed(xml, base).flatMap((a) => {
+    if (!a.published) return [];
+    const sym = tickerInRelease(`${a.title} ${a.summary}`);
+    return [{ id: hashId(a.url), ts: a.published, headline: a.title, summary: a.summary.slice(0, 600), symbols: sym ? [sym] : [], source, url: a.url }];
   });
 }
 
@@ -128,6 +143,7 @@ export async function fastNews(env: NodeJS.ProcessEnv = process.env, fetchImpl?:
 async function fastNewsFresh(env: NodeJS.ProcessEnv, fetchImpl: typeof fetch | undefined, now: Date): Promise<NewsItem[]> {
   const since = now.getTime() - 24 * 3600_000;
   const jobs: Array<Promise<NewsItem[]>> = WIRES.map((w) => getText(w.url, { headers: UA, fetchImpl, cacheMs: 10_000, timeoutMs: 6000, retries: 0 }).then((x) => wireItems(x, w.name, w.url)).catch(() => []));
+  for (const w of WORLD) jobs.push(getText(w.url, { headers: UA, fetchImpl, cacheMs: 30_000, timeoutMs: 6000, retries: 0 }).then((x) => worldItems(x, w.name, w.url)).catch(() => []));
   jobs.push(getText(HALTS, { headers: UA, fetchImpl, cacheMs: 10_000, timeoutMs: 6000, retries: 0 }).then(haltItems).catch(() => []));
   const ua = env.SEC_USER_AGENT?.trim();
   if (ua) {

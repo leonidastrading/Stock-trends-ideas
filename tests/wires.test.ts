@@ -77,3 +77,15 @@ describe("trading halts and phone alerts", async () => {
     expect(pickAlerts(items, new Set(["NVDA", "URGN"]), new Set(picks.map((p) => p.key)), now)).toHaveLength(0);
   });
 });
+
+describe("world news: BBC and Al Jazeera", async () => {
+  const { worldItems } = await import("@/lib/sources/wires");
+  const { isMainstream } = await import("@/lib/sources/news");
+  it("reads world headlines without tickers, and counts the outlets as mainstream", () => {
+    const xml = `<rss><channel><item><title>Japan scrambles jets as Russian aircraft violate airspace near Okinoshima</title><link>https://www.aljazeera.com/news/2026/11/17/japan-jets</link><description>Tokyo protested to Moscow.</description><pubDate>Tue, 17 Nov 2026 22:00:00 GMT</pubDate></item></channel></rss>`;
+    const [n] = worldItems(xml, "Al Jazeera", "https://www.aljazeera.com/");
+    expect(n).toMatchObject({ source: "Al Jazeera", symbols: [], headline: "Japan scrambles jets as Russian aircraft violate airspace near Okinoshima" });
+    expect(isMainstream(n)).toBe(true);
+    expect(isMainstream({ ...n, source: "BBC", url: "https://www.bbc.co.uk/news/world-asia-1" })).toBe(true);
+  });
+});

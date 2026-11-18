@@ -65,7 +65,7 @@ export const SCOUT = {
   mainstreamHosts: [
     "reuters.com", "bloomberg.com", "wsj.com", "ft.com", "cnbc.com", "nytimes.com", "washingtonpost.com", "apnews.com",
     "barrons.com", "marketwatch.com", "forbes.com", "businessinsider.com", "theverge.com", "techcrunch.com", "axios.com",
-    "benzinga.com", "yahoo.com", "fool.com", "seekingalpha.com", "investors.com", "economist.com", "theguardian.com", "bbc.com",
+    "benzinga.com", "yahoo.com", "fool.com", "seekingalpha.com", "investors.com", "economist.com", "theguardian.com", "bbc.com", "bbc.co.uk", "aljazeera.com",
   ],
 };
 
