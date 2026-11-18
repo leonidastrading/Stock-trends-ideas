@@ -48,7 +48,9 @@ export async function POST(request: Request) {
     const asked = shownUserText(parsed.data.message);
     // Cards named in the question (#208, "card 208"): fetched now, so cards newer than the chat's briefing are seen.
     const { cardRefs } = await import("@/lib/scout/live-context");
-    const refs = cardRefs(asked);
+    // A follow-up that names no card ("can you see it now?") reuses the card numbers of your last two messages.
+    let refs = cardRefs(asked);
+    if (!refs.length && asked.length < 200) refs = cardRefs(t.messages.filter((m) => m.role === "user").slice(-2).map((m) => shownUserText(m.content)).join(" "));
     if (refs.length) {
       const cards = await Promise.all(refs.map((id) => store.getCard(id).catch(() => null)));
       const parts: string[] = [];
@@ -61,7 +63,19 @@ export async function POST(request: Request) {
     }
     // Tickers named in the question ($NVDA or NVDA) that are listed.
     const listed = new Set((await import("@/lib/scout/symbol-search").then(({ listings }) => listings()).catch(() => [])).map((l) => l.s));
-    symbols = [...new Set([...symbols, ...(await import("@/lib/scout/live-context")).tickersAsked(asked, listed)])];
+    const named = (await import("@/lib/scout/live-context")).tickersAsked(asked, listed);
+    // A stock named without a card number: attach its latest card from the last 30 days (two stocks at most).
+    if (!refs.length && named.length) {
+      const latest = await store.latestCardIds(named.slice(0, 2)).catch(() => new Map<string, number>());
+      const parts: string[] = [];
+      for (const id of latest.values()) {
+        const c = await store.getCard(id).catch(() => null);
+        if (!c || Date.now() - Date.parse(c.createdAt) > 30 * 86400_000) continue;
+        parts.push(`Latest card on ${c.primaryTicker} (#${c.id}), fetched now:\n${cardQuestion(c, await store.getTrack(c.id).catch(() => null), "").split(CARD_ATTACHED)[1]}`);
+      }
+      if (parts.length) message = `${message}${CARD_ATTACHED}${parts.join("\n\n")}`;
+    }
+    symbols = [...new Set([...symbols, ...named])];
   }
   // The price, moves and headlines as of now (the briefing is a snapshot from when the chat started).
   const live = symbols.length ? await import("@/lib/scout/live-context").then(({ liveContext }) => liveContext(marketDataFromEnv(), symbols)).catch(() => null) : null;
