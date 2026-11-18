@@ -22,7 +22,7 @@ export const THEMES_PROMPT = `You read what a trader's sources are saying and fi
 You get three kinds of sources from the last 14 days: documents the trader collected (newsletters, notes, other bots' reports), article titles from websites they follow, and Stocktwits chatter (the trending list with why each stock is trending, and recent posts with their bullish/bearish tags).
 
 Pick the top 3 ideas by agreement: an idea counts more when several independent sources make the same call (same stock or theme, same direction), when it shows up across kinds of sources (documents and websites and Stocktwits), and when it is recent. Not just the loudest single stock: a theme many sources share (for example "power for AI data centers: long utilities and grid suppliers") can be one idea with 1-3 tickers. For each:
-- title, direction (long or short), 1-3 US tickers that express it best;
+- title (12 words or fewer, in plain English a non-expert gets at a glance: what happened and what it means for which company (e.g. 'FBI warns of a new AI hacking tool; could lift demand for CrowdStrike'). No trader jargon (read-through, print, beat-and-raise, TAM) and no unexplained acronyms or code names), direction (long or short), 1-3 US tickers that express it best;
 - the thesis in plain words, and why it should play out within 1-2 weeks (a dated catalyst if there is one);
 - agreement: how many sources of each kind make the call, and 2-4 short quotes or paraphrases with where they came from;
 - disagreement: who argues the other side, if anyone;

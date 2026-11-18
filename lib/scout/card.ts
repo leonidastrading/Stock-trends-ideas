@@ -67,7 +67,7 @@ export const CARD_JSON_SCHEMA = {
   additionalProperties: false,
   required: ["title", "kind", "origin", "observation", "evidence", "tickers", "why_not_priced", "lateness", "catalyst", "direction", "invalidation", "time_limit_days", "scores", "confidence", "expression", "unknowns"],
   properties: {
-    title: { type: "string", description: "12 words or fewer" },
+    title: { type: "string", description: "12 words or fewer, in plain English a non-expert gets at a glance: what happened and what it means for which company (e.g. 'FBI warns of a new AI hacking tool; could lift demand for CrowdStrike'). No trader jargon (read-through, print, beat-and-raise, TAM) and no unexplained acronyms or code names" },
     kind: { type: "string", enum: [...KINDS] },
     origin: { type: "string", enum: ["scout", "human"] },
     observation: { type: "string", description: "What changed, with the numbers and dates" },
