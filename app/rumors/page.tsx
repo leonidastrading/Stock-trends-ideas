@@ -3,7 +3,8 @@ import Pager, { FilterLinks, paginate } from "@/components/Pager";
 import SetupNotice from "@/components/SetupNotice";
 import Ticker from "@/components/Ticker";
 import { hasDatabase } from "@/lib/db";
-import { CATEGORIES, recentRumorDocs, rumorsSince } from "@/lib/scout/rumors";
+import { CATEGORIES, groupRumors, recentRumorDocs, rumorsSince } from "@/lib/scout/rumors";
+import CombineButton from "./CombineButton";
 import * as store from "@/lib/scout/store";
 import { etLabelAgo } from "@/lib/time";
 import RumorDrop from "./RumorDrop";
@@ -80,6 +81,13 @@ export default async function RumorsPage({ searchParams }: { searchParams: Promi
   const checkedCount = rumorsOnly.filter((r) => verdicts.has(r.id)).length;
   const page = paginate(rows, Number(sp.page ?? 1), PAGE);
   const params: Record<string, string | undefined> = { days: days === 7 ? undefined : String(days), cat: cat || undefined, tickers: withTickers ? "1" : undefined, truth: truth || undefined };
+  // Uploads that gave several rumors on one company (read before bundles were merged): offer to fold them into one each.
+  const foldable = docs.map((d) => {
+    const mine = all.filter((r) => r.docId === d.id && !checked.has(r.id));
+    const after = groupRumors(mine).length;
+    const top = Object.entries(mine.reduce<Record<string, number>>((m, r) => { if (r.tickers[0]) m[r.tickers[0]] = (m[r.tickers[0]] ?? 0) + 1; return m; }, {})).sort((a, b) => b[1] - a[1])[0];
+    return { doc: d, before: mine.length, after, top };
+  }).filter((x) => x.after < x.before);
   const counts = new Map<string, number>();
   for (const r of rumorsOnly) counts.set(r.category, (counts.get(r.category) ?? 0) + 1);
   return (
@@ -88,6 +96,12 @@ export default async function RumorsPage({ searchParams }: { searchParams: Promi
       <RememberFilters keys={["days", "cat", "tickers", "truth"]} />
       {tally("confirmed") > 0 && <div className="truth truth-confirmed truth-summary"><div className="truth-label">✅ {tally("confirmed")} rumor{tally("confirmed") === 1 ? "" : "s"} came true</div><div className="truth-note">{tally("partly") ? `${tally("partly")} partly true · ` : ""}{checkedCount} of {rumorsOnly.length} checked in this window. <a href="?truth=confirmed#rumors">Show them</a>.</div></div>}
       {tally("already_news") > 0 && truth !== "already_news" && <p className="small muted">{tally("already_news")} claim{tally("already_news") === 1 ? " was" : "s were"} already mainstream news when the scout read {tally("already_news") === 1 ? "it" : "them"}, so {tally("already_news") === 1 ? "it is" : "they are"} on the News tab, not listed here (<a href="?truth=already_news">show</a>).</p>}
+      {foldable.map((f) => (
+        <div key={f.doc.id} className="card section small">
+          <b>{f.doc.source}</b> gave {f.before} rumors{f.top ? <>, {f.top[1]} of them on {f.top[0]}</> : null}. Combine them into one per company ({f.after} in all), with the rest as supporting points?
+          <CombineButton docId={f.doc.id} label="Combine" />
+        </div>
+      ))}
       <p className="small warn">Unverified claims from conspiracy forums and fringe sites. Listed as claims, not facts; nothing here is researched or traded unless you press Check it.</p>
       <details className="card section">
         <summary><b>How this page works</b> <span className="small muted">where rumors come from and what the scout does with them</span></summary>
@@ -125,7 +139,7 @@ export default async function RumorsPage({ searchParams }: { searchParams: Promi
               {r.tickers.slice(0, 5).map((t, i) => <span key={t}>{i ? ", " : ""}<Ticker symbol={t} className={r.direction === "long" ? "pos" : r.direction === "short" ? "neg" : "accent"} /></span>)}
               {r.tickers.length > 0 && r.direction !== "none" && <span className={`small ${r.direction === "long" ? "pos" : "neg"}`}> {r.direction === "long" ? "▲ if true" : "▼ if true"}</span>}
             </div>
-            <div>{r.claim}</div>
+            <div style={{ whiteSpace: "pre-line" }}>{r.claim}</div>
             <div className="small muted">{[SPEC[r.specificity], r.timeframe ? `timing: ${r.timeframe}` : ""].filter(Boolean).join(" · ")}</div>
             {r.mainstream && (
               <div className="small">

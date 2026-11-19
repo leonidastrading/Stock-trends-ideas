@@ -126,3 +126,56 @@ describe("rumors: JSON dumps", () => {
     expect(seen).not.toContain("zzz999");
   });
 });
+
+describe("rumors: an upload of several files about one story", () => {
+  let pg: PGlite;
+  beforeAll(() => {
+    pg = new PGlite();
+    setQuerierForTests({ query: async (text, params) => (await pg.query(text, params as unknown[])).rows as Record<string, unknown>[] });
+  });
+  afterAll(() => setQuerierForTests(null));
+
+  const item = (claim: string, tickers: string[], direction: "long" | "short" | "none", specificity = 3, confirm = "") => ({ claim, tickers, direction, category: "regulatory" as const, specificity, timeframe: "", confirm, source: "", quote: "" });
+
+  it("folds rumors on one company and direction into one, the most specific claim leading", async () => {
+    const { groupRumors, mergeRumors } = await import("@/lib/scout/rumors");
+    const xs = [
+      item("The chart claims AMD ties 22% of revenue to China. It frames this as risk.", ["AMD", "NVDA"], "short", 4, "10-K geographic revenue"),
+      item("The article implies Hygon doubled IP fees to AMD.", ["AMD"], "short", 5, "Hygon annual report"),
+      item("Aivres, tied to blacklisted Inspur, supports AMD MI350.", ["AMD"], "short", 3, "Entity List updates"),
+      item("Posters say AMD will beat.", ["AMD"], "long"),
+      item("A vague market crash claim.", [], "none"),
+    ];
+    const g = groupRumors(xs);
+    expect(g.map((x) => x.members)).toEqual([[0, 1, 2], [3], [4]]);
+    const m = mergeRumors(xs)[0];
+    expect(m.claim).toBe("The article implies Hygon doubled IP fees to AMD.\nSupporting points from the same upload:\n• The chart claims AMD ties 22% of revenue to China.\n• Aivres, tied to blacklisted Inspur, supports AMD MI350.");
+    expect(m).toMatchObject({ tickers: ["AMD", "NVDA"], specificity: 5, direction: "short", confirm: "10-K geographic revenue; Hygon annual report; Entity List updates" });
+  });
+
+  it("an upload of several files is read as one story, and an older upload can be combined after the fact", async () => {
+    const { combineDocRumors, readRumorDoc, rumorsSince } = await import("@/lib/scout/rumors");
+    let seen = "";
+    const reply = { rumors: [item("Chart: AMD China revenue 22%.", ["AMD"], "short", 4), item("Hygon doubled IP fees.", ["AMD"], "short", 5)] };
+    const callModel: CallModel = async ({ user, purpose }) => {
+      if (purpose === "rumor_check") return { text: JSON.stringify({ results: [] }), stopReason: "end_turn", modelServed: "m", usage: { input_tokens: 1, output_tokens: 1 }, costUsd: 0 };
+      seen = user;
+      return { text: JSON.stringify(reply), stopReason: "end_turn", modelServed: "m", usage: { input_tokens: 1, output_tokens: 1 }, costUsd: 0 };
+    };
+    const deps = { data: null, sources: [], callModel, now: new Date("2026-11-19T21:00:00Z"), env: {} as NodeJS.ProcessEnv, fetchImpl: emptyRss };
+    const r = await readRumorDoc("===== a.jpg =====\nchart\n\n===== b.jpg =====\nreport", "amd.zip", deps, null, { bundle: 2 });
+    expect(seen).toContain("2 files uploaded together");
+    expect(r.rumors).toBe(1);
+
+    // Read the old way (no bundle flag): two rumors; combining folds them into one new rumor.
+    const old = await readRumorDoc("one long article about AMD", "amd-old.zip", deps);
+    expect(old.rumors).toBe(2);
+    const ids = (await rumorsSince(7)).filter((x) => x.docId === old.docId).map((x) => x.id);
+    const res = await combineDocRumors(old.docId, deps);
+    expect(res).toMatchObject({ before: 2, after: 1 });
+    const now = (await rumorsSince(7)).filter((x) => x.docId === old.docId);
+    expect(now).toHaveLength(1);
+    expect(ids).not.toContain(now[0].id);
+    expect(now[0].claim).toMatch(/^Hygon doubled IP fees\.\nSupporting points/);
+  });
+});

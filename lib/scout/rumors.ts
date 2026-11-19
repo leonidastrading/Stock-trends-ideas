@@ -144,6 +144,45 @@ export function parseRumors(text: string): RumorItem[] {
   }).slice(0, RUMORS.perDoc);
 }
 
+const firstSentence = (s: string) => (s.trim().match(/^.+?[.!?](?=\s|$)/)?.[0] ?? s.trim()).slice(0, 240);
+
+/**
+ * Pure: rumors about the same company and direction folded into one (an upload of several files about one story
+ * would otherwise give one rumor per file or chart). The most specific claim leads; the others become its supporting
+ * points. Rumors with no ticker are left as they are. Returns each merged rumor with the indexes it was made from.
+ */
+export function groupRumors(items: RumorItem[]): Array<{ item: RumorItem; members: number[] }> {
+  const groups = new Map<string, number[]>();
+  const out: Array<{ key: string | null; members: number[] }> = [];
+  items.forEach((r, i) => {
+    const key = r.tickers[0] ? `${r.tickers[0]}|${r.direction}` : null;
+    if (key && groups.has(key)) groups.get(key)!.push(i);
+    else { const members = [i]; if (key) groups.set(key, members); out.push({ key, members }); }
+  });
+  return out.map(({ members }) => {
+    if (members.length === 1) return { item: items[members[0]], members };
+    const rs = members.map((i) => items[i]);
+    const lead = rs.reduce((a, b) => (b.specificity > a.specificity ? b : a));
+    const rest = rs.filter((r) => r !== lead);
+    const uniq = (xs: string[]) => [...new Set(xs.map((x) => x.trim()).filter(Boolean))];
+    let points = "";
+    for (const r of rest) { const line = `\n• ${firstSentence(r.claim)}`; if (points.length + line.length > 1400) { points += `\n• …and ${rest.length - points.split("\n• ").length + 1} more`; break; } points += line; }
+    return {
+      members,
+      item: {
+        ...lead,
+        claim: `${lead.claim.trim()}\nSupporting points from the same upload:${points}`,
+        tickers: uniq(rs.flatMap((r) => r.tickers)).slice(0, 8),
+        specificity: Math.max(...rs.map((r) => r.specificity)),
+        timeframe: lead.timeframe || rs.find((r) => r.timeframe)?.timeframe || "",
+        confirm: uniq(rs.map((r) => r.confirm)).join("; ").slice(0, 500),
+        source: uniq(rs.map((r) => r.source)).join(", ").slice(0, 160),
+      },
+    };
+  });
+}
+export const mergeRumors = (items: RumorItem[]): RumorItem[] => groupRumors(items).map((g) => g.item);
+
 /** Pure: a document split into pieces the model can read (on paragraph breaks where possible). */
 export function chunks(text: string, size = RUMORS.chunkChars, max = RUMORS.maxChunks): string[] {
   const out: string[] = [];
@@ -191,7 +230,7 @@ export function imageAsText(r: { kind: string; what_it_shows: string; text_in_im
 }
 
 /** Read one document: extract rumors (one model call per 90k characters, up to 3), check them against the news, store them. */
-export async function readRumorDoc(text: string, source: string, deps: ResearchDeps & { data: MarketData | null }, path: string | null = null): Promise<RumorDocResult> {
+export async function readRumorDoc(text: string, source: string, deps: ResearchDeps & { data: MarketData | null }, path: string | null = null, opts: { bundle?: number } = {}): Promise<RumorDocResult> {
   const settings = await store.loadSettings();
   const today = toEt(deps.now).date;
   // A JSON dump (Reddit, forum exports, scrapers): the posts and comments, not the metadata.
@@ -206,7 +245,8 @@ export async function readRumorDoc(text: string, source: string, deps: ResearchD
     const spend = await store.spendOn(today);
     if (spend.cost >= settings.dailyCapUsd) { error = `daily AI cap reached ($${spend.cost.toFixed(2)} of $${settings.dailyCapUsd})`; break; }
     try {
-      const reply = await deps.callModel({ model: settings.model, effort: "low", purpose: "rumors", user: `Document: ${source}${parts.length > 1 ? ` (part ${i + 1} of ${parts.length})` : ""}\n\n${part}\n\nReply with the JSON object.` });
+      const bundleNote = (opts.bundle ?? 0) > 1 ? `\n\nThis document is ${opts.bundle} files uploaded together (each headed "===== name ====="), usually about one story. Treat them as ONE document: give one rumor per distinct thesis on a company, folding the facts, numbers and charts from every file into that rumor's claim, not one rumor per file, chart or fact.` : "";
+      const reply = await deps.callModel({ model: settings.model, effort: "low", purpose: "rumors", user: `Document: ${source}${parts.length > 1 ? ` (part ${i + 1} of ${parts.length})` : ""}${bundleNote}\n\n${part}\n\nReply with the JSON object.` });
       await store.logLlmCall({ etDate: today, model: settings.model, purpose: "rumors", usage: reply.usage, costUsd: reply.costUsd, ok: true });
       cost += reply.costUsd ?? 0;
       found.push(...parseRumors(reply.text));
@@ -215,6 +255,8 @@ export async function readRumorDoc(text: string, source: string, deps: ResearchD
       break;
     }
   }
+  // Several files uploaded together: one rumor per company and direction, whatever the model returned per file or part.
+  if ((opts.bundle ?? 0) > 1) found.splice(0, found.length, ...mergeRumors(found));
   const tickers = [...new Set(found.flatMap((r) => r.tickers))];
   const news = deps.data && tickers.length ? await deps.data.getNews(tickers.slice(0, 60), new Date(deps.now.getTime() - 7 * 86400_000), deps.now, 500).catch(() => [] as NewsItem[]) : [];
   const docId = Number((await q(`INSERT INTO rumor_docs (source, path, chars, rumors, cost_usd, error) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`, [source.slice(0, 200), path, text.length, found.length, cost, error]))[0].id);
@@ -271,6 +313,42 @@ export async function rumorsSince(days: number, limit = 500): Promise<Rumor[]> {
     specificity: Number(r.specificity), timeframe: String(r.timeframe ?? ""), confirm: String(r.confirm ?? ""), source: String(r.source ?? ""), quote: String(r.quote ?? ""),
     mainstream: (r.mainstream as Mainstream | null) ?? null,
   }));
+}
+
+/** Rumor ids already sent to research (their card is found from the "rumor: … #id" term), which must keep their id. */
+async function researchedRumorIds(): Promise<Set<number>> {
+  return new Set((await q(`SELECT term FROM candidates WHERE term LIKE 'rumor:%'`)).map((r) => Number(/^rumor: .*?#(\d+)/.exec(String(r.term))?.[1])).filter(Boolean));
+}
+
+/**
+ * Fold one document's rumors into one per company and direction (for uploads read before bundles were merged).
+ * Rumors already sent to research are left alone. The merged rumor keeps the earliest time and is checked against
+ * the news again.
+ */
+export async function combineDocRumors(docId: number, deps: { data: MarketData | null; callModel: ResearchDeps["callModel"]; now: Date; fetchImpl?: typeof fetch; env?: NodeJS.ProcessEnv }): Promise<{ before: number; after: number; ids: number[] }> {
+  const done = await researchedRumorIds();
+  const rows = (await rumorsSince(3650, 100000)).filter((r) => r.docId === docId && !done.has(r.id)).sort((a, b) => a.id - b.id);
+  const groups = groupRumors(rows).filter((g) => g.members.length > 1);
+  const ids: number[] = [];
+  for (const g of groups) {
+    const members = g.members.map((i) => rows[i]);
+    const lead = members.find((m) => m.claim === g.item.claim.split("\nSupporting points")[0]) ?? members[0];
+    const first = members.reduce((a, b) => (a.createdAt < b.createdAt ? a : b));
+    const r = g.item;
+    const row = await q(`INSERT INTO rumors (doc_id, created_at, claim, tickers, direction, category, specificity, timeframe, confirm, source, quote, mainstream) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+      [docId, first.createdAt, r.claim, r.tickers, r.direction, r.category, r.specificity, r.timeframe, r.confirm, r.source, r.quote, JSON.stringify(lead.mainstream)]);
+    ids.push(Number(row[0].id));
+    const old = members.map((m) => m.id);
+    await q(`DELETE FROM rumor_checks WHERE rumor_id = ANY($1::int[])`, [old]);
+    await q(`DELETE FROM rumors WHERE id = ANY($1::int[])`, [old]);
+  }
+  const after = rows.length - groups.reduce((n, g) => n + g.members.length - 1, 0);
+  if (ids.length) {
+    await q(`UPDATE rumor_docs SET rumors = (SELECT count(*) FROM rumors WHERE doc_id = $1) WHERE id = $1`, [docId]);
+    await import("./rumor-check").then(({ checkRumors }) => checkRumors({ data: deps.data, callModel: deps.callModel, now: deps.now, fetchImpl: deps.fetchImpl, env: deps.env }, Date.now() + 120_000, ids))
+      .catch((err) => console.error(`rumor news check failed: ${err instanceof Error ? err.message : String(err)}`));
+  }
+  return { before: rows.length, after, ids };
 }
 
 export async function getRumor(id: number): Promise<Rumor | null> {

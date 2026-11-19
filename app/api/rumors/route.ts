@@ -3,7 +3,7 @@ import { z } from "zod";
 import { checkBasicAuth } from "@/lib/auth";
 import { hasDatabase } from "@/lib/db";
 import { defaultDeps } from "@/lib/scout/engine";
-import { getRumor, imageAsText, partText, readRumorDoc, researchRumor } from "@/lib/scout/rumors";
+import { combineDocRumors, getRumor, imageAsText, partText, readRumorDoc, researchRumor } from "@/lib/scout/rumors";
 import { joinParts } from "@/lib/files/unpack";
 
 export const runtime = "nodejs";
@@ -20,7 +20,7 @@ const MAX_CHARS = 400_000;
 export async function POST(request: Request) {
   if (!checkBasicAuth(request.headers.get("authorization"))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!hasDatabase()) return NextResponse.json({ ok: false, errors: ["database not connected"] }, { status: 503 });
-  let text = "", source = "";
+  let text = "", source = "", bundle = 0;
   if ((request.headers.get("content-type") ?? "").includes("multipart/form-data")) {
     const form = await request.formData();
     const file = form.get("file");
@@ -34,15 +34,25 @@ export async function POST(request: Request) {
   } else {
     const parsed = z.union([
       z.object({ action: z.literal("research"), id: z.number().int().positive() }),
+      z.object({ action: z.literal("combine"), docId: z.number().int().positive() }),
       z.object({ text: z.string().min(1), source: z.string().max(200).optional() }),
       z.object({ parts: z.array(z.object({ name: z.string().max(300), text: z.string() })).min(1).max(600), source: z.string().max(200).optional() }),
     ]).safeParse(await request.json().catch(() => null));
     if (!parsed.success) return NextResponse.json({ ok: false, errors: ["send { text, source }, { parts, source } or { action: 'research', id }"] }, { status: 422 });
+    if ("action" in parsed.data && parsed.data.action === "combine") {
+      try {
+        const res = await combineDocRumors(parsed.data.docId, defaultDeps());
+        return NextResponse.json({ ok: true, ...res });
+      } catch (err) {
+        return NextResponse.json({ ok: false, errors: [err instanceof Error ? err.message : String(err)] }, { status: 500 });
+      }
+    }
     if ("parts" in parsed.data) {
+      bundle = parsed.data.parts.filter((x) => x.text.trim()).length;
       const parts = await Promise.all(parsed.data.parts.map(async (x) => ({ name: x.name, text: await partText(x.text) })));
       parsed.data = { text: joinParts(parts, MAX_CHARS) || " ", source: parsed.data.source };
     }
-    if ("action" in parsed.data) {
+    if ("action" in parsed.data && parsed.data.action === "research") {
       const r = await getRumor(parsed.data.id);
       if (!r) return NextResponse.json({ ok: false, errors: ["no such rumor"] }, { status: 404 });
       try {
@@ -60,7 +70,7 @@ export async function POST(request: Request) {
   if (text.length > MAX_CHARS) text = text.slice(0, MAX_CHARS);
   const label = (source || `pasted ${new Date().toISOString().slice(0, 16).replace("T", " ")}`).slice(0, 200);
   after(async () => {
-    await readRumorDoc(text, label, defaultDeps()).catch((err) => console.error(`rumor read failed: ${err instanceof Error ? err.message : String(err)}`));
+    await readRumorDoc(text, label, defaultDeps(), null, { bundle }).catch((err) => console.error(`rumor read failed: ${err instanceof Error ? err.message : String(err)}`));
   });
   return NextResponse.json({ ok: true, reading: label, chars: text.length }, { status: 202 });
 }
