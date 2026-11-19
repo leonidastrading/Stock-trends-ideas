@@ -11,20 +11,31 @@ import { isPennyShort } from "./card";
 /** Extra event words for the News tab only (operational shocks the story desk's list does not name). */
 export const NEWS_EVENT = /\b(ground stop|grounded|grounding|delist\w*|cyberattack|ransomware|explosion|evacuat\w*|derail\w*|shutdown|layoffs?|job cuts|guidance raise|raises guidance|misses estimates|beats estimates)\b/i;
 
+/**
+ * Pure: a routine trading pause (limit up-limit down, straddle, single-stock pause). Small, jumpy stocks hit these
+ * several times a day, so they are not news; halts for pending news or regulatory reasons are.
+ */
+export const isRoutinePause = (i: { source: string; headline: string; summary: string }) =>
+  i.source === "Nasdaq halts" && /reason code (LUDP|LUDS|M|T5)\b/.test(i.summary);
+
 export interface FeedItem { id: string; at: string; headline: string; summary: string; source: string; url: string; symbols: string[]; event: string | null; cardIds: number[]; buzz: number; score: number; kind: "news" | "trump" | "rumor"; repostedAt?: string }
 
 /** Pure: score and rank. Freshness halves every 6 hours; an event word, a pile-up on one stock and a card on it each lift a story. */
 export function rankFeed(items: Array<Omit<FeedItem, "score" | "buzz" | "event" | "cardIds">>, cards: Map<string, number[]>, now: Date): FeedItem[] {
+  // Routine pauses do not count as headlines piling onto a stock (four pauses are not four stories).
   const recentBySym = new Map<string, number>();
-  for (const i of items) if (now.getTime() - Date.parse(i.at) < 6 * 3600_000) for (const s of i.symbols) recentBySym.set(s, (recentBySym.get(s) ?? 0) + 1);
+  for (const i of items) if (!isRoutinePause(i) && now.getTime() - Date.parse(i.at) < 6 * 3600_000) for (const s of i.symbols) recentBySym.set(s, (recentBySym.get(s) ?? 0) + 1);
   return items.map((i) => {
     const ageH = Math.max(0, (now.getTime() - Date.parse(i.at)) / 3600_000);
     // "strike price" and similar options wording is not a strike; the story desk's own word list is left as it is.
     const text = `${i.headline} ${i.summary}`.replace(/\bstrike(?: prices?| of)\b/gi, "");
-    const event = eventWord(text) ?? (NEWS_EVENT.exec(text)?.[1]?.toLowerCase() ?? null);
+    const routine = isRoutinePause(i);
+    const event = routine ? null : eventWord(text) ?? (NEWS_EVENT.exec(text)?.[1]?.toLowerCase() ?? null);
     const cardIds = [...new Set(i.symbols.flatMap((s) => cards.get(s) ?? []))];
     const buzz = Math.max(0, ...i.symbols.map((s) => recentBySym.get(s) ?? 0));
     const broad = i.symbols.length > 4; // round-ups tagged with many tickers are rarely the story
+    // A routine pause sits at the bottom of Top unless the stock is on a card (then it is worth a glance).
+    if (routine) return { ...i, event: "paused", cardIds, buzz: 0, score: Math.round((cardIds.length ? 0.8 : 0.1) * Math.pow(0.5, ageH / 6) * 100) / 100 };
     const weight = 1 + (event ? 1.5 : 0) + Math.min(2, Math.max(0, buzz - 1) * 0.5) + (cardIds.length ? (event || buzz >= 2 ? 1.5 : 0.5) : 0) + (i.kind === "trump" ? 1.5 : 0) - (broad ? 1 : 0);
     return { ...i, event, cardIds, buzz, score: Math.round(weight * Math.pow(0.5, ageH / 6) * 100) / 100 };
   });

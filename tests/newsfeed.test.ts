@@ -43,4 +43,18 @@ describe("news feed fixes", () => {
     expect(by.get("whale")!.event).toBeNull();
     expect(by.get("real")!.score).toBeGreaterThan(by.get("fluff")!.score);
   });
+
+  it("routine volatility pauses sink to the bottom of Top and do not pile up; news-pending halts still rank", () => {
+    const now = new Date("2026-11-19T15:55:00Z");
+    const pause = (n: number, sym = "TDTH") => ({ id: `p${n}${sym}`, at: new Date(now.getTime() - n * 20 * 60_000).toISOString(), headline: `Trading halted: ${sym} (Trident Dgtl Tch Hld Cl B Ords), volatility pause (limit up-limit down); resumes 10:37:48 ET`, summary: "Nasdaq halt, reason code LUDP.", source: "Nasdaq halts", url: "", symbols: [sym], kind: "news" as const });
+    const r = rankFeed([
+      pause(1), pause(2), pause(3), pause(4), pause(1, "MU"),
+      { id: "n1", at: new Date(now.getTime() - 80 * 60_000).toISOString(), headline: "NVIDIA receives analyst downgrades following CEO resignation", summary: "", source: "fiscal.ai", url: "", symbols: ["NVDA"], kind: "news" as const },
+      { id: "h1", at: new Date(now.getTime() - 30 * 60_000).toISOString(), headline: "Trading halted: ACME (Acme Corp), news pending", summary: "Nasdaq halt, reason code T1.", source: "Nasdaq halts", url: "", symbols: ["ACME"], kind: "news" as const },
+    ], new Map([["NVDA", [217]], ["MU", [12]]]), now).sort((a, b) => b.score - a.score);
+    expect(r.slice(0, 2).map((x) => x.id)).toEqual(["n1", "h1"]);
+    const tdth = r.filter((x) => x.symbols[0] === "TDTH");
+    expect(tdth.every((x) => x.event === "paused" && x.buzz === 0 && x.score <= 0.1)).toBe(true);
+    expect(r.find((x) => x.id === "p1MU")!.score).toBeGreaterThan(tdth[0].score); // on a card: still low, but above other pauses
+  });
 });
