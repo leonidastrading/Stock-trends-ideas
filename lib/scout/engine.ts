@@ -255,6 +255,16 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
       return `COT ${cot.data ? `${(cot.data as unknown[]).length} markets` : `failed: ${cot.error}`}; gamma ${g.filter(Boolean).length}/3`;
     }).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
   } else out.positioning = "later: not enough time";
+  // Pharma: the FDA calendar (twice a day) and Phase 3 readouts (daily), kept warm for the Pharma page.
+  if (left() > 60_000) {
+    out.pharma = await Promise.all([import("../sources/pharma"), import("../market/panels"), import("../sources/edgar")]).then(async ([ph, { panel }, { secTickerList }]) => {
+      const today = (await import("../time")).toEt(now).date;
+      const ua = process.env.SEC_USER_AGENT?.trim();
+      const fda = await panel("pharma:fda", 12 * 60, () => ph.fetchFdaCalendar(today, fetchImpl), 25_000);
+      const tr = ua ? await panel("pharma:trials", 24 * 60, async () => ph.fetchTrialReadouts(today, await secTickerList(ua, fetchImpl), fetchImpl), 25_000) : null;
+      return `FDA ${fda.data ? `${(fda.data as unknown[]).length} events` : `failed: ${fda.error}`}; trials ${tr?.data ? `${(tr.data as unknown[]).length}` : tr ? `failed: ${tr.error}` : "no SEC_USER_AGENT"}`;
+    }).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+  } else out.pharma = "later: not enough time";
   // Open cards: is any card's own invalidation met? (about every 3 hours each, on the live price and headlines)
   if (left() > 70_000) {
     out.invalidation = await import("./invalidation").then(({ checkInvalidations }) => checkInvalidations({ data, callModel: callResearchModel, now, env: process.env }, deadline - 30_000)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
