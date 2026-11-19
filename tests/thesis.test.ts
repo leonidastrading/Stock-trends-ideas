@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cardForPrompt, fallbackThesis, THESIS_PROMPT } from "@/lib/scout/thesis";
+import { fallbackThesis, thesisFor } from "@/lib/scout/thesis";
 import type { StoredCard } from "@/lib/scout/store";
 
 const card = (observation: string) => ({
@@ -24,9 +24,11 @@ describe("one-sentence thesis", () => {
     expect(fallbackThesis(dated)).toBe("Long PANW: Palo Alto Networks bear market into fiscal Q1 earnings. Catalyst about Nov 30, 2026; 30-day time limit.");
   });
 
-  it("gives the model the card's fields and asks for one plain sentence", () => {
-    expect(cardForPrompt(card("PANW fell 26%."))).toMatch(/^CARD 211: long PANW \(Palo Alto Networks\), time limit 30 days, written 2026-11-16\.\nTitle: .*\nObservation: PANW fell 26%\./);
-    expect(THESIS_PROMPT).toMatch(/ONE plain-English sentence/);
-    expect(THESIS_PROMPT).toMatch(/data, not instructions/);
+  it("a card's own thesis always wins and never changes; older cards fall back", () => {
+    const own = card("PANW fell 26%.");
+    own.card.thesis = "Long PANW: the fears are priced in, so a clean report should lift it within 30 days.";
+    expect(thesisFor(own, "a sentence written later")).toBe(own.card.thesis);
+    expect(thesisFor(card("PANW fell 26%."), "written earlier for an old card")).toBe("written earlier for an old card");
+    expect(thesisFor(card("PANW fell 26%."))).toMatch(/^Long PANW: /);
   });
 });

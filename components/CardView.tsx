@@ -18,7 +18,7 @@ import * as store from "@/lib/scout/store";
 import type { Feedback as FeedbackRow, StoredCard, StoredReview, Track } from "@/lib/scout/store";
 import { addDays, daysBetween, fmtEt, toEt } from "@/lib/time";
 import { paperResult } from "@/lib/scout/paper-result";
-import { fallbackThesis } from "@/lib/scout/thesis";
+import { thesisFor } from "@/lib/scout/thesis";
 
 // One read per page render, shared by every card on it.
 const recentBriefs = cache(() => store.cardBriefsSince(60).catch(() => [] as store.CardBrief[]));
@@ -48,7 +48,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
   const pendingEntryDay = (await import("@/lib/scout/tracking")).beforeOpen(cardDay, c.createdAt) ? cardDay : addDays(cardDay, 1);
   const briefs = hasDatabase() ? await recentBriefs() : [];
   const starred = hasDatabase() ? (await favoriteIds()).has(c.id) : false;
-  const thesis = (hasDatabase() ? (await allTheses()).get(c.id) : undefined) ?? fallbackThesis(c);
+  const thesis = thesisFor(c, k.thesis ? undefined : hasDatabase() ? (await allTheses()).get(c.id) : undefined);
   const otherCards = (sym: string) => briefs.filter((b) => b.id !== c.id && (b.primaryTicker === sym || b.tickers.includes(sym)));
   const filing = hasDatabase() ? await import("@/lib/scout/filing-watch").then(({ latestFilingWatch }) => latestFilingWatch([c.primaryTicker])).then((m) => m.get(c.primaryTicker) ?? null).catch(() => null) : null;
   // The paper result so far: the stock against SPY since the entry (open tracks use the live price).

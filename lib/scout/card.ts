@@ -35,6 +35,8 @@ export const latenessSchema = z.object({
 
 export const cardSchema = z.object({
   title: z.string().min(1).max(120),
+  /** One plain sentence: direction, ticker, reason, what should happen by when. Cards before this field have none. */
+  thesis: z.string().max(400).optional(),
   kind: z.enum(KINDS),
   origin: z.enum(["scout", "human"]),
   observation: z.string().min(1),
@@ -65,9 +67,10 @@ export type CardTicker = z.infer<typeof tickerSchema>;
 export const CARD_JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["title", "kind", "origin", "observation", "evidence", "tickers", "why_not_priced", "lateness", "catalyst", "direction", "invalidation", "time_limit_days", "scores", "confidence", "expression", "unknowns"],
+  required: ["title", "thesis", "kind", "origin", "observation", "evidence", "tickers", "why_not_priced", "lateness", "catalyst", "direction", "invalidation", "time_limit_days", "scores", "confidence", "expression", "unknowns"],
   properties: {
     title: { type: "string", description: "12 words or fewer, in plain English a non-expert gets at a glance: what happened and what it means for which company (e.g. 'FBI warns of a new AI hacking tool; could lift demand for CrowdStrike'). No trader jargon (read-through, print, beat-and-raise, TAM) and no unexplained acronyms or code names" },
+    thesis: { type: "string", description: "The thesis as ONE plain-English sentence of 35 words or fewer that a non-expert understands at a glance: start with Long or Short and the ticker, then the reason and what should happen by when (e.g. 'Long PANW: the 26% drop already prices in the fears, so a clean earnings report around Nov 19 should spark a rebound against the market within 30 days'). Only the card's own facts; no jargon, acronyms spelled out." },
     kind: { type: "string", enum: [...KINDS] },
     origin: { type: "string", enum: ["scout", "human"] },
     observation: { type: "string", description: "What changed, with the numbers and dates" },

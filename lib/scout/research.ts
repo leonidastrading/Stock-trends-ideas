@@ -173,11 +173,6 @@ export async function researchCandidate(input: ResearchInput, deps: ResearchDeps
     status: gated.status, gateNotes: gated.notes, catalystDate: cDate, rankScore: rankScore(gated.card),
   });
   const candidate = await store.addCandidate({ ...base, outcome: "card", reason: gated.status, cardId: stored.id });
-  // Its one-sentence thesis right away (display only; the hourly upkeep catches any that fail here).
-  // (Only with the real model: test fakes count every call.)
-  if (deps.callModel === (await import("./llm")).callResearchModel) {
-    await import("./thesis").then(({ writeTheses }) => writeTheses({ callModel: deps.callModel, now: deps.now }, Date.now() + 60_000, 1, [stored.id])).catch(() => undefined);
-  }
   // The name each symbol trades as and its next earnings, for the card's header.
   await import("./symbols").then(({ refreshSymbolInfo }) => refreshSymbolInfo(deps.data, deps.env, gated.card.tickers.map((t) => t.symbol), deps.now, 20, deps.fetchImpl)).catch(() => undefined);
 
