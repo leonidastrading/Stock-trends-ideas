@@ -423,3 +423,8 @@ html { scroll-padding-top: 120px; }
 .dot-arrow { color: var(--accent); font-weight: 700; }
 a.chip.active { border-color: var(--accent); color: var(--accent); }
 a.chip { text-decoration: none; }
+
+.move-banner { margin: 8px 0; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); border-left-width: 4px; }
+.move-banner.against { border-left-color: var(--neg); background: color-mix(in srgb, var(--neg) 12%, transparent); }
+.move-banner.with { border-left-color: var(--pos); background: color-mix(in srgb, var(--pos) 12%, transparent); }
+.move-banner a { color: inherit; text-decoration: underline; }

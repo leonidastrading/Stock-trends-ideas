@@ -43,6 +43,15 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
     else after(() => lookup);
   }
   const q = await quote(c.primaryTicker);
+  // A 5%+ move today on the card's stock: a banner with the most likely headline from the last 3 hours.
+  const bigMove = q?.changePct !== null && q?.changePct !== undefined && Math.abs(q.changePct) >= 5 ? q.changePct : null;
+  const moveReason = bigMove !== null ? await (async () => {
+    const data = marketDataFromEnv();
+    if (!data) return null;
+    const news = await data.getNews([c.primaryTicker], new Date(Date.now() - 3 * 3600_000), new Date(), 20).catch(() => []);
+    const fast = await import("@/lib/sources/wires").then(({ fastNews }) => fastNews()).catch(() => []);
+    return (await import("@/lib/scout/price-watch")).likelyReason(c.primaryTicker, [...news, ...fast], new Date());
+  })() : null;
   // Where the paper entry will be: the same day's open for a card written before 9:30 AM ET, else the next session's.
   const cardDay = toEt(new Date(c.createdAt)).date;
   const pendingEntryDay = (await import("@/lib/scout/tracking")).beforeOpen(cardDay, c.createdAt) ? cardDay : addDays(cardDay, 1);
@@ -83,6 +92,13 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
             <div className="filing-label">⚠ {filing.status === "red_flag" ? "SEC RED FLAG" : filing.status === "past_due" ? "REPORT PAST DUE" : filing.status === "nt_filed" ? "LATE-FILING NOTICE" : "REPORT LATER THAN USUAL"}</div>
             <div>{filing.message}</div>
             <div className="small">Filing watch · checked {fmtEt(filing.checkedAt)} ET{filing.cik ? <> · <a href={`https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${filing.cik}&type=&dateb=&owner=include&count=40`} target="_blank" rel="noreferrer">SEC filings</a></> : null}</div>
+          </div>
+        )}
+        {bigMove !== null && (
+          <div className={`move-banner ${(bigMove < 0) === (c.direction === "long") ? "against" : "with"}`}>
+            <b>{bigMove < 0 ? "📉" : "📈"} {c.primaryTicker} {bigMove > 0 ? "+" : "−"}{Math.abs(bigMove).toFixed(1)}% today</b>
+            <span className="small"> · {(bigMove < 0) === (c.direction === "long") ? `against this ${c.direction}` : `in this ${c.direction}'s favour`}</span>
+            <div className="small">{moveReason ? <>Likely reason: {moveReason.url.startsWith("http") ? <a href={moveReason.url} target="_blank" rel="noreferrer">{moveReason.headline}</a> : moveReason.headline} <span className="muted">({moveReason.source})</span></> : "No headline in the scout's feeds yet: the news may be on X, in a short report or a niche outlet."}</div>
           </div>
         )}
         {track?.excluded && <div className="small neg" style={{ marginTop: 6 }}><b>Excluded from scoring: wrong security.</b> {track.excluded}</div>}
