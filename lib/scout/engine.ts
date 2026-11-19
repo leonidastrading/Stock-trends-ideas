@@ -255,6 +255,10 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
       return `COT ${cot.data ? `${(cot.data as unknown[]).length} markets` : `failed: ${cot.error}`}; gamma ${g.filter(Boolean).length}/3`;
     }).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
   } else out.positioning = "later: not enough time";
+  // Dots: second-order ideas from changes in behaviour in the news, once a weekday from 8 AM ET.
+  if (left() > 90_000) {
+    out.dots = await import("./dots").then(({ dotsIfDue }) => dotsIfDue({ data, callModel: callResearchModel, now, fetchImpl })).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+  } else out.dots = "later: not enough time";
   // Pharma: the FDA calendar (twice a day) and Phase 3 readouts (daily), kept warm for the Pharma page.
   if (left() > 60_000) {
     out.pharma = await Promise.all([import("../sources/pharma"), import("../market/panels"), import("../sources/edgar")]).then(async ([ph, { panel }, { secTickerList }]) => {

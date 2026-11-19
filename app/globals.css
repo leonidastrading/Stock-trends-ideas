@@ -419,3 +419,5 @@ html { scroll-padding-top: 120px; }
 .fav-star:disabled { opacity: 0.7; cursor: progress; }
 
 .pharma-has-card td { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.dot-chain { margin: 2px 0 8px; padding: 8px 10px; border-radius: 6px; background: color-mix(in srgb, var(--accent) 7%, transparent); font-size: 0.97rem; line-height: 1.5; }
+.dot-arrow { color: var(--accent); font-weight: 700; }

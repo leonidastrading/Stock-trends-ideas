@@ -3,11 +3,11 @@
 import { useState } from "react";
 
 /** Research one catalyst into a card (scored as human-originated), like the Home search's "Research it". */
-export default function ResearchButton({ symbol, term, observation }: { symbol: string; term: string; observation: string }) {
+export default function ResearchButton({ symbol, term, observation, kind = "event" }: { symbol: string; term: string; observation: string; kind?: string | null }) {
   const [state, setState] = useState<"idle" | "busy" | { cardId?: number; status?: string; error?: string }>("idle");
   async function go() {
     setState("busy");
-    const res = await fetch("/api/notice", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ observation, term, tickers: [symbol], kind: "event" }) }).catch(() => null);
+    const res = await fetch("/api/notice", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ observation, term, tickers: [symbol], kind }) }).catch(() => null);
     if (!res) { setState({ error: "Lost the connection while it ran; if it finishes, the card shows up on Ideas and here." }); return; }
     const j = await res.json().catch(() => ({ errors: [`HTTP ${res.status}`] }));
     setState(res.ok && j.ok ? { cardId: j.cardId, status: j.status } : { error: (j.errors ?? ["failed"]).join("; ") });

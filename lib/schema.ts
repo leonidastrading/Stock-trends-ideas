@@ -312,6 +312,16 @@ CREATE TABLE IF NOT EXISTS filing_watch (
   data jsonb
 );
 CREATE INDEX IF NOT EXISTS filing_watch_symbol_idx ON filing_watch (symbol, checked_at);
+-- Dots: second-order ideas from changes in behaviour in the news, one row per run (never edited).
+CREATE TABLE IF NOT EXISTS dots_runs (
+  id serial PRIMARY KEY,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  et_date date NOT NULL,
+  ideas jsonb NOT NULL,
+  headlines integer,
+  cost_usd double precision
+);
+CREATE OR REPLACE TRIGGER dots_runs_ro BEFORE UPDATE OR DELETE ON dots_runs FOR EACH ROW EXECUTE FUNCTION forbid_change();
 -- Cards you starred (your own list; starring changes nothing about the card or its scoring).
 CREATE TABLE IF NOT EXISTS favorites (
   card_id integer PRIMARY KEY,

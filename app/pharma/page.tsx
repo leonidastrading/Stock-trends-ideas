@@ -6,7 +6,7 @@ import { secTickerList } from "@/lib/sources/edgar";
 import { fetchFdaCalendar, fetchTrialReadouts, type FdaEvent, type TrialReadout } from "@/lib/sources/pharma";
 import * as store from "@/lib/scout/store";
 import { daysBetween, fmtEt, toEt } from "@/lib/time";
-import ResearchButton from "./ResearchButton";
+import ResearchButton from "@/components/ResearchButton";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
