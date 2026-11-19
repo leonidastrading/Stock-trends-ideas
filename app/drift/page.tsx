@@ -7,6 +7,8 @@ import { DRIFT, scanDrift, shortLine, type DriftSetup } from "@/lib/scout/drift"
 import * as store from "@/lib/scout/store";
 import { etLabelAgo, dayAgo } from "@/lib/time";
 import DriftResearch from "./DriftResearch";
+import StockChart from "@/components/StockChart";
+import { tvSymbol } from "@/config/links";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -78,6 +80,8 @@ export default async function DriftPage() {
                 {s.headlines.map((h, i) => <div key={i}>{day(h.date)} {h.kind ? <span className="tag">{h.kind}</span> : null} <a href={h.url} target="_blank" rel="noreferrer">{h.headline}</a></div>)}
               </details>
             )}
+            {/* The bad-news day marked on the chart, at that day's close. */}
+            <div style={{ marginTop: 10 }}><StockChart symbol={s.symbol} tvSymbol={tvSymbol(s.symbol)} height={440} entry={{ date: s.eventDate, price: null, direction: "short", label: `${s.eventKind}` }} /></div>
           </section>
         );
       })}

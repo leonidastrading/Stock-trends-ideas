@@ -6,6 +6,8 @@ import { allCards, allDocs, allTracks, EARN, EARN_VERSION, historyCount, isA, pe
 import { calendarDay } from "@/lib/sources/earnings-data";
 import { addDays, etLabelAgo, toEt, dayAgo } from "@/lib/time";
 import EarningsSend from "./EarningsSend";
+import StockChart from "@/components/StockChart";
+import { tvSymbol } from "@/config/links";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -144,6 +146,8 @@ function SetupCard({ s, t, c, d }: { s: ScanRow; t: TrackRow | null; c: CardRow 
       <div className="small" style={{ marginTop: 4 }}>
         {t?.tappedAt ? <span className="tag ok">sent to Swing ideas {etLabelAgo(t.tappedAt)}</span> : k?.ai_recommendation === "promote" && !t?.closed ? <EarningsSend id={s.id} /> : null}
       </div>
+      {/* The report shows as an earnings line; the paper entry (and exit once closed) as markers. */}
+      <div style={{ marginTop: 10 }}><StockChart symbol={s.symbol} tvSymbol={tvSymbol(s.symbol)} height={440} entry={t?.entryDate ? { date: t.entryDate, price: t.entryPrice, direction: "long", label: "paper entry", ...(t.closed && t.exitDate ? { exitDate: t.exitDate, exitPrice: t.exitPrice } : {}) } : undefined} /></div>
     </section>
   );
 }
