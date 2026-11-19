@@ -39,6 +39,19 @@ describe("price watch", () => {
     expect(bigMoves({ X: { price: 90, prevClose: 100, sessionDate: today, at, mid: 90.2 } }, today, [5, 10], now)).toHaveLength(1);
   });
 
+  it("stocks under $5 are not market news, and law-firm ads are not a reason (FMC, Nov 19 2026)", () => {
+    expect(bigMoves({ FMC: { price: 4.29, prevClose: 4.67, sessionDate: today, at } }, today, [5, 10], now)).toEqual([]);
+    const ad = [{ ts: "2026-11-19T15:50:00Z", headline: "Law Firms Initiate Securities Litigation Investigations and File Complaint Against FMC", symbols: ["FMC"], source: "fiscal.ai", url: "" }];
+    expect(likelyReason("FMC", ad, now)).toBeNull();
+    expect(likelyReason("FMC", [...ad, { ts: "2026-11-19T15:40:00Z", headline: "FMC cuts dividend", symbols: ["FMC"], source: "x", url: "" }], now)?.headline).toBe("FMC cuts dividend");
+    const items = [
+      { id: "p", at: "2026-11-19T15:55:00Z", headline: "FMC plunges on dividend cut", summary: "", source: "x", url: "", symbols: ["FMC"], kind: "news" as const },
+      { id: "q", at: "2026-11-19T15:55:00Z", headline: "Visa plunges on dividend cut", summary: "", source: "x", url: "", symbols: ["V"], kind: "news" as const },
+    ];
+    const [a, b] = rankFeed(items, new Map(), now, new Set(["FMC"]));
+    expect(a.score).toBeCloseTo(b.score * 0.2, 1);
+  });
+
   it("a move must hold for two checks before it is pushed", () => {
     expect(confirmed({ ...amd, firstSeen: "2026-11-19T16:00:20Z" }, now)).toBe(false);
     expect(confirmed({ ...amd, firstSeen: "2026-11-19T15:59:00Z" }, now)).toBe(true);

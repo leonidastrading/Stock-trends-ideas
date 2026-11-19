@@ -23,7 +23,7 @@ export interface FeedItem { id: string; at: string; headline: string; summary: s
 export interface CardRef { id: number; ticker: string; direction: "long" | "short"; via: string | null }
 
 /** Pure: score and rank. Freshness halves every 6 hours; an event word, a pile-up on one stock and a card on it each lift a story. */
-export function rankFeed(items: Array<Omit<FeedItem, "score" | "buzz" | "event" | "cardIds">>, cards: Map<string, number[]>, now: Date): FeedItem[] {
+export function rankFeed(items: Array<Omit<FeedItem, "score" | "buzz" | "event" | "cardIds">>, cards: Map<string, number[]>, now: Date, penny: Set<string> = new Set()): FeedItem[] {
   // Routine pauses do not count as headlines piling onto a stock (four pauses are not four stories).
   const recentBySym = new Map<string, number>();
   for (const i of items) if (!isRoutinePause(i) && now.getTime() - Date.parse(i.at) < 6 * 3600_000) for (const s of i.symbols) recentBySym.set(s, (recentBySym.get(s) ?? 0) + 1);
@@ -41,7 +41,9 @@ export function rankFeed(items: Array<Omit<FeedItem, "score" | "buzz" | "event" 
     if (routine) return { ...i, event: "paused", cardIds, buzz: 0, score: Math.round((cardIds.length ? 0.8 : 0.1) * Math.pow(0.5, ageH / 6) * 100) / 100 };
     // A big company's 5%+ move is a top story on its own (the news behind it may be nowhere in the feeds yet).
     const weight = 1 + (move ? 2.5 : 0) + (event ? 1.5 : 0) + Math.min(2, Math.max(0, buzz - 1) * 0.5) + (cardIds.length ? (event || buzz >= 2 ? 1.5 : 0.5) : 0) + (i.kind === "trump" ? 1.5 : 0) - (broad ? 1 : 0);
-    return { ...i, event, cardIds, buzz, score: Math.round(weight * Math.pow(0.5, ageH / 6) * 100) / 100 };
+    // A stock under $5 is not a top story (a fifth of the weight), whatever happened to it.
+    const cheap = i.symbols.length > 0 && i.symbols.every((s) => penny.has(s));
+    return { ...i, event, cardIds, buzz, score: Math.round(weight * (cheap ? 0.2 : 1) * Math.pow(0.5, ageH / 6) * 100) / 100 };
   });
 }
 
@@ -80,7 +82,8 @@ export async function newsFeed(now = new Date()): Promise<FeedItem[]> {
     ...posts.filter((p) => p.read).map((p) => ({ id: `t${p.id}`, at: p.at, headline: `Trump: ${p.read!.summary}`, summary: p.text.slice(0, 400), source: "Truth Social", url: p.url, symbols: p.read!.tickers, kind: "trump" as const })),
   ];
   const byId = new Map(cards.map((c) => [c.id, c]));
-  cache.items = rankFeed(items, bySym, now).map((i) => ({
+  const { pennySymbols } = await import("./price-watch");
+  cache.items = rankFeed(items, bySym, now, pennySymbols()).map((i) => ({
     ...i,
     cardRefs: i.cardIds.flatMap((id) => {
       const c = byId.get(id);

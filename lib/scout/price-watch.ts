@@ -20,7 +20,7 @@ import * as store from "./store";
 /** The scout's large and mid caps: big enough that their news, and their moves, are market news even without a card. */
 export const BIG_NAMES = new Set(Object.values(UNIVERSE).flat());
 
-export const PRICE_WATCH = { levels: [5, 10], refreshMs: 60_000 };
+export const PRICE_WATCH = { levels: [5, 10], refreshMs: 60_000, minPrice: 5 };
 
 /** When the price is from: before the open, the regular session, or after the close (US Eastern). */
 export type Phase = "pre" | "regular" | "post";
@@ -46,7 +46,7 @@ export function bigMoves(snaps: Record<string, Snap>, today: string, levels = PR
     if (phase === "post" && barToday && s.dailyClose && Math.abs(s.price / s.dailyClose - 1) > 0.0005) { base = s.dailyClose; vs = "today's close"; }
     else if (barToday || !s.sessionDate) { base = s.prevClose; vs = phase === "post" ? "yesterday's close" : "the last close"; }
     else { base = s.dailyClose ?? s.prevClose; vs = "the last close"; } // before today's first trade in the bar: the bar is the last session
-    if (!base) continue;
+    if (!base || base < PRICE_WATCH.minPrice || s.price < PRICE_WATCH.minPrice) continue; // under $5: not market news
     const pct = Math.round((s.price / base - 1) * 1000) / 10;
     const level = [...levels].reverse().find((l) => Math.abs(pct) >= l);
     if (!level) continue;
@@ -60,13 +60,19 @@ export function bigMoves(snaps: Record<string, Snap>, today: string, levels = PR
 /** Pure: a move that has held for two checks (seen at least 90 seconds ago and still there): ready for a phone alert. */
 export const confirmed = (m: BigMove, now: Date) => now.getTime() - Date.parse(m.firstSeen) >= 90_000;
 
-/** Pure: the most recent headline on the stock in the last 3 hours (the likely reason), if any feed has one. */
+/** Law firms advertising for plaintiffs: they follow a drop, they do not explain it. */
+export const LAW_FIRM_AD = /\b(law firms?|investigation on behalf of|on behalf of (?:investors|shareholders)|class action|lead plaintiff|shareholder alert|investor alert|securities litigation|investors? who (?:lost|purchased)|encourages? .{0,40}investors|reminds? .{0,40}(?:investors|shareholders)|contact the firm|recover(?:ing)? (?:their )?losses)\b/i;
+
+/** Pure: the most recent headline on the stock in the last 3 hours (the likely reason), if any feed has one; law-firm ads are skipped. */
 export function likelyReason(symbol: string, news: Array<Pick<NewsItem, "ts" | "headline" | "symbols" | "source" | "url">>, now: Date): { headline: string; source: string; url: string } | null {
-  const n = news.filter((x) => x.symbols.includes(symbol) && x.source !== "Nasdaq halts" && now.getTime() - Date.parse(x.ts) <= 3 * 3600_000).sort((a, b) => b.ts.localeCompare(a.ts))[0];
+  const n = news.filter((x) => x.symbols.includes(symbol) && x.source !== "Nasdaq halts" && !LAW_FIRM_AD.test(x.headline) && now.getTime() - Date.parse(x.ts) <= 3 * 3600_000).sort((a, b) => b.ts.localeCompare(a.ts))[0];
   return n ? { headline: n.headline, source: n.source, url: n.url } : null;
 }
 
-const memo = { at: 0, moves: [] as BigMove[] };
+const memo = { at: 0, moves: [] as BigMove[], penny: new Set<string>() };
+
+/** The scout's big names last seen under $5 (from the latest price check). */
+export const pennySymbols = (): Set<string> => memo.penny;
 
 /** Today's big moves (cached a minute), with the time each was first seen. */
 export async function priceWatch(data: MarketData | null, now = new Date()): Promise<BigMove[]> {
@@ -76,6 +82,7 @@ export async function priceWatch(data: MarketData | null, now = new Date()): Pro
   const snaps = await data.getSnapshots([...BIG_NAMES]).catch(() => null);
   if (!snaps) return memo.moves;
   const moves = bigMoves(snaps as Record<string, Snap>, today, PRICE_WATCH.levels, now);
+  memo.penny = new Set(Object.entries(snaps as Record<string, Snap>).filter(([, s]) => s.price > 0 && s.price < PRICE_WATCH.minPrice).map(([sym]) => sym));
   const seen = (await store.cacheGet<Record<string, string>>("price-watch:first").catch(() => null))?.data ?? {};
   let changed = false;
   for (const m of moves) if (!seen[m.key]) { seen[m.key] = now.toISOString(); changed = true; }
