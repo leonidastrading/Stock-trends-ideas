@@ -111,7 +111,7 @@ describe("signals", () => {
       "2026-11-14",
     );
     expect(s.map((x) => [x.kind, x.symbol, x.direction])).toEqual([["8-K", "ACFN", "short"], ["insider", "SMBK", "long"], ["13D", "COUR", "long"], ["insider", "BIG", "long"]]);
-    expect(s[1].context).toMatch(/2 insider\(s\).*non-executive insider.*Cohen, Malloy & Pomorski.*local, non-executive insiders.*Lopez-Lira & Tang.*near 180 days/s);
+    expect(s[1].context).toMatch(/2 insider\(s\).*non-executive insider.*Cohen, Malloy & Pomorski.*local, non-executive insiders.*Lopez-Lira & Tang.*after the stock fell 50% or more.*near 90 days/s);
     expect(s[0].term).toBe("filing: ACFN 8-K 4.02");
   });
 });
@@ -188,5 +188,26 @@ describe("who is buying (Cohen, Malloy & Pomorski: local, non-executive insiders
     expect([ceoUnknown, dirOpp, dirOppLocal]).toEqual([1, 1.5, 1.8]);
     expect(insiderLine(b({ local: true, ownerState: "OH", issuerState: "OH" }))).toBe("Doe Jane (director) bought 10,000 shares at $20 = $200k on 2026-11-09, +20% to their holding; outside their usual trading month (opportunistic); non-executive insider; local: lives in OH, where the company is based");
     expect(insiderLine(b({ role: "CEO", routine: null }))).toContain("no trading history to tell routine from opportunistic; top executive");
+  });
+});
+
+describe("insider buying, re-weighted by our own Form 4 test", () => {
+  const buy = (p: Partial<store.InsiderBuyRow>): store.InsiderBuyRow => ({ accession: Math.random().toString(), filed: "2026-11-13", issuerCik: "1", symbol: "STUB", issuerName: "StubHub", owner: "A", ownerCik: "1", role: "director", txDate: "2026-11-12", shares: 1000, price: 9, value: 9000 * 5, ownedAfter: 100000, pctIncrease: 5, plan10b5: false, routine: false, ...p });
+
+  it("measures the fall from the 52-week high", async () => {
+    const { belowHigh } = await import("@/lib/scout/filings");
+    const bars = Array.from({ length: 200 }, (_, i) => ({ symbol: "STUB", date: `2026-${String(1 + Math.floor(i / 20)).padStart(2, "0")}-${String(1 + (i % 20)).padStart(2, "0")}`, h: i === 50 ? 40 : 20, c: i === 199 ? 10 : 20 }));
+    expect(belowHigh(bars, "STUB")).toBe(75);
+    expect(belowHigh(bars.slice(0, 50), "STUB")).toBeNull();
+  });
+
+  it("a single small opportunistic buy qualifies only after a 50%+ drop, and the drop lifts it above a plain cluster", () => {
+    const one = [buy({})];
+    expect(pickSignals(one, [], "2026-11-14")).toEqual([]);
+    const s = pickSignals(one, [], "2026-11-14", [], [], new Map([["STUB", 75]]));
+    expect(s).toHaveLength(1);
+    expect(s[0].context).toMatch(/75% below its 52-week high \(the after-a-big-drop group/);
+    const cluster = pickSignals([buy({ symbol: "CLU", owner: "X" }), buy({ symbol: "CLU", owner: "Y" })], [], "2026-11-14")[0];
+    expect(s[0].strength).toBeGreaterThan(cluster.strength);
   });
 });

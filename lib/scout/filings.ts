@@ -156,13 +156,24 @@ const usd = (v: number) => (v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${Math.ro
  * found most informative: buys confirmed outside the insider's routine month, by non-executive insiders, who live
  * near the company (same state as its headquarters, from their own address on the Form 4).
  */
-export function insiderStrength(owners: number, bs: store.InsiderBuyRow[]): number {
-  const base = owners >= 3 ? 2.5 : owners >= 2 ? 2 : 1;
+export function insiderStrength(owners: number, bs: store.InsiderBuyRow[], belowHighPct: number | null = null): number {
+  // Our own test (QuantConnect Form 4 data, Jul 2021 to Nov 2026): clusters and big-dollar buys added nothing over a plain
+  // buy, so they count for less than before; a buy after the stock fell 50%+ from its 52-week high was the strongest group.
+  const base = owners >= 3 ? 2 : owners >= 2 ? 1.7 : 1;
   const total = bs.reduce((a, b) => a + (b.value ?? 0), 0);
   const opp = bs.filter((b) => b.routine === false);
-  const bonus = (total >= 5_000_000 ? 1.5 : total >= 1_000_000 ? 1 : 0) + (bs.some((b) => (b.pctIncrease ?? 0) >= 100) ? 0.5 : 0)
-    + (opp.length ? 0.2 : 0) + (opp.some((b) => !isExecutive(b.role ?? "")) ? 0.3 : 0) + (opp.some((b) => b.local === true) ? 0.3 : 0);
+  const bonus = (total >= 5_000_000 ? 0.5 : total >= 1_000_000 ? 0.3 : 0) + (bs.some((b) => (b.pctIncrease ?? 0) >= 100) ? 0.5 : 0)
+    + (opp.length ? 0.2 : 0) + (opp.some((b) => !isExecutive(b.role ?? "")) ? 0.3 : 0) + (opp.some((b) => b.local === true) ? 0.3 : 0)
+    + (belowHighPct !== null && belowHighPct >= 50 ? 1 : belowHighPct !== null && belowHighPct >= 30 ? 0.4 : 0);
   return Math.round(Math.min(3.4, base + bonus) * 100) / 100;
+}
+
+/** Pure: how far the last close is below the 52-week high, in % (null without a year of bars). */
+export function belowHigh(bars: Array<{ symbol: string; date: string; h: number; c: number }>, symbol: string): number | null {
+  const s = bars.filter((b) => b.symbol === symbol).sort((a, b) => a.date.localeCompare(b.date)).slice(-252);
+  if (s.length < 120) return null;
+  const hi = Math.max(...s.map((b) => b.h));
+  return hi > 0 ? Math.round((1 - s[s.length - 1].c / hi) * 1000) / 10 : null;
 }
 
 /** Pure: one insider purchase as a line the research step reads. */
@@ -175,10 +186,10 @@ export function insiderLine(b: store.InsiderBuyRow): string {
   return `${b.owner} (${b.role}) bought ${Math.round(b.shares ?? 0).toLocaleString("en-US")} shares at $${b.price} = ${usd(b.value ?? 0)} on ${b.txDate ?? b.filed}${b.pctIncrease !== null ? `, +${b.pctIncrease}% to their holding` : ""}; ${tags.join("; ")}`;
 }
 
-const INSIDER_EVIDENCE = "The evidence: Cohen, Malloy & Pomorski (2012) split insider trades into routine (the same calendar month in prior years; over half of all trades), which earn about zero, and opportunistic, which earn about 0.82% a month (value-weighted abnormal) building for about six months with no reversal. The most informative opportunistic traders are local, non-executive insiders at poorly governed, geographically concentrated firms: check the governance (insider-controlled board, dual-class shares, a combined CEO and chair, past restatements) and whether the business is concentrated in one region. Lopez-Lira & Tang find markets underreact to insider-transaction headlines, so the drift is still there after the news. Also strongest when several insiders buy, after a decline, in small and mid caps, and when the purchase is large against the holding. Horizon about six months: set the time limit near 180 days unless a nearer catalyst decides it. Use the background below: each buyer's earlier trades at the company and the stock's 52-week range. Say whether this is a first buy, an add after a winning buy, or averaging down on a losing one (weaker: cost-basis repair, defending the stake or a control agenda are other motives), and describe the timing only as the range numbers allow.";
+const INSIDER_EVIDENCE = "The evidence: Cohen, Malloy & Pomorski (2012) split insider trades into routine (the same calendar month in prior years; over half of all trades), which earn about zero, and opportunistic, which earn about 0.82% a month (value-weighted abnormal) building for about six months with no reversal. The most informative opportunistic traders are local, non-executive insiders at poorly governed, geographically concentrated firms: check the governance (insider-controlled board, dual-class shares, a combined CEO and chair, past restatements) and whether the business is concentrated in one region. Lopez-Lira & Tang find markets underreact to insider-transaction headlines, so the drift is still there after the news. Also strongest when several insiders buy, after a decline, in small and mid caps, and when the purchase is large against the holding. Our own test of every open-market insider trade in QuantConnect's Form 4 data (Jul 2021 to Nov 2026, about 12,000 buy events; stocks of $5+ trading $1M+ a day; bought at the next open after the filing; against comparable stocks): any insider buy beat them by about 3% over the next 3 months, a first buy in 12 months by about 4%, and a buy after the stock fell 50% or more from its 52-week high by about 5% (the strongest group, positive in both halves of the period); CEO/CFO buys, $1M+ buys and clusters added nothing beyond a plain buy, and insider sales carried no signal. The median 3-month result was still negative (a minority of big winners makes the average), and against SPY the edge was gone by 6 months. Horizon about 60 to 90 days: set the time limit near 90 days unless a nearer catalyst decides it, and say the position is one of many small ones, not a high-conviction bet. Use the background below: each buyer's earlier trades at the company and the stock's 52-week range. Say whether this is a first buy, an add after a winning buy, or averaging down on a losing one (weaker: cost-basis repair, defending the stake or a control agenda are other motives), and describe the timing only as the range numbers allow.";
 
 /** Pure: the day's candidate signals from stored buys and alerts, strongest first. */
-export function pickSignals(buys: store.InsiderBuyRow[], alerts: store.FilingAlert[], today: string, flags: store.OptionsFlag[] = [], congress: store.CongressTradeRow[] = []): FilingSignal[] {
+export function pickSignals(buys: store.InsiderBuyRow[], alerts: store.FilingAlert[], today: string, flags: store.OptionsFlag[] = [], congress: store.CongressTradeRow[] = [], belowHighBy: Map<string, number | null> = new Map()): FilingSignal[] {
   const out: FilingSignal[] = smartMoneySignals(buys, congress, today);
   // Unusual new options positions (last two days): the largest per stock and side.
   const best = new Map<string, store.OptionsFlag>();
@@ -221,11 +232,14 @@ export function pickSignals(buys: store.InsiderBuyRow[], alerts: store.FilingAle
     const total = bs.reduce((a, b) => a + (b.value ?? 0), 0);
     // Big: $100k+ that adds 10%+ to the holding, or $1M+ whatever the holding (often unknown for directors).
     const big = bs.some((b) => ((b.value ?? 0) >= 100_000 && (b.pctIncrease ?? 0) >= 10) || (b.value ?? 0) >= 1_000_000);
-    if (owners.size < 2 && !big) continue;
+    // Also a single insider's opportunistic buy after a 50%+ fall from the 52-week high: the strongest group in our test.
+    const dd = belowHighBy.get(symbol) ?? null;
+    const afterDrop = dd !== null && dd >= 50 && bs.some((b) => b.routine === false);
+    if (owners.size < 2 && !big && !afterDrop) continue;
     const lines = bs.slice(0, 6).map(insiderLine);
     out.push({
-      kind: "insider", symbol, term: `insider: ${symbol}`, strength: insiderStrength(owners.size, bs), direction: "long",
-      context: `Insider open-market purchases (Form 4, code P, not under a 10b5-1 plan) in ${bs[0].issuerName} over the last ${FILINGS.clusterDays} days: ${owners.size} insider(s), ${usd(total)} in total.\n${lines.map((l) => `- ${l}`).join("\n")}\n${INSIDER_EVIDENCE}`,
+      kind: "insider", symbol, term: `insider: ${symbol}`, strength: insiderStrength(owners.size, bs, dd), direction: "long",
+      context: `Insider open-market purchases (Form 4, code P, not under a 10b5-1 plan) in ${bs[0].issuerName} over the last ${FILINGS.clusterDays} days: ${owners.size} insider(s), ${usd(total)} in total.${dd !== null ? ` The stock is ${dd}% below its 52-week high${dd >= 50 ? " (the after-a-big-drop group, the strongest in our test)" : ""}.` : ""}\n${lines.map((l) => `- ${l}`).join("\n")}\n${INSIDER_EVIDENCE}`,
       trigger: [{ source: "edgar", metric: `insider_buys_30d:${symbol}`, value: owners.size, baseline: null, changeVs12m: null, asOf: bs[0].filed, note: `${owners.size} insider(s) bought ${usd(total)} of ${symbol} in 30 days` }],
     });
   }
@@ -240,7 +254,10 @@ export async function runFilingResearch(deps: ResearchDeps, maxNow: number = FIL
   const [buys, alerts, flags, congress, recent, lastDay] = await Promise.all([store.insiderBuysSince(addDays(today, -50)), store.filingAlertsSince(addDays(today, -10)), store.optionsFlagsSince(addDays(today, -3)), store.congressTradesSince(addDays(today, -45)), store.recentTerms(30), store.recentTerms(1)]);
   const doneToday = [...lastDay].filter((t) => /^(filing|insider|options|congress|insider\+congress): /.test(t)).length;
   const room = Math.max(0, Math.min(maxNow, FILINGS.maxResearchPerDay - doneToday));
-  const signals = pickSignals(buys, alerts, today, flags, congress).filter((s) => ![...recent].some((t) => t.startsWith(s.term.toLowerCase().split(" ").slice(0, 2).join(" "))));
+  const insiderSyms = [...new Set(buys.filter((b) => b.symbol && daysBetween(b.filed, today) <= FILINGS.clusterDays).map((b) => b.symbol!))].slice(0, 60);
+  const bars = deps.data && insiderSyms.length ? await deps.data.getDailyBars(insiderSyms, addDays(today, -380), today).catch(() => []) : [];
+  const belowHighBy = new Map(insiderSyms.map((s) => [s, belowHigh(bars, s)] as const));
+  const signals = pickSignals(buys, alerts, today, flags, congress, belowHighBy).filter((s) => ![...recent].some((t) => t.startsWith(s.term.toLowerCase().split(" ").slice(0, 2).join(" "))));
   const out = { signals: signals.length, researched: [] as Array<{ term: string; outcome: string; reason?: string; cardId?: number }>, error: null as string | null };
   for (const s of signals.slice(0, room)) {
     // Insider buys: each buyer's earlier trades at the company and where the stock is in its range.
