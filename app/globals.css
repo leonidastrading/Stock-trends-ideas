@@ -404,10 +404,11 @@ main { overflow-wrap: break-word; }
 
 /* The menu and the breaking-news strip stay at the top while scrolling. On phones the menu is one row that scrolls sideways. */
 .site-top { position: sticky; top: 0; z-index: 60; background: var(--surface-1); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); }
+/* Phones: every menu item visible, wrapped into compact rows. */
 @media (max-width: 640px) {
-  .site-top nav { flex-wrap: nowrap; overflow-x: auto; gap: 14px; padding: 8px 12px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
-  .site-top nav::-webkit-scrollbar { display: none; }
-  .site-top nav > * { flex: 0 0 auto; white-space: nowrap; }
+  .site-top nav { flex-wrap: wrap; gap: 6px 12px; padding: 8px 12px; font-size: 14px; line-height: 1.35; }
+  .site-top nav > * { white-space: nowrap; }
+  html { scroll-padding-top: 230px; }
 }
 /* Links to a card or section land below the sticky menu. */
 html { scroll-padding-top: 120px; }
