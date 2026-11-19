@@ -30,13 +30,15 @@ export function rankFeed(items: Array<Omit<FeedItem, "score" | "buzz" | "event" 
     // "strike price" and similar options wording is not a strike; the story desk's own word list is left as it is.
     const text = `${i.headline} ${i.summary}`.replace(/\bstrike(?: prices?| of)\b/gi, "");
     const routine = isRoutinePause(i);
-    const event = routine ? null : eventWord(text) ?? (NEWS_EVENT.exec(text)?.[1]?.toLowerCase() ?? null);
+    const move = i.source === "Scout price watch";
+    const event = routine ? null : move ? "big move" : eventWord(text) ?? (NEWS_EVENT.exec(text)?.[1]?.toLowerCase() ?? null);
     const cardIds = [...new Set(i.symbols.flatMap((s) => cards.get(s) ?? []))];
     const buzz = Math.max(0, ...i.symbols.map((s) => recentBySym.get(s) ?? 0));
     const broad = i.symbols.length > 4; // round-ups tagged with many tickers are rarely the story
     // A routine pause sits at the bottom of Top unless the stock is on a card (then it is worth a glance).
     if (routine) return { ...i, event: "paused", cardIds, buzz: 0, score: Math.round((cardIds.length ? 0.8 : 0.1) * Math.pow(0.5, ageH / 6) * 100) / 100 };
-    const weight = 1 + (event ? 1.5 : 0) + Math.min(2, Math.max(0, buzz - 1) * 0.5) + (cardIds.length ? (event || buzz >= 2 ? 1.5 : 0.5) : 0) + (i.kind === "trump" ? 1.5 : 0) - (broad ? 1 : 0);
+    // A big company's 5%+ move is a top story on its own (the news behind it may be nowhere in the feeds yet).
+    const weight = 1 + (move ? 2.5 : 0) + (event ? 1.5 : 0) + Math.min(2, Math.max(0, buzz - 1) * 0.5) + (cardIds.length ? (event || buzz >= 2 ? 1.5 : 0.5) : 0) + (i.kind === "trump" ? 1.5 : 0) - (broad ? 1 : 0);
     return { ...i, event, cardIds, buzz, score: Math.round(weight * Math.pow(0.5, ageH / 6) * 100) / 100 };
   });
 }
@@ -48,18 +50,22 @@ export async function newsFeed(now = new Date()): Promise<FeedItem[]> {
   if (Date.now() - cache.at < 15_000 && cache.items.length) return cache.items;
   const data = marketDataFromEnv();
   const since = new Date(now.getTime() - 24 * 3600_000);
-  const [alpaca, fast, posts, cards, fromRumors] = await Promise.all([
+  const [alpaca, fast, posts, cards, fromRumors, moves] = await Promise.all([
     data ? data.getNews([], since, now, 200).catch(() => [] as NewsItem[]) : Promise.resolve([] as NewsItem[]),
     // Press-release wires, the SEC's live 8-Ks and Finnhub: fast even when Alpaca's stream lags.
     import("../sources/wires").then(({ fastNews }) => fastNews(process.env, undefined, now)).catch(() => [] as NewsItem[]),
     store.truthPostsSince(since.toISOString(), true).catch(() => []),
     store.cardsSince(30).catch(() => []),
     import("./rumor-check").then(({ alreadyNewsSince }) => alreadyNewsSince(new Date(now.getTime() - 3 * 86400_000))).catch(() => []),
+    import("./price-watch").then(({ priceWatch }) => priceWatch(data, now)).catch(() => []),
   ]);
   const bare = (h: string) => h.replace(/^\s*reported\s+\w+(\s+week)?\s*,\s*/i, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   // The same story from two sources: keep the first one seen (Alpaca's, then the fast sources').
   const seen = new Set(alpaca.map((n) => bare(n.headline)));
-  const news = [...alpaca, ...fast.filter((n) => { const k = bare(n.headline); if (seen.has(k)) return false; seen.add(k); return true; })];
+  const headlines = [...alpaca, ...fast.filter((n) => { const k = bare(n.headline); if (seen.has(k)) return false; seen.add(k); return true; })];
+  // Big moves on big companies, each with the likely headline when a feed has one.
+  const { likelyReason, moveItem } = await import("./price-watch");
+  const news = [...headlines, ...moves.map((m) => moveItem(m, likelyReason(m.symbol, headlines, now)))];
   const originals = new Set(news.filter((n) => !n.repostedAt).map((n) => bare(n.headline)));
   const bySym = new Map<string, number[]>();
   // One card per stock: its latest (a stock with many cards would otherwise list them all on every headline).
