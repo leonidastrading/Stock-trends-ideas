@@ -2,6 +2,8 @@ import CardCollapse, { CollapseAll } from "@/components/CardCollapse";
 import ResearchButton from "@/components/ResearchButton";
 import SetupNotice from "@/components/SetupNotice";
 import Ticker from "@/components/Ticker";
+import StockChart from "@/components/StockChart";
+import { tvSymbol } from "@/config/links";
 import { marketDataFromEnv } from "@/lib/alpaca";
 import { hasDatabase } from "@/lib/db";
 import { dotsRuns, type Crowd, type DotIdea, type DotsRun } from "@/lib/scout/dots";
@@ -39,10 +41,15 @@ function details(t: DotIdea, run: DotsRun): string {
 }
 
 /** Dots: trade ideas from changes in what people and businesses are doing, followed to the companies nobody has connected yet. */
-export default async function DotsPage() {
+export default async function DotsPage({ searchParams }: { searchParams: Promise<{ run?: string }> }) {
   if (!hasDatabase()) return <SetupNotice />;
   const runs = await dotsRuns(30).catch(() => [] as DotsRun[]);
-  const [latest, ...older] = runs;
+  // The run shown in full: the one asked for (?run=ID), else the latest.
+  const wanted = Number((await searchParams).run);
+  const latest = runs.find((r) => r.id === wanted) ?? runs[0];
+  const isNewest = latest?.id === runs[0]?.id;
+  const older = runs.filter((r) => r.id !== latest?.id);
+  const info = latest ? await store.symbolInfo([...new Set(latest.ideas.map((t) => t.tickers[0]))]).catch(() => new Map<string, store.SymbolInfo>()) : new Map<string, store.SymbolInfo>();
   const syms = [...new Set(runs.flatMap((r) => r.ideas.map((t) => t.tickers[0])))];
   const snaps = syms.length ? await (marketDataFromEnv()?.getSnapshots?.(syms) ?? Promise.resolve({})).catch(() => ({})) : {};
   const now = Object.fromEntries(Object.entries(snaps as Record<string, { price: number }>).map(([s, v]) => [s, v.price]));
@@ -57,9 +64,16 @@ export default async function DotsPage() {
         <DotsRefresh />
         {latest && <span className="small muted">Last read {fmtEt(latest.createdAt)} from {latest.headlines} lines and headlines{latest.costUsd !== null ? ` · $${latest.costUsd.toFixed(2)}` : ""}</span>}
       </div>
+      {runs.length > 1 && (
+        <div className="toolbar small" id="runs">
+          <span className="muted">Runs:</span>
+          {runs.map((r) => <a key={r.id} className={`chip${r.id === latest?.id ? " active" : ""}`} href={r.id === runs[0].id ? "/dots#runs" : `/dots?run=${r.id}#runs`} title={`${r.ideas.length} ideas`}>{r.etDate.slice(5)}{r.id === runs[0].id ? " (latest)" : ""} · {r.ideas.length}</a>)}
+        </div>
+      )}
+      {latest && !isNewest && <p className="small warn">Showing the run from {fmtEt(latest.createdAt)}. <a href="/dots">Back to the latest</a>.</p>}
       {latest && latest.changes.length > 0 && (
         <details className="card section">
-          <summary><b>What the scout saw changing this week</b> <span className="small muted">{latest.changes.length} changes, the searches it ran to dig in, and what it read</span></summary>
+          <summary><b>What the scout saw changing{isNewest ? " this week" : ` (run of ${latest.etDate})`}</b> <span className="small muted">{latest.changes.length} changes, the searches it ran to dig in, and what it read</span></summary>
           <ol className="small">{latest.changes.map((c, i) => <li key={i}>{c.lens ? <span className="tag">{c.lens}</span> : null} {c.change} {c.searches.length ? <span className="muted">· searched: {c.searches.map((x) => `“${x}”`).join(", ")}</span> : null}</li>)}</ol>
           <div className="small muted">Read: {Object.entries(latest.sources).filter(([, n]) => n > 0).map(([k, n]) => `${k} ${n}`).join(" · ")}</div>
         </details>
@@ -92,6 +106,7 @@ export default async function DotsPage() {
             <div className="small"><b>Would confirm it:</b> {t.confirm_with}</div>
             <div className="small" style={{ marginTop: 4 }}><b>What would break it:</b> {t.breaks_it}</div>
             <div className="small muted" style={{ marginTop: 4 }}>Horizon about {t.horizon_days} days.</div>
+            <div style={{ marginTop: 10 }}><StockChart symbol={main} tvSymbol={tvSymbol(main, info.get(main)?.exchange)} height={480} entry={{ date: latest.etDate, price: t.prices?.[main] ?? null, direction: t.direction, label: "idea published" }} /></div>
             <div className="small rumor-actions" style={{ marginTop: 8 }}>
               {cards.length ? <span>Scout cards on {main}: {cards.slice(0, 4).map((c) => <a key={c.id} className="tag card-number" style={{ marginRight: 4 }} href={`/ideas?days=365&card=${c.id}#card-${c.id}`}><span className={c.direction === "long" ? "pos" : "neg"}>{c.direction === "long" ? "▲" : "▼"}</span> #{c.id}</a>)}</span> : null}
               <ResearchButton symbol={main} term={`dots: ${t.title}`.slice(0, 80)} observation={details(t, latest)} kind={null} />
@@ -102,13 +117,14 @@ export default async function DotsPage() {
 
       {older.length > 0 && (
         <section className="card section">
-          <h2>Earlier ideas</h2>
+          <h2>{isNewest ? "Earlier ideas" : "Other runs"}</h2>
+          <p className="small muted">Tap an idea to see its run in full, with the chain, the headlines and a chart.</p>
           <div className="table-wrap"><table>
             <thead><tr><th>Date</th><th>Idea</th><th>Main ticker</th><th>How late then</th><th className="num">Since</th></tr></thead>
             <tbody>{older.flatMap((r) => r.ideas.map((t, i) => {
               const s = since(t, now);
               const c = t.crowd?.[t.tickers[0]];
-              return <tr key={`${r.id}-${i}`}><td className="small">{r.etDate}</td><td className="small">{t.title}</td><td className="small"><span className={t.direction === "long" ? "pos" : "neg"}>{t.direction === "long" ? "▲" : "▼"}</span> <Ticker symbol={t.tickers[0]} /></td><td className="small">{c ? CROWD[c.verdict].label : "—"}</td><td className={`num ${s === null ? "" : s >= 0 ? "pos" : "neg"}`}>{pct(s)}</td></tr>;
+              return <tr key={`${r.id}-${i}`}><td className="small">{r.etDate}</td><td className="small"><a href={`/dots?run=${r.id}#dot-${r.id * 10 + i}`}>{t.title}</a></td><td className="small"><span className={t.direction === "long" ? "pos" : "neg"}>{t.direction === "long" ? "▲" : "▼"}</span> <Ticker symbol={t.tickers[0]} /></td><td className="small">{c ? CROWD[c.verdict].label : "—"}</td><td className={`num ${s === null ? "" : s >= 0 ? "pos" : "neg"}`}>{pct(s)}</td></tr>;
             }))}</tbody>
           </table></div>
         </section>
