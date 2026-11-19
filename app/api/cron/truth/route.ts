@@ -1,5 +1,5 @@
 import { after, NextResponse } from "next/server";
-import { checkCronSecret } from "@/lib/auth";
+import { checkCronSecret, cronAuthProblem } from "@/lib/auth";
 import { hasDatabase } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -11,7 +11,11 @@ export const maxDuration = 300;
  * alerts and research run after the reply, one run at a time.
  */
 export async function GET(request: Request) {
-  if (!checkCronSecret(request.headers.get("authorization"))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!checkCronSecret(request.headers.get("authorization"))) {
+    const why = cronAuthProblem(request.headers.get("authorization"));
+    console.warn(`cron auth refused ${new URL(request.url).pathname}: ${why.detail}`);
+    return NextResponse.json({ error: "unauthorized", reason: why.reason }, { status: 401 });
+  }
   if (!hasDatabase()) return NextResponse.json({ ok: false, errors: ["database not connected"] }, { status: 503 });
   after(async () => {
     const store = await import("@/lib/scout/store");

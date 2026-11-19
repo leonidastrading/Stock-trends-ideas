@@ -1,5 +1,5 @@
 import { after, NextResponse } from "next/server";
-import { checkCronSecret } from "@/lib/auth";
+import { checkCronSecret, cronAuthProblem } from "@/lib/auth";
 import { marketDataFromEnv } from "@/lib/alpaca";
 import { callResearchModel } from "@/lib/scout/llm";
 import * as store from "@/lib/scout/store";
@@ -31,7 +31,11 @@ async function premarket() {
  * ?wait=1 runs in the foreground and returns the result.
  */
 export async function GET(request: Request) {
-  if (!checkCronSecret(request.headers.get("authorization"))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!checkCronSecret(request.headers.get("authorization"))) {
+    const why = cronAuthProblem(request.headers.get("authorization"));
+    console.warn(`cron auth refused ${new URL(request.url).pathname}: ${why.detail}`);
+    return NextResponse.json({ error: "unauthorized", reason: why.reason }, { status: 401 });
+  }
   if (new URL(request.url).searchParams.get("wait") === "1") return NextResponse.json(await premarket());
   after(async () => { await premarket().catch((err) => console.error(`premarket run failed: ${err instanceof Error ? err.message : String(err)}`)); });
   return NextResponse.json({ status: "started", note: "checking every open card's invalidation; the result lands in Settings → Recent runs" }, { status: 202 });

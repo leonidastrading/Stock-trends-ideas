@@ -23,10 +23,33 @@ export function checkBasicAuth(header: string | null, env: Record<string, string
 
 /** Vercel cron sends "Authorization: Bearer $CRON_SECRET". */
 export function checkCronSecret(header: string | null, env: Record<string, string | undefined> = process.env): boolean {
-  // Tolerant of a stray space or line break pasted around the secret (in Vercel or the scheduler) and of "bearer".
-  const secret = env.CRON_SECRET?.trim();
-  const got = header?.trim().replace(/^bearer\s+/i, "").trim();
+  const secret = cleanSecret(env.CRON_SECRET);
+  const got = cleanSecret(header);
   return !!secret && !!got && safeEqual(got, secret);
+}
+
+/**
+ * Tolerant of what gets pasted by hand into Vercel or a scheduler: stray spaces or line breaks, "bearer" in any case,
+ * "Bearer" typed twice (the scheduler's field already had it), and quotes around the value.
+ */
+function cleanSecret(v: string | null | undefined): string {
+  let s = (v ?? "").trim();
+  for (let i = 0; i < 3; i++) s = s.replace(/^bearer[\s:]+/i, "").replace(/^["'\u201c\u2018]+|["'\u201d\u2019]+$/g, "").trim();
+  return s;
+}
+
+/**
+ * Why a cron call was refused, without the secret: what the caller sent (its length, not its value) against what the
+ * server expects. Safe to log and to return to the caller (the expected length stays in the log only).
+ */
+export function cronAuthProblem(header: string | null, env: Record<string, string | undefined> = process.env): { reason: string; detail: string } {
+  const secret = cleanSecret(env.CRON_SECRET);
+  const got = cleanSecret(header);
+  if (!secret) return { reason: "CRON_SECRET is not set on the server", detail: "server has no CRON_SECRET" };
+  if (header === null) return { reason: "no Authorization header reached the app", detail: "no Authorization header" };
+  if (!got) return { reason: "the Authorization header is empty", detail: `header of ${header.length} chars, empty after Bearer` };
+  const shape = `${/^bearer/i.test(header.trim()) ? "with" : "without"} Bearer, ${got.length} chars received, ${secret.length} expected, ${/[^\x21-\x7e]/.test(got) ? "has spaces or non-ASCII" : "plain ASCII"}`;
+  return { reason: got.length === secret.length ? "the secret does not match (same length, different value)" : "the secret does not match (different length)", detail: shape };
 }
 
 /**

@@ -1,5 +1,5 @@
 import { after, NextResponse } from "next/server";
-import { checkCronSecret } from "@/lib/auth";
+import { checkCronSecret, cronAuthProblem } from "@/lib/auth";
 import { runStoriesJob } from "@/lib/scout/engine";
 import * as store from "@/lib/scout/store";
 
@@ -19,7 +19,11 @@ export const maxDuration = 300;
  * answered "throttled" and do nothing, so a scheduler set too often costs nothing.
  */
 export async function GET(request: Request) {
-  if (!checkCronSecret(request.headers.get("authorization"))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!checkCronSecret(request.headers.get("authorization"))) {
+    const why = cronAuthProblem(request.headers.get("authorization"));
+    console.warn(`cron auth refused ${new URL(request.url).pathname}: ${why.detail}`);
+    return NextResponse.json({ error: "unauthorized", reason: why.reason }, { status: 401 });
+  }
   const params = new URL(request.url).searchParams;
   if (params.get("force") !== "1") {
     const last = await store.lastStarted("stories").catch(() => null);
