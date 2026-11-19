@@ -85,7 +85,8 @@ export interface BreakingItem { id: string; at: string; headline: string; url: s
  * topped up with the latest headlines when the hour is quiet.
  */
 export function breakingNews(items: FeedItem[], now: Date, max = 30, minShown = 10): BreakingItem[] {
-  const recent = items.filter((i) => !i.repostedAt && now.getTime() - Date.parse(i.at) <= 3 * 3600_000 && Date.parse(i.at) <= now.getTime() + 60_000);
+  // Routine volatility pauses never make the strip.
+  const recent = items.filter((i) => !i.repostedAt && i.event !== "paused" && now.getTime() - Date.parse(i.at) <= 3 * 3600_000 && Date.parse(i.at) <= now.getTime() + 60_000);
   const why = (i: FeedItem) => (i.kind === "trump" ? "Trump" : i.kind === "rumor" ? "from rumors" : i.event ? i.event : i.cardIds.length && i.symbols.length <= 4 ? "on your cards" : i.buzz >= 3 ? `${i.buzz} stories` : "");
   const strong = recent.filter((i) => why(i));
   const pick = strong.length >= minShown ? strong : [...strong, ...recent.filter((i) => !why(i)).sort((a, b) => b.at.localeCompare(a.at)).slice(0, minShown - strong.length)];

@@ -19,4 +19,9 @@ describe("breaking-news ticker", () => {
     const b = breakingNews([item("a", 5), item("b", 50), item("c", 20, { event: "downgrade" })], now, 30, 3);
     expect(b.map((x) => x.id)).toEqual(["a", "c", "b"]);
   });
+
+  it("leaves routine volatility pauses out, even as filler", () => {
+    const b = breakingNews([item("pause", 5, { event: "paused", source: "Nasdaq halts" }), item("plain", 15)], now, 30, 4);
+    expect(b.map((x) => x.id)).toEqual(["plain"]);
+  });
 });
