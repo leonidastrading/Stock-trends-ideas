@@ -8,6 +8,7 @@ import { swingConfigured } from "@/lib/scout/swing";
 import { fmtEt } from "@/lib/time";
 import { ThemeResearch, ThemeSend, ThemesRefresh } from "./ThemeButtons";
 import StockChart from "@/components/StockChart";
+import CardCollapse, { CollapseAll } from "@/components/CardCollapse";
 import { tvSymbol } from "@/config/links";
 import * as store from "@/lib/scout/store";
 
@@ -51,14 +52,16 @@ export default async function ThemesPage() {
       <p className="small secondary">The 3 trade ideas most of your sources are talking about and agree on, for the next 1–2 weeks. Read once each weekday morning from the last 14 days of your inbox files, your websites&apos; articles and Stocktwits chatter. Consensus is not an edge: each idea says how crowded it looks and what would break it, and &quot;Research it&quot; checks what is already priced before anything is tracked.</p>
       <div className="toolbar">
         <ThemesRefresh />
-        {latest && <span className="small muted">Last read {fmtEt(latest.createdAt)} ET from {latest.sources.documents} documents, {latest.sources.websites} website articles and {latest.sources.stocktwits} Stocktwits posts{latest.costUsd !== null ? ` · $${latest.costUsd.toFixed(2)}` : ""}</span>}
+        {latest && <span className="small muted">Last read {fmtEt(latest.createdAt)} from {latest.sources.documents} documents, {latest.sources.websites} website articles and {latest.sources.stocktwits} Stocktwits posts{latest.costUsd !== null ? ` · $${latest.costUsd.toFixed(2)}` : ""}</span>}
       </div>
       {!latest && <p className="small muted">No themes yet. The first reading runs on the next weekday morning (from 7 AM ET), or press Refresh now.</p>}
       {latest && latest.themes.length === 0 && <p className="small muted">The last reading found no idea that several sources agree on.</p>}
+      {latest && latest.themes.length > 0 && <div className="toolbar"><CollapseAll /></div>}
       {latest?.themes.map((t, i) => {
         const s = since(t, now);
         return (
-          <section key={i} className="card theme">
+          <CardCollapse key={i} id={latest.id * 10 + i} prefix="theme" className="theme">
+            <div>
             <div className="theme-head">
               <span className="theme-rank">#{i + 1}</span>
               <span className={`theme-dir ${t.direction === "long" ? "pos" : "neg"}`}>{t.direction === "long" ? "▲ LONG" : "▼ SHORT"}</span>
@@ -67,6 +70,9 @@ export default async function ThemesPage() {
               {s.avg !== null && <span className={`tag ${s.avg >= 0 ? "ok" : "neg"}`} title="Direction-adjusted move since it was published, averaged over its tickers">{pct(s.avg)} since {latest.etDate.slice(5)}</span>}
             </div>
             <h3 className="theme-title">{t.title}</h3>
+            {/* Written with the theme and never changed; older themes get a fixed one from their own title. */}
+            <div className={`card-thesis card-thesis-${t.direction}`}><span className="card-thesis-label">{t.direction === "long" ? "▲" : "▼"} Thesis</span> {t.one_line?.trim() || `${t.direction === "long" ? "Long" : "Short"} ${t.tickers.join(", ")}: ${t.title.replace(/\.$/, "")}.`}</div>
+            </div>
             <div>{t.thesis}</div>
             <div className="small" style={{ marginTop: 6 }}><b>Catalyst:</b> {t.catalyst || "none dated"}</div>
             <div className="small theme-agree">
@@ -83,7 +89,7 @@ export default async function ThemesPage() {
               <ThemeResearch run={latest.id} index={i} />
               <CardAsk symbol={t.tickers[0]} tickers={t.tickers} noun="theme" subject={`theme "${t.title}" (${t.direction} ${t.tickers.join(", ")})`} context={details(t, latest)} />
             </div>
-          </section>
+          </CardCollapse>
         );
       })}
       {older.length > 0 && (

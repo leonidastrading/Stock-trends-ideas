@@ -23,6 +23,7 @@ You get three kinds of sources from the last 14 days: documents the trader colle
 
 Pick the top 3 ideas by agreement: an idea counts more when several independent sources make the same call (same stock or theme, same direction), when it shows up across kinds of sources (documents and websites and Stocktwits), and when it is recent. Not just the loudest single stock: a theme many sources share (for example "power for AI data centers: long utilities and grid suppliers") can be one idea with 1-3 tickers. For each:
 - title (12 words or fewer, in plain English a non-expert gets at a glance: what happened and what it means for which company (e.g. 'FBI warns of a new AI hacking tool; could lift demand for CrowdStrike'). No trader jargon (read-through, print, beat-and-raise, TAM) and no unexplained acronyms or code names), direction (long or short), 1-3 US tickers that express it best;
+- one_line: the thesis as ONE plain-English sentence of 35 words or fewer a non-expert gets at a glance, starting with Long or Short and the main ticker, then the reason and what should happen by when (no jargon, acronyms spelled out);
 - the thesis in plain words, and why it should play out within 1-2 weeks (a dated catalyst if there is one);
 - agreement: how many sources of each kind make the call, and 2-4 short quotes or paraphrases with where they came from;
 - disagreement: who argues the other side, if anyone;
@@ -38,9 +39,9 @@ export const THEMES_SCHEMA = {
       type: "array",
       items: {
         type: "object", additionalProperties: false,
-        required: ["title", "direction", "tickers", "thesis", "catalyst", "agreement", "quotes", "disagreement", "crowding", "breaks_it", "confidence"],
+        required: ["title", "one_line", "direction", "tickers", "thesis", "catalyst", "agreement", "quotes", "disagreement", "crowding", "breaks_it", "confidence"],
         properties: {
-          title: { type: "string" }, direction: { type: "string", enum: ["long", "short"] }, tickers: { type: "array", items: { type: "string" } },
+          title: { type: "string" }, one_line: { type: "string" }, direction: { type: "string", enum: ["long", "short"] }, tickers: { type: "array", items: { type: "string" } },
           thesis: { type: "string" }, catalyst: { type: "string" },
           agreement: { type: "object", additionalProperties: false, required: ["documents", "websites", "stocktwits"], properties: { documents: { type: "integer" }, websites: { type: "integer" }, stocktwits: { type: "integer" } } },
           quotes: { type: "array", items: { type: "object", additionalProperties: false, required: ["text", "source"], properties: { text: { type: "string" }, source: { type: "string" } } } },
@@ -55,6 +56,8 @@ const themeSchema = z.object({
   title: z.string(), direction: z.enum(["long", "short"]).catch("long"),
   tickers: z.array(z.string()).transform((a) => [...new Set(a.map((s) => s.trim().toUpperCase().replace(/^\$/, "")).filter((s) => /^[A-Z]{1,5}(\.[A-Z])?$/.test(s)))].slice(0, 3)),
   thesis: z.string().catch(""), catalyst: z.string().catch(""),
+  /** One-sentence thesis, written with the theme (older runs have none). */
+  one_line: z.string().max(400).optional().catch(undefined),
   agreement: z.object({ documents: z.number().catch(0), websites: z.number().catch(0), stocktwits: z.number().catch(0) }).catch({ documents: 0, websites: 0, stocktwits: 0 }),
   quotes: z.array(z.object({ text: z.string(), source: z.string() })).catch([]),
   disagreement: z.string().catch(""), crowding: z.string().catch(""), breaks_it: z.string().catch(""),
