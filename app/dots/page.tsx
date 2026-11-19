@@ -9,6 +9,8 @@ import { hasDatabase } from "@/lib/db";
 import { dotsRuns, type Crowd, type DotIdea, type DotsRun } from "@/lib/scout/dots";
 import * as store from "@/lib/scout/store";
 import { fmtEtAgo } from "@/lib/time";
+import CardChips from "@/components/CardChips";
+import Pager, { paginate } from "@/components/Pager";
 import DotsRefresh from "./DotsRefresh";
 
 export const dynamic = "force-dynamic";
@@ -41,20 +43,26 @@ function details(t: DotIdea, run: DotsRun): string {
 }
 
 /** Dots: trade ideas from changes in what people and businesses are doing, followed to the companies nobody has connected yet. */
-export default async function DotsPage({ searchParams }: { searchParams: Promise<{ run?: string }> }) {
+const PAGE_SIZE = 20;
+
+export default async function DotsPage({ searchParams }: { searchParams: Promise<{ run?: string; p?: string }> }) {
   if (!hasDatabase()) return <SetupNotice />;
   const runs = await dotsRuns(30).catch(() => [] as DotsRun[]);
   // The run shown in full: the one asked for (?run=ID), else the latest.
-  const wanted = Number((await searchParams).run);
+  const sp = await searchParams;
+  const wanted = Number(sp.run);
   const latest = runs.find((r) => r.id === wanted) ?? runs[0];
   const isNewest = latest?.id === runs[0]?.id;
-  const older = runs.filter((r) => r.id !== latest?.id);
   const info = latest ? await store.symbolInfo([...new Set(latest.ideas.map((t) => t.tickers[0]))]).catch(() => new Map<string, store.SymbolInfo>()) : new Map<string, store.SymbolInfo>();
   const syms = [...new Set(runs.flatMap((r) => r.ideas.map((t) => t.tickers[0])))];
   const snaps = syms.length ? await (marketDataFromEnv()?.getSnapshots?.(syms) ?? Promise.resolve({})).catch(() => ({})) : {};
   const now = Object.fromEntries(Object.entries(snaps as Record<string, { price: number }>).map(([s, v]) => [s, v.price]));
   const briefs = await store.cardBriefsSince(120).catch(() => [] as store.CardBrief[]);
-  const cardsOn = (sym: string) => briefs.filter((c) => c.primaryTicker === sym || c.tickers.includes(sym));
+  // Every card on any of an idea's stocks.
+  const cardsFor = (t: DotIdea) => briefs.filter((c) => t.tickers.some((x) => c.primaryTicker === x || c.tickers.includes(x)));
+  // Every idea from every run, newest first, a page at a time.
+  const all = runs.flatMap((r) => r.ideas.map((t, i) => ({ r, t, i })));
+  const page = paginate(all, Number(sp.p ?? 1), PAGE_SIZE);
 
   return (
     <>
@@ -64,13 +72,8 @@ export default async function DotsPage({ searchParams }: { searchParams: Promise
         <DotsRefresh />
         {latest && <span className="small muted">Last read {fmtEtAgo(latest.createdAt)} from {latest.headlines} lines and headlines{latest.costUsd !== null ? ` · $${latest.costUsd.toFixed(2)}` : ""}</span>}
       </div>
-      {runs.length > 1 && (
-        <div className="toolbar small" id="runs">
-          <span className="muted">Runs:</span>
-          {runs.map((r) => <a key={r.id} className={`chip${r.id === latest?.id ? " active" : ""}`} href={r.id === runs[0].id ? "/dots#runs" : `/dots?run=${r.id}#runs`} title={`${r.ideas.length} ideas`}>{r.etDate.slice(5)}{r.id === runs[0].id ? " (latest)" : ""} · {r.ideas.length}</a>)}
-        </div>
-      )}
-      {latest && !isNewest && <p className="small warn">Showing the run from {fmtEtAgo(latest.createdAt)}. <a href="/dots">Back to the latest</a>.</p>}
+      {latest && !isNewest && <p className="small warn">Showing the ideas posted {fmtEtAgo(latest.createdAt)}. <a href="/dots">Back to the latest</a> · <a href="#all-ideas">all ideas</a>.</p>}
+      {latest && latest.ideas.length > 0 && <p className="small muted">{isNewest ? "Latest ideas" : "Ideas"}, posted {fmtEtAgo(latest.createdAt)}. <a href="#all-ideas">All {all.length} ideas</a>.</p>}
       {latest && latest.changes.length > 0 && (
         <details className="card section">
           <summary><b>What the scout saw changing{isNewest ? " this week" : ` (run of ${latest.etDate})`}</b> <span className="small muted">{latest.changes.length} changes, the searches it ran to dig in, and what it read</span></summary>
@@ -84,7 +87,7 @@ export default async function DotsPage({ searchParams }: { searchParams: Promise
       {latest?.ideas.map((t, i) => {
         const main = t.tickers[0];
         const s = since(t, now);
-        const cards = cardsOn(main);
+        const cards = cardsFor(t);
         return (
           <CardCollapse key={i} id={latest.id * 10 + i} prefix="dot" className="theme">
             <div>
@@ -95,6 +98,7 @@ export default async function DotsPage({ searchParams }: { searchParams: Promise
                 <span className="tag">confidence {t.confidence}</span>
                 {t.crowd?.[main] && <span className={`tag ${CROWD[t.crowd[main].verdict].cls}`} title={CROWD[t.crowd[main].verdict].tip}>{CROWD[t.crowd[main].verdict].label}</span>}
                 {s !== null && <span className={`tag ${s >= 0 ? "ok" : "error"}`} title="Direction-adjusted move of the main ticker since published">{pct(s)} since {latest.etDate.slice(5)}</span>}
+                <span className="small muted">posted {fmtEtAgo(latest.createdAt)}</span>
               </div>
               <h3 className="theme-title">{t.title}</h3>
               <div className={`card-thesis card-thesis-${t.direction}`}><span className="card-thesis-label">{t.direction === "long" ? "▲" : "▼"} Thesis</span> {t.one_line || `${t.direction === "long" ? "Long" : "Short"} ${t.tickers.join(", ")}: ${t.title}.`}</div>
@@ -108,25 +112,28 @@ export default async function DotsPage({ searchParams }: { searchParams: Promise
             <div className="small muted" style={{ marginTop: 4 }}>Horizon about {t.horizon_days} days.</div>
             <div style={{ marginTop: 10 }}><StockChart symbol={main} tvSymbol={tvSymbol(main, info.get(main)?.exchange)} height={480} entry={{ date: latest.etDate, price: t.prices?.[main] ?? null, direction: t.direction, label: "idea published" }} /></div>
             <div className="small rumor-actions" style={{ marginTop: 8 }}>
-              {cards.length ? <span>Scout cards on {main}: {cards.slice(0, 4).map((c) => <a key={c.id} className="tag card-number" style={{ marginRight: 4 }} href={`/ideas?days=365&card=${c.id}#card-${c.id}`}><span className={c.direction === "long" ? "pos" : "neg"}>{c.direction === "long" ? "▲" : "▼"}</span> #{c.id}</a>)}</span> : null}
+              {cards.length ? <span>Scout cards on {t.tickers.join(", ")}: <CardChips cards={cards} max={50} /></span> : <span className="muted">No scout cards on {t.tickers.join(", ")} yet.</span>}
               <ResearchButton symbol={main} term={`dots: ${t.title}`.slice(0, 80)} observation={details(t, latest)} kind={null} />
             </div>
           </CardCollapse>
         );
       })}
 
-      {older.length > 0 && (
-        <section className="card section">
-          <h2>{isNewest ? "Earlier ideas" : "Other runs"}</h2>
-          <p className="small muted">Tap an idea to see its run in full, with the chain, the headlines and a chart.</p>
+      {all.length > 0 && (
+        <section className="card section" id="all-ideas">
+          <h2>All ideas</h2>
+          <p className="small muted">Every idea the scout has posted, newest first. Tap one to see it in full, with the chain, the headlines and a chart.</p>
+          <Pager params={{ run: sp.run }} name="p" page={page.page} pages={page.pages} total={page.total} label="ideas" hash="#all-ideas" />
           <div className="table-wrap"><table>
-            <thead><tr><th>Date</th><th>Idea</th><th>Main ticker</th><th>How late then</th><th className="num">Since</th></tr></thead>
-            <tbody>{older.flatMap((r) => r.ideas.map((t, i) => {
+            <thead><tr><th>Posted</th><th>Idea</th><th>Main ticker</th><th>How late then</th><th className="num">Since</th><th>Cards</th></tr></thead>
+            <tbody>{page.items.map(({ r, t, i }) => {
               const s = since(t, now);
               const c = t.crowd?.[t.tickers[0]];
-              return <tr key={`${r.id}-${i}`}><td className="small">{r.etDate}</td><td className="small"><a href={`/dots?run=${r.id}#dot-${r.id * 10 + i}`}>{t.title}</a></td><td className="small"><span className={t.direction === "long" ? "pos" : "neg"}>{t.direction === "long" ? "▲" : "▼"}</span> <Ticker symbol={t.tickers[0]} /></td><td className="small">{c ? CROWD[c.verdict].label : "—"}</td><td className={`num ${s === null ? "" : s >= 0 ? "pos" : "neg"}`}>{pct(s)}</td></tr>;
-            }))}</tbody>
+              const cards = cardsFor(t);
+              return <tr key={`${r.id}-${i}`} className={r.id === latest?.id ? "row-current" : ""}><td className="small" style={{ whiteSpace: "nowrap" }}>{fmtEtAgo(r.createdAt)}</td><td className="small"><a href={`/dots?run=${r.id}#dot-${r.id * 10 + i}`}>{t.title}</a></td><td className="small" style={{ whiteSpace: "nowrap" }}><span className={t.direction === "long" ? "pos" : "neg"}>{t.direction === "long" ? "▲" : "▼"}</span> {t.tickers.map((x, k) => <span key={x}>{k ? " " : ""}<Ticker symbol={x} /></span>)}</td><td className="small">{c ? CROWD[c.verdict].label : "—"}</td><td className={`num ${s === null ? "" : s >= 0 ? "pos" : "neg"}`}>{pct(s)}</td><td className="small">{cards.length ? <CardChips cards={cards} max={4} /> : <span className="muted">—</span>}</td></tr>;
+            })}</tbody>
           </table></div>
+          <Pager params={{ run: sp.run }} name="p" page={page.page} pages={page.pages} total={page.total} label="ideas" hash="#all-ideas" />
         </section>
       )}
     </>

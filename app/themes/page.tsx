@@ -6,6 +6,7 @@ import { hasDatabase } from "@/lib/db";
 import { themeRuns, themeSends, type Theme, type ThemeRun } from "@/lib/scout/themes";
 import { swingConfigured } from "@/lib/scout/swing";
 import { fmtEtAgo } from "@/lib/time";
+import CardChips from "@/components/CardChips";
 import { ThemeResearch, ThemeSend, ThemesRefresh } from "./ThemeButtons";
 import StockChart from "@/components/StockChart";
 import CardCollapse, { CollapseAll } from "@/components/CardCollapse";
@@ -44,6 +45,9 @@ export default async function ThemesPage() {
   const snaps = syms.length ? await (marketDataFromEnv()?.getSnapshots?.(syms) ?? Promise.resolve({})).catch(() => ({})) : {};
   const now = Object.fromEntries(Object.entries(snaps as Record<string, { price: number }>).map(([s, v]) => [s, v.price]));
   const [latest, ...older] = runs;
+  // Every scout card on any of a theme's stocks.
+  const briefs = await store.cardBriefsSince(120).catch(() => [] as store.CardBrief[]);
+  const cardsFor = (t: Theme) => briefs.filter((c) => t.tickers.some((x) => c.primaryTicker === x || c.tickers.includes(x)));
   // The exchange of each idea's main ticker, so the chart opens the right listing.
   const info = latest ? await store.symbolInfo(latest.themes.map((t) => t.tickers[0]).filter(Boolean)).catch(() => new Map<string, store.SymbolInfo>()) : new Map<string, store.SymbolInfo>();
   return (
@@ -68,6 +72,7 @@ export default async function ThemesPage() {
               {t.tickers.map((x) => <Ticker key={x} symbol={x} className="theme-ticker" />)}
               <span className="tag">confidence {t.confidence}</span>
               {s.avg !== null && <span className={`tag ${s.avg >= 0 ? "ok" : "neg"}`} title="Direction-adjusted move since it was published, averaged over its tickers">{pct(s.avg)} since {latest.etDate.slice(5)}</span>}
+              <span className="small muted">posted {fmtEtAgo(latest.createdAt)}</span>
             </div>
             <h3 className="theme-title">{t.title}</h3>
             {/* Written with the theme and never changed; older themes get a fixed one from their own title. */}
@@ -84,6 +89,7 @@ export default async function ThemesPage() {
             <div className="small" style={{ marginTop: 4 }}><b>What would break it:</b> {t.breaks_it}</div>
             {s.each.some((e) => e.move !== null) && <div className="small muted" style={{ marginTop: 4 }}>Since published: {s.each.map((e) => `${e.s} ${pct(e.move)}${t.prices?.[e.s] ? ` (from $${t.prices[e.s].toFixed(2)})` : ""}`).join(" · ")}</div>}
             {t.tickers[0] && <div style={{ marginTop: 10 }}><StockChart symbol={t.tickers[0]} tvSymbol={tvSymbol(t.tickers[0], info.get(t.tickers[0])?.exchange)} height={520} entry={{ date: latest.etDate, price: t.prices?.[t.tickers[0]] ?? null, direction: t.direction, label: "theme published" }} /></div>}
+            <div className="small" style={{ marginTop: 8 }}>{cardsFor(t).length ? <>Scout cards on {t.tickers.join(", ")}: <CardChips cards={cardsFor(t)} max={50} /></> : <span className="muted">No scout cards on {t.tickers.join(", ")} yet.</span>}</div>
             <div className="small rumor-actions" style={{ marginTop: 8 }}>
               <ThemeSend run={latest.id} index={i} ticker={t.tickers[0]} side={t.direction} sent={sends.has(`${latest.id}:${i}`)} configured={sw} />
               <ThemeResearch run={latest.id} index={i} />
@@ -96,10 +102,10 @@ export default async function ThemesPage() {
         <section className="card section">
           <h2>Earlier readings</h2>
           <p className="small muted">How each day&apos;s ideas have done since (direction-adjusted, at today&apos;s prices).</p>
-          <div className="table-wrap"><table><thead><tr><th>Day</th><th>#</th><th>Idea</th><th>Call</th><th className="num">Since</th></tr></thead>
+          <div className="table-wrap"><table><thead><tr><th>Posted</th><th>#</th><th>Idea</th><th>Call</th><th className="num">Since</th><th>Cards</th></tr></thead>
             <tbody>{older.flatMap((r) => r.themes.map((t, i) => {
               const s = since(t, now);
-              return <tr key={`${r.id}-${i}`}><td className="small">{r.etDate}</td><td>{i + 1}</td><td className="small">{t.title}</td><td className="small"><span className={t.direction === "long" ? "pos" : "neg"}>{t.direction === "long" ? "▲" : "▼"}</span> {t.tickers.map((x, k) => <span key={x}>{k ? ", " : ""}<Ticker symbol={x} /></span>)}</td><td className={`num ${s.avg === null ? "" : s.avg >= 0 ? "pos" : "neg"}`}>{pct(s.avg)}</td></tr>;
+              return <tr key={`${r.id}-${i}`}><td className="small" style={{ whiteSpace: "nowrap" }}>{fmtEtAgo(r.createdAt)}</td><td>{i + 1}</td><td className="small">{t.title}</td><td className="small"><span className={t.direction === "long" ? "pos" : "neg"}>{t.direction === "long" ? "▲" : "▼"}</span> {t.tickers.map((x, k) => <span key={x}>{k ? ", " : ""}<Ticker symbol={x} /></span>)}</td><td className={`num ${s.avg === null ? "" : s.avg >= 0 ? "pos" : "neg"}`}>{pct(s.avg)}</td><td className="small">{cardsFor(t).length ? <CardChips cards={cardsFor(t)} max={4} /> : <span className="muted">—</span>}</td></tr>;
             }))}</tbody></table></div>
         </section>
       )}

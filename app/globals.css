@@ -30,7 +30,10 @@ body { margin: 0; background: var(--surface-0); color: var(--text-primary); font
 a { color: var(--accent); }
 /* Desktop: the page is about two thirds of the screen, centred (never narrower than ~1060 px); phones and small windows use the full width. */
 :root { --page-w: 100%; }
-@media (min-width: 1200px) { :root { --page-w: max(1060px, 67vw); } }
+@media (min-width: 900px) { :root { --page-w: max(720px, 67vw); } }
+/* Nothing inside the page may push it wider than the page width (wide tables scroll inside their box). */
+main > * { max-width: 100%; }
+.theme, .card { min-width: 0; overflow-wrap: anywhere; }
 main { max-width: var(--page-w); margin: 0 auto; padding: 16px 24px; }
 nav { display: flex; gap: 4px 2px; align-items: center; padding: 8px max(16px, calc((100% - var(--page-w)) / 2 + 12px)); border-bottom: 1px solid var(--border); background: var(--surface-1); flex-wrap: wrap; }
 nav .brand { font-weight: 700; margin-right: 10px; letter-spacing: -0.01em; }
