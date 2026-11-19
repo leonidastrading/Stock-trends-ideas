@@ -4,6 +4,7 @@ import CardAsk from "@/components/CardAsk";
 import CardCollapse from "@/components/CardCollapse";
 import CapShort from "@/components/CapShort";
 import StockChart from "@/components/StockChart";
+import FavoriteStar from "@/components/FavoriteStar";
 import Ticker from "@/components/Ticker";
 import { chartUrl, tvSymbol } from "@/config/links";
 import { cache, Suspense } from "react";
@@ -21,6 +22,7 @@ import { fallbackThesis } from "@/lib/scout/thesis";
 
 // One read per page render, shared by every card on it.
 const recentBriefs = cache(() => store.cardBriefsSince(60).catch(() => [] as store.CardBrief[]));
+const favoriteIds = cache(() => store.favorites().then((f) => new Set(f.map((x) => x.cardId))).catch(() => new Set<number>()));
 const allTheses = cache(() => import("@/lib/scout/thesis").then(({ cardTheses }) => cardTheses()).catch(() => new Map<number, string>()));
 
 const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
@@ -42,6 +44,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
   }
   const q = await quote(c.primaryTicker);
   const briefs = hasDatabase() ? await recentBriefs() : [];
+  const starred = hasDatabase() ? (await favoriteIds()).has(c.id) : false;
   const thesis = (hasDatabase() ? (await allTheses()).get(c.id) : undefined) ?? fallbackThesis(c);
   const otherCards = (sym: string) => briefs.filter((b) => b.id !== c.id && (b.primaryTicker === sym || b.tickers.includes(sym)));
   const filing = hasDatabase() ? await import("@/lib/scout/filing-watch").then(({ latestFilingWatch }) => latestFilingWatch([c.primaryTicker])).then((m) => m.get(c.primaryTicker) ?? null).catch(() => null) : null;
@@ -58,6 +61,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
     <CardCollapse id={c.id}>
       <div>
         <div className="inline">
+          {hasDatabase() && <FavoriteStar cardId={c.id} initial={starred} />}
           <a className="tag card-number" href={`/ideas?days=365&card=${c.id}#card-${c.id}`} title="Link to this card">#{c.id}</a>
           <span className={`tag ${c.status}`}>{c.status.replace("_", " ")}</span>
           <span className="tag">{KIND_LABEL[c.kind as Kind] ?? c.kind}</span>
@@ -132,7 +136,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
       </div>
       <div className="card-chart">
         <div className="small muted card-chart-head"><span>{c.primaryTicker} · chart</span><a href={chartUrl(c.primaryTicker)} target="_blank" rel="noreferrer">Open full chart →</a></div>
-        <StockChart symbol={c.primaryTicker} tvSymbol={tvSymbol(c.primaryTicker, info?.exchange)} entry={track ? { date: track.entryDate, price: track.entryPrice, direction: track.direction, exitDate: track.exitDate } : undefined} />
+        <StockChart symbol={c.primaryTicker} tvSymbol={tvSymbol(c.primaryTicker, info?.exchange)} entry={track?.entryDate && track.entryPrice ? { date: track.entryDate, price: track.entryPrice, direction: track.direction, exitDate: track.exitDate, exitPrice: track.exitPrice, label: "scout entry" } : { date: toEt(new Date(c.createdAt)).date, price: null, direction: c.direction, label: track ? "card written (entry next open)" : "card written" }} />
       </div>
       <div className="actions">{actions}<CardAsk cardId={c.id} symbol={c.primaryTicker} tickers={k.tickers.map((t) => t.symbol)} /></div>
       <Feedback target={`card:${c.id}`} initial={feedback ? { vote: feedback.vote, note: feedback.note } : null} />

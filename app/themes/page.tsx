@@ -77,7 +77,7 @@ export default async function ThemesPage() {
             <div className="small warn" style={{ marginTop: 4 }}><b>Crowding:</b> {t.crowding}</div>
             <div className="small" style={{ marginTop: 4 }}><b>What would break it:</b> {t.breaks_it}</div>
             {s.each.some((e) => e.move !== null) && <div className="small muted" style={{ marginTop: 4 }}>Since published: {s.each.map((e) => `${e.s} ${pct(e.move)}${t.prices?.[e.s] ? ` (from $${t.prices[e.s].toFixed(2)})` : ""}`).join(" · ")}</div>}
-            {t.tickers[0] && <div style={{ marginTop: 10 }}><StockChart symbol={t.tickers[0]} tvSymbol={tvSymbol(t.tickers[0], info.get(t.tickers[0])?.exchange)} height={520} /></div>}
+            {t.tickers[0] && <div style={{ marginTop: 10 }}><StockChart symbol={t.tickers[0]} tvSymbol={tvSymbol(t.tickers[0], info.get(t.tickers[0])?.exchange)} height={520} entry={{ date: latest.etDate, price: t.prices?.[t.tickers[0]] ?? null, direction: t.direction, label: "theme published" }} /></div>}
             <div className="small rumor-actions" style={{ marginTop: 8 }}>
               <ThemeSend run={latest.id} index={i} ticker={t.tickers[0]} side={t.direction} sent={sends.has(`${latest.id}:${i}`)} configured={sw} />
               <ThemeResearch run={latest.id} index={i} />

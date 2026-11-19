@@ -411,3 +411,8 @@ main { overflow-wrap: break-word; }
 }
 /* Links to a card or section land below the sticky menu. */
 html { scroll-padding-top: 120px; }
+
+.fav-star { background: none; border: none; padding: 0 2px; font-size: 1.35rem; line-height: 1; cursor: pointer; color: var(--text-muted); vertical-align: middle; }
+.fav-star:hover { color: #e8a33d; }
+.fav-star.on { color: #e8a33d; }
+.fav-star:disabled { opacity: 0.7; cursor: progress; }

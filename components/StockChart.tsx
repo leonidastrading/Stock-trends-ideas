@@ -5,7 +5,11 @@ import TvChart from "@/components/TvChart";
 import { findCrashBounce, type Bar, type CrashBounce } from "@/lib/market/crash-bounce";
 
 interface BarsReply { symbol: string; bars: Bar[]; raw?: Array<[string, number, number]>; feed?: string; earnings: string[]; next: string | null; nextBasis: string | null; error?: string }
-export interface ChartEntry { date: string | null; price: number | null; direction: "long" | "short"; exitBy?: string | null; exitDate?: string | null }
+/**
+ * The scout's call on this chart: the paper entry when the trade is open, otherwise the day the card (or theme) was
+ * written, priced at that day's close when no price is given.
+ */
+export interface ChartEntry { date: string | null; price: number | null; direction: "long" | "short"; exitBy?: string | null; exitDate?: string | null; exitPrice?: number | null; label?: string }
 
 const RANGES = [["1M", 31], ["3M", 92], ["6M", 183], ["YTD", 0], ["1Y", 365], ["2Y", 730], ["All", -1]] as const;
 type Range = (typeof RANGES)[number][0];
@@ -129,12 +133,17 @@ export default function StockChart({ symbol, tvSymbol, height = 680, entry }: { 
         const s = chart.addLineSeries({ color, lineWidth: 1, lineStyle: style, lastValueVisible: !!title, priceLineVisible: false, crosshairMarkerVisible: false, title });
         s.setData(a === b ? [{ time: a, value }] : [{ time: a, value }, { time: b, value }]);
       };
-      // The card's paper trade: an arrow at the entry and a dashed line at the entry price.
-      if (entry?.date && entry.price) {
+      // The scout's call: an arrow on the day and a dashed line at the price, labelled on the price axis.
+      const entryPrice = entry?.date ? entry.price ?? bars.find((b) => b[0] >= keyOf(entry.date!))?.[4] ?? null : null;
+      if (entry?.date && entryPrice) {
         const long = entry.direction === "long";
-        marks.push({ time: keyOf(entry.date), position: long ? "belowBar" : "aboveBar", color: accent, shape: long ? "arrowUp" : "arrowDown", text: `${long ? "long" : "short"} entry $${entry.price.toFixed(2)}` });
-        if (entry.exitDate) marks.push({ time: keyOf(entry.exitDate), position: long ? "aboveBar" : "belowBar", color: accent, shape: "square", text: "exit" });
-        candles.createPriceLine({ price: entry.price, color: accent, lineWidth: 1, lineStyle: lib.LineStyle.Dashed, axisLabelVisible: true, title: "entry" });
+        const label = entry.label ?? "scout entry";
+        marks.push({ time: keyOf(entry.date), position: long ? "belowBar" : "aboveBar", color: accent, shape: long ? "arrowUp" : "arrowDown", text: `${long ? "▲" : "▼"} ${label} $${entryPrice.toFixed(2)}` });
+        candles.createPriceLine({ price: entryPrice, color: accent, lineWidth: 2, lineStyle: lib.LineStyle.Dashed, axisLabelVisible: true, title: `${label} ${long ? "long" : "short"}` });
+        if (entry.exitDate) {
+          marks.push({ time: keyOf(entry.exitDate), position: long ? "aboveBar" : "belowBar", color: accent, shape: "square", text: `exit${entry.exitPrice ? ` $${entry.exitPrice.toFixed(2)}` : ""}` });
+          if (entry.exitPrice) candles.createPriceLine({ price: entry.exitPrice, color: muted, lineWidth: 1, lineStyle: lib.LineStyle.Dotted, axisLabelVisible: true, title: "exit" });
+        }
       }
       // The crash-and-bounce short setup (daily bars only): peak, first low, the 50% level, and the trade once it starts.
       if (prefs.setup && !prefs.weekly) {
@@ -145,7 +154,7 @@ export default function StockChart({ symbol, tvSymbol, height = 680, entry }: { 
           seg(s.firstLow.date, s.trigger?.date ?? end, s.level, warn, lib.LineStyle.Dashed, s === setups[setups.length - 1] ? "50% level" : "");
           marks.push({ time: s.peak.date, position: "aboveBar", color: neg, shape: "circle", text: `peak $${s.peak.price.toFixed(2)}` });
           marks.push({ time: s.firstLow.date, position: "belowBar", color: muted, shape: "circle", text: `low $${s.firstLow.price.toFixed(2)} (−${s.firstLow.dropPct}%)` });
-          if (s.trigger) marks.push({ time: s.trigger.date, position: "aboveBar", color: warn, shape: "square", text: "trigger" });
+          if (s.trigger) marks.push({ time: s.trigger.date, position: "belowBar", color: warn, shape: "square", text: "trigger" });
           if (s.status === "waiting for entry" && s.trigger && s.entryLevel) seg(s.trigger.date, end, s.entryLevel, warn, lib.LineStyle.Solid, "short below");
           if (s.entry && s.stop) {
             const stopAt = s.exit?.date ?? end;
@@ -246,7 +255,7 @@ export default function StockChart({ symbol, tvSymbol, height = 680, entry }: { 
           <div className="small muted chart-foot">
             <span className="key-earn" /> earnings (SEC 8-K)
             {res?.next ? <><span className="key-next" /> next report about {fmtDay(res.next)} (estimated)</> : null}
-            {entry?.date ? <><span className="key-entry" /> paper entry</> : null}
+            {entry?.date ? <><span className="key-entry" /> {entry.label ?? "scout entry"}{entry.price ? ` $${entry.price.toFixed(2)}` : ""}</> : null}
             {res?.feed === "iex" ? <span className="warn"> · prices from IEX only (whole-market data unavailable)</span> : null}
           </div>
           {prefs.setup && setups.length > 0 && (

@@ -209,6 +209,15 @@ export async function cardsSince(days: number): Promise<StoredCard[]> {
   return (await q(`SELECT ${CARD_COLS} FROM cards WHERE created_at >= now() - ($1::int * interval '1 day') ORDER BY created_at DESC`, [days])).map(toCard);
 }
 
+export async function favorites(): Promise<Array<{ cardId: number; addedAt: string }>> {
+  return (await q(`SELECT card_id, added_at FROM favorites ORDER BY added_at DESC`)).map((r) => ({ cardId: Number(r.card_id), addedAt: iso(r.added_at)! }));
+}
+
+export async function setFavorite(cardId: number, on: boolean): Promise<void> {
+  if (on) await q(`INSERT INTO favorites (card_id) VALUES ($1) ON CONFLICT (card_id) DO NOTHING`, [cardId]);
+  else await q(`DELETE FROM favorites WHERE card_id = $1`, [cardId]);
+}
+
 export interface CardBrief { id: number; createdAt: string; status: string; direction: "long" | "short"; primaryTicker: string; tickers: string[] }
 
 /** Every card from the last `days` days, light (no full card), for "other cards on this ticker" links. */

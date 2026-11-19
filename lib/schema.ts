@@ -312,6 +312,11 @@ CREATE TABLE IF NOT EXISTS filing_watch (
   data jsonb
 );
 CREATE INDEX IF NOT EXISTS filing_watch_symbol_idx ON filing_watch (symbol, checked_at);
+-- Cards you starred (your own list; starring changes nothing about the card or its scoring).
+CREATE TABLE IF NOT EXISTS favorites (
+  card_id integer PRIMARY KEY,
+  added_at timestamptz NOT NULL DEFAULT now()
+);
 -- One-sentence thesis per card (display only; never part of the card or its scoring).
 CREATE TABLE IF NOT EXISTS card_theses (
   card_id integer PRIMARY KEY,
