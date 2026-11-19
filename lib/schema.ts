@@ -321,6 +321,8 @@ CREATE TABLE IF NOT EXISTS dots_runs (
   headlines integer,
   cost_usd double precision
 );
+ALTER TABLE dots_runs ADD COLUMN IF NOT EXISTS changes jsonb;
+ALTER TABLE dots_runs ADD COLUMN IF NOT EXISTS sources jsonb;
 CREATE OR REPLACE TRIGGER dots_runs_ro BEFORE UPDATE OR DELETE ON dots_runs FOR EACH ROW EXECUTE FUNCTION forbid_change();
 -- Cards you starred (your own list; starring changes nothing about the card or its scoring).
 CREATE TABLE IF NOT EXISTS favorites (

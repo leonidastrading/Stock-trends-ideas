@@ -19,7 +19,7 @@ const PURPOSE_LABEL: Record<string, string> = {
   research: "Writing idea cards (all desks)", chat: "Chat and Ask the scout", stories: "Story desk: reading the news", triage: "Trend desk: picking what to research",
   review: "Reviewing cards after their catalyst", inbox: "Reading inbox files", inbox_digest: "Inbox digest", truth: "Reading Trump posts",
   rumors: "Reading rumor dumps", rumor_check: "Did the rumor come true?", investigate_plan: "Investigate: planning", investigate_report: "Investigate: report",
-  earnings_card: "Earnings drift cards", invalidation: "Invalidation watch", themes: "Themes (daily top 3)", image_read: "Reading uploaded images", dots: "Dots (second-order ideas)", thesis: "One-sentence card theses",
+  earnings_card: "Earnings drift cards", invalidation: "Invalidation watch", themes: "Themes (daily top 3)", image_read: "Reading uploaded images", dots: "Dots (second-order ideas)", dots_scan: "Dots (scanning for changes)", thesis: "One-sentence card theses",
 };
 
 export const dynamic = "force-dynamic";
