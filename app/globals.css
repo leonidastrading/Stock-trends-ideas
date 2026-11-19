@@ -447,3 +447,5 @@ a.chip { text-decoration: none; }
 
 .news-pager { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 8px 0; }
 .news-pager .chip:disabled { opacity: 0.45; cursor: default; }
+
+.nav-update { border-color: var(--accent); color: var(--accent); font-weight: 600; }

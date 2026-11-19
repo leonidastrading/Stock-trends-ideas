@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const LINKS: Array<{ href: string; label: string; badge?: string }> = [
   { href: "/", label: "Home" }, { href: "/ideas", label: "Ideas", badge: "ideas" }, { href: "/favorites", label: "★ Favorites" }, { href: "/news", label: "News", badge: "news" },
@@ -23,6 +23,9 @@ const writeSeen = (s: Record<string, string>) => { try { localStorage.setItem(KE
 export default function NavBar() {
   const path = usePathname();
   const [counts, setCounts] = useState<Record<string, number>>({});
+  // The site was updated since this page was opened (switching tabs keeps the old styles and code): reload.
+  const build = useRef<string | null>(null);
+  const [stale, setStale] = useState(false);
   const active = TAB_OF[path] ? LINKS.find((l) => l.badge === TAB_OF[path])?.href : path === "/" ? "/" : LINKS.find((l) => l.href !== "/" && path.startsWith(l.href))?.href;
   const current = TAB_OF[path] ?? LINKS.find((l) => l.href === active)?.badge ?? null;
 
@@ -37,10 +40,15 @@ export default function NavBar() {
       const r = await fetch(`/api/badges?s=${encodeURIComponent(JSON.stringify(seen))}`, { cache: "no-store" });
       const j = await r.json();
       if (j.ok) setCounts({ ...j.counts, ...(current ? { [current]: 0 } : {}) });
+      if (j.build) { if (build.current === null) build.current = j.build; else if (j.build !== build.current) setStale(true); }
     } catch {
       /* offline: keep the last counts */
     }
   }, [current]);
+
+  // An update came out while the page was open: the next tab you open loads in full, with the new version.
+  const firstPath = useRef(path);
+  useEffect(() => { if (stale && path !== firstPath.current) window.location.reload(); firstPath.current = path; }, [path, stale]);
 
   useEffect(() => {
     void poll();
@@ -53,6 +61,7 @@ export default function NavBar() {
   return (
     <nav>
       <span className="brand">Trend scout</span>
+      {stale && <button type="button" className="chip nav-update" onClick={() => window.location.reload()} title="The site was updated since this page was opened">Updated · reload</button>}
       {LINKS.map((l) => {
         const c = l.badge && l.badge !== current ? counts[l.badge] ?? 0 : 0;
         return (
