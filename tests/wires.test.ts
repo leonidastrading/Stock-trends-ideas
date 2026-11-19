@@ -72,9 +72,31 @@ describe("trading halts and phone alerts", async () => {
       n({ headline: "Old news beats", ts: "2026-11-17T19:00:00Z", url: "https://x/d" }), // too old
     ];
     const picks = pickAlerts(items, new Set(["NVDA", "URGN"]), new Set(), now);
-    expect(picks.map((p) => p.why)).toEqual(["halt", "filing", "beats estimates"]);
-    expect(picks).toHaveLength(3);
-    expect(pickAlerts(items, new Set(["NVDA", "URGN"]), new Set(picks.map((p) => p.key)), now)).toHaveLength(0);
+    // One push per stock per run: NVDA's filing now, its headline on the next run.
+    expect(picks.map((p) => [p.symbol, p.why])).toEqual([["URGN", "halt"], ["NVDA", "filing"]]);
+    const next = pickAlerts(items, new Set(["NVDA", "URGN"]), new Set(picks.map((p) => p.key)), now);
+    expect(next.map((p) => [p.symbol, p.why])).toEqual([["NVDA", "beats estimates"]]);
+    expect(pickAlerts(items, new Set(["NVDA", "URGN"]), new Set([...picks, ...next].flatMap((p) => [p.key, ...(p.cooldown ? [`story:${p.symbol}:${Math.floor(now.getTime() / 7200_000)}`] : [])])), now)).toHaveLength(0);
+  });
+
+  it("a big company's big story alerts without a card; one outlet, a quiet headline or a volatility pause does not", () => {
+    const now = new Date("2026-11-19T16:05:00Z");
+    const n = (o: Record<string, unknown>) => ({ id: 1, ts: "2026-11-19T16:00:00Z", headline: "h", summary: "", symbols: ["AMD"], source: "fiscal.ai", url: `https://x/${Math.random()}`, ...o });
+    const amd = [n({ headline: "AMD to acquire chip startup in $4B deal" }), n({ headline: "AMD agrees to $4 billion acquisition", source: "PR Newswire" }), n({ headline: "AMD shares climb on deal", source: "Benzinga" })];
+    const one = pickAlerts(amd, new Set(), new Set(), now);
+    expect(one).toHaveLength(1);
+    expect(one[0]).toMatchObject({ symbol: "AMD", why: "deal", bigStory: true });
+    // Only one outlet so far: not yet.
+    expect(pickAlerts(amd.slice(0, 1), new Set(), new Set(), now)).toHaveLength(0);
+    // Once alerted, the other outlets' copies stay quiet for two hours.
+    expect(pickAlerts(amd, new Set(), new Set([`story:AMD:${Math.floor(now.getTime() / 7200_000)}`]), now)).toHaveLength(0);
+    // A small stock needs three outlets.
+    const tiny = (src: string) => n({ headline: "Tiny Co announces merger", symbols: ["TINY"], source: src });
+    expect(pickAlerts([tiny("a"), tiny("b")], new Set(), new Set(), now)).toHaveLength(0);
+    expect(pickAlerts([tiny("a"), tiny("b"), tiny("c")], new Set(), new Set(), now)[0]).toMatchObject({ symbol: "TINY", bigStory: true });
+    // A routine volatility pause never alerts, even on your stock.
+    const pause = n({ headline: "Trading halted: TDTH, volatility pause (limit up-limit down)", summary: "Nasdaq halt, reason code LUDP.", source: "Nasdaq halts", symbols: ["TDTH"] });
+    expect(pickAlerts([pause], new Set(["TDTH"]), new Set(), now)).toHaveLength(0);
   });
 });
 
