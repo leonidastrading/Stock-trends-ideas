@@ -179,6 +179,11 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
   } catch (err) {
     out.cardSymbols = `failed: ${err instanceof Error ? err.message : String(err)}`;
   }
+  // One-sentence thesis per card (display only): early, so it isn't starved by the slower slices below. Cards
+  // normally get theirs the moment they are written; this catches the rest, a dozen per call.
+  if (left() > 40_000) {
+    out.theses = await import("./thesis").then(({ writeTheses }) => writeTheses({ callModel: callResearchModel, now }, Math.min(deadline - 30_000, Date.now() + 45_000), 12)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+  } else out.theses = "later: not enough time";
   out.chatter = left() > 100_000 ? await chatterBatch(now, fetchImpl) : "later: not enough time";
   if (data && left() > 40_000) {
     out.chatterBars = await import("./chatter").then(({ ensureChatterBars }) => ensureChatterBars(data, now, CHATTER_EXPLORE_FROM)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -259,10 +264,6 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
   if (left() > 70_000) {
     out.invalidation = await import("./invalidation").then(({ checkInvalidations }) => checkInvalidations({ data, callModel: callResearchModel, now, env: process.env }, deadline - 30_000)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
   } else out.invalidation = "later: not enough time";
-  // One-sentence thesis per card (display only), a few batches per call.
-  if (left() > 50_000) {
-    out.theses = await import("./thesis").then(({ writeTheses }) => writeTheses({ callModel: callResearchModel, now }, deadline - 30_000)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
-  } else out.theses = "later: not enough time";
   // Market cap and short interest per card, frozen the day it is written (for scoring by size and short interest).
   if (left() > 60_000) {
     out.cardProfiles = await import("./card-profiles").then(({ captureCardProfiles }) => captureCardProfiles(now, deadline - 40_000)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);

@@ -14,11 +14,14 @@ const card = (observation: string) => ({
 describe("one-sentence thesis", () => {
   it("uses the card's own 'The thesis:' sentence when there is one", () => {
     const t = fallbackThesis(card("PANW fell 26%. The thesis: the drawdown already prices in a lot of the valuation and integration fear. A clean print could produce a relief rally."));
-    expect(t).toBe("Long PANW: the drawdown already prices in a lot of the valuation and integration fear; catalyst: Palo Alto Networks fiscal Q1 2027 earnings and guidance, within 30 days.");
+    expect(t).toBe("Long PANW: the drawdown already prices in a lot of the valuation and integration fear. 30-day time limit.");
   });
 
   it("falls back to the title", () => {
-    expect(fallbackThesis(card("PANW fell 26%."))).toMatch(/^Long PANW: Palo Alto Networks bear market into fiscal Q1 earnings; catalyst: .*, within 30 days\.$/);
+    expect(fallbackThesis(card("PANW fell 26%."))).toBe("Long PANW: Palo Alto Networks bear market into fiscal Q1 earnings. 30-day time limit.");
+    const dated = card("PANW fell 26%.");
+    dated.card.catalyst = { what: "Q1 earnings and guidance, watch for restructuring charges and more words than fit", date: "2026-11-30" } as never;
+    expect(fallbackThesis(dated)).toBe("Long PANW: Palo Alto Networks bear market into fiscal Q1 earnings. Catalyst about Nov 30, 2026; 30-day time limit.");
   });
 
   it("gives the model the card's fields and asks for one plain sentence", () => {

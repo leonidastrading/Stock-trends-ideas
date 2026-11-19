@@ -28,8 +28,10 @@ export function fallbackThesis(c: Pick<store.StoredCard, "direction" | "primaryT
   const k = c.card;
   const own = /\bThe thesis(?: is)?:\s*([^]*?[.!?])(?:\s|$)/i.exec(`${k.observation} ${k.why_not_priced}`)?.[1];
   const why = own ? own.replace(/\.$/, "") : k.title.replace(/\.$/, "");
-  const when = k.catalyst?.what ? `; catalyst: ${cut(k.catalyst.what, 90)}${k.catalyst.date && k.catalyst.date !== "unknown" ? ` (${k.catalyst.date})` : ""}` : "";
-  return `${c.direction === "long" ? "Long" : "Short"} ${c.primaryTicker}: ${why}${when}, within ${k.time_limit_days} days.`;
+  // Whole sentences only: the catalyst by its date (its full text is on the card), never cut off mid-word.
+  const date = k.catalyst?.date && /^\d{4}-\d{2}-\d{2}$/.test(k.catalyst.date)
+    ? new Date(`${k.catalyst.date}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : null;
+  return `${c.direction === "long" ? "Long" : "Short"} ${c.primaryTicker}: ${why}.${date ? ` Catalyst about ${date};` : ""} ${k.time_limit_days}-day time limit.`;
 }
 
 /** Pure: one card as the model reads it. */
@@ -48,9 +50,9 @@ export async function cardTheses(ids?: number[]): Promise<Map<number, string>> {
 }
 
 /** Upkeep: write the sentence for cards that have none (newest first), within its own small daily budget. */
-export async function writeTheses(deps: { callModel: CallModel; now: Date }, deadline: number, max = THESIS.perCall): Promise<string> {
-  const [cards, have, settings] = await Promise.all([store.cardsSince(THESIS.days), cardTheses(), store.loadSettings()]);
-  const todo = cards.filter((c) => !have.has(c.id)).slice(0, max);
+export async function writeTheses(deps: { callModel: CallModel; now: Date }, deadline: number, max = THESIS.perCall, only?: number[]): Promise<string> {
+  const [cards, have, settings] = await Promise.all([store.cardsSince(THESIS.days), cardTheses(only), store.loadSettings()]);
+  const todo = cards.filter((c) => !have.has(c.id) && (!only || only.includes(c.id))).slice(0, max);
   if (!todo.length) return "nothing to write";
   const today = toEt(deps.now).date;
   let written = 0;
