@@ -428,3 +428,5 @@ a.chip { text-decoration: none; }
 .move-banner.against { border-left-color: var(--neg); background: color-mix(in srgb, var(--neg) 12%, transparent); }
 .move-banner.with { border-left-color: var(--pos); background: color-mix(in srgb, var(--pos) 12%, transparent); }
 .move-banner a { color: inherit; text-decoration: underline; }
+
+.history-note { margin: 6px 0 10px; padding: 8px 10px; border-radius: 6px; border-left: 3px solid var(--warn); background: color-mix(in srgb, var(--warn) 9%, transparent); line-height: 1.45; }

@@ -13,6 +13,14 @@ export const runtime = "nodejs";
 
 const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 const fmtMonth = (m: string) => new Date(`${m}-15T12:00:00Z`).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+/**
+ * Our own tests (QuantConnect, 638 biotech and pharma stocks, 2016-2026, against XBI): buying the stock before, on or
+ * after FDA and trial news showed no edge; holding a small biotech through a trial readout lost about 9% a trade.
+ */
+const HISTORY_FDA = "No edge from the stock alone: in our test of 675 FDA decisions (2016-2026, against the biotech ETF XBI), buying when the date became public and selling the day before averaged −0.3% (small caps −4.2%), and holding through the decision was a coin flip (about 80% approvals at +2% against rejections at −7%). The whole reaction happens on the day, mostly in the opening gap, and approvals in small caps tended to fade about 11% over the next three months.";
+const HISTORY_TRIALS = "Holding a small biotech through a trial readout lost money in our test: only about 44% of small-cap readouts were positive (+17% on the day) against failures at −30%, about −9% per trade. Buying after a positive readout did not pay either: the move is done on day one and tended to fade.";
+const BRIEF_RULES = `What our own tests found, to weigh before proposing anything: ${HISTORY_FDA} The one edge left is in options, which are usually overpriced before a binary FDA date; say so where it applies, but cards are tracked in shares. So do not promote buying the stock just because a decision is coming, and do not promote holding a small cap through the event; promote only when there is a reason beyond the event itself (a mispriced business either way, a forced seller, the market ignoring a known outcome), and say plainly when the right answer is no trade.`;
+
 const decided = (e: FdaEvent) => !/^pending$/i.test(e.outcome.trim());
 
 /** Cards on a ticker, as small links. */
@@ -50,6 +58,7 @@ export default async function PharmaPage() {
 
       <section className="card section">
         <h2>FDA decisions</h2>
+        <div className="history-note small"><b>What history says:</b> {HISTORY_FDA} The one edge left is in options, which tend to be overpriced before decision dates.</div>
         <p className="small muted">{upcoming.length} upcoming{withCards ? `, ${withCards} on stocks with a scout card` : ""}. From RTTNews&apos; FDA calendar{fda.updatedAt ? `, read ${fmtEt(fda.updatedAt)}` : ""}; some dates are given only as a month or quarter.{fda.error && !fda.data ? <span className="warn"> Could not read the calendar: {fda.error}</span> : null}</p>
         {[...byMonth.entries()].map(([m, evs]) => (
           <div key={m} style={{ marginTop: 10 }}>
@@ -64,7 +73,7 @@ export default async function PharmaPage() {
                     <td className="small" style={{ whiteSpace: "nowrap" }}>{e.date ? <><b>{fmtDay(e.date)}</b><div className="muted">{days === 0 ? "today" : days! > 0 ? `in ${days} days` : `${-days!} days ago`}</div></> : <><b>{e.when}</b><div className="muted">date not exact</div></>}</td>
                     <td>{e.symbol ? <Ticker symbol={e.symbol} /> : null} <span className="small">{e.company}</span>{e.otherSymbols.length ? <div className="small muted">{e.otherSymbols.join(", ")}</div> : null}</td>
                     <td className="small"><b>{e.drug}</b> · {e.event}{e.status ? <> <span className="tag">{e.status}</span></> : null}{decided(e) ? <div className={/declin|reject|complete response|\bCRL\b|not approv/i.test(e.outcome) ? "neg" : /approv/i.test(e.outcome) ? "pos" : "warn"}>{e.outcome}</div> : null}{e.note ? <details><summary className="muted">review history</summary>{e.note}</details> : null}{e.detailUrl ? <> <a href={e.detailUrl} target="_blank" rel="noreferrer">details</a></> : null}</td>
-                    <td className="small">{cards.length ? <CardChips cards={cards} /> : e.symbol && !decided(e) ? <ResearchButton symbol={e.symbol} term={`${e.symbol} FDA ${e.when}: ${e.drug}`.slice(0, 80)} observation={`Upcoming FDA catalyst: ${e.company} (${e.symbol}), ${e.drug}. ${e.event}. Expected ${e.when}${e.status ? `; ${e.status.trim()}` : ""}. Research whether there is a trade into or around this decision: what the market already prices (the stock's move, options-implied move), the approval odds from the data and the FDA's history in this indication, the size of the drug for this company, and what happens on approval versus a rejection or delay.`} /> : <span className="muted">—</span>}</td>
+                    <td className="small">{cards.length ? <CardChips cards={cards} /> : e.symbol && !decided(e) ? <ResearchButton symbol={e.symbol} term={`${e.symbol} FDA ${e.when}: ${e.drug}`.slice(0, 80)} observation={`Upcoming FDA catalyst: ${e.company} (${e.symbol}), ${e.drug}. ${e.event}. Expected ${e.when}${e.status ? `; ${e.status.trim()}` : ""}. Research whether there is a trade into or around this decision: what the market already prices (the stock's move, options-implied move), the approval odds from the data and the FDA's history in this indication, the size of the drug for this company, and what happens on approval versus a rejection or delay. ${BRIEF_RULES}`} /> : <span className="muted">—</span>}</td>
                   </tr>
                 );
               })}</tbody>
@@ -77,6 +86,7 @@ export default async function PharmaPage() {
       <section className="card section">
         <details open={readouts.length <= 40}>
           <summary><h2 style={{ display: "inline" }}>Phase 3 trials finishing soon</h2> <span className="small muted">{readouts.length} on US-listed companies</span></summary>
+          <div className="history-note small"><b>What history says:</b> {HISTORY_TRIALS}</div>
           <p className="small muted">Company-sponsored Phase 3 trials whose primary completion (the last main measurement) falls in the next six months, from ClinicalTrials.gov, matched to US tickers by company name. Results usually come weeks to months after this date, and the date itself often slips.{trials.updatedAt ? ` Read ${fmtEt(trials.updatedAt)}.` : ""}{trials.error && !trials.data ? <span className="warn"> {trials.error}</span> : null}</p>
           <div className="table-wrap"><table>
             <thead><tr><th>Primary completion</th><th>Company</th><th>Trial</th><th>Scout</th></tr></thead>
