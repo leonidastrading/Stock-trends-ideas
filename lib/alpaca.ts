@@ -49,7 +49,11 @@ export function assertReadOnlyEndpoint(host: string, path: string): void {
   if (!rules || !rules.some((re) => re.test(path))) throw new Error(`Refusing non-allowlisted Alpaca endpoint ${host}${path} (read-only)`);
 }
 
-export interface Snapshot { price: number; at: string | null; prevClose: number | null; sessionDate: string | null; volume?: number | null }
+/**
+ * price: the latest trade (IEX); dailyClose: the last price of the daily bar (today's close once the session is over);
+ * prevClose: the session before the daily bar's; mid: the IEX quote midpoint, when the quote is sane.
+ */
+export interface Snapshot { price: number; at: string | null; prevClose: number | null; sessionDate: string | null; volume?: number | null; dailyClose?: number | null; mid?: number | null }
 export interface Mover { symbol: string; price: number; changePct: number }
 
 export interface Asset { symbol: string; name: string; exchange: string; active: boolean; tradable: boolean }
@@ -219,13 +223,15 @@ export class AlpacaClient {
   async getSnapshots(symbols: readonly string[]): Promise<Record<string, Snapshot>> {
     const out: Record<string, Snapshot> = {};
     for (let i = 0; i < symbols.length; i += 100) {
-      const resp = await this.get<Record<string, { latestTrade?: { p: number; t: string } | null; dailyBar?: { c: number; t: string; v?: number } | null; prevDailyBar?: { c: number; t: string } | null } | null>>(
+      const resp = await this.get<Record<string, { latestTrade?: { p: number; t: string } | null; latestQuote?: { ap?: number; bp?: number } | null; dailyBar?: { c: number; t: string; v?: number } | null; prevDailyBar?: { c: number; t: string } | null } | null>>(
         DATA_HOST, "/v2/stocks/snapshots", { symbols: symbols.slice(i, i + 100).join(","), feed: "iex" },
       );
       for (const [sym, s] of Object.entries(resp ?? {})) {
         const price = s?.latestTrade?.p ?? s?.dailyBar?.c ?? null;
         if (!s || price === null) continue;
-        out[sym] = { price, at: s.latestTrade?.t ?? s.dailyBar?.t ?? null, prevClose: s.prevDailyBar?.c ?? null, sessionDate: s.dailyBar?.t ? s.dailyBar.t.slice(0, 10) : null, volume: s.dailyBar?.v ?? null };
+        const ap = s.latestQuote?.ap ?? 0, bp = s.latestQuote?.bp ?? 0;
+        const mid = ap > 0 && bp > 0 && ap >= bp && ap / bp <= 1.03 ? (ap + bp) / 2 : null;
+        out[sym] = { price, at: s.latestTrade?.t ?? s.dailyBar?.t ?? null, prevClose: s.prevDailyBar?.c ?? null, sessionDate: s.dailyBar?.t ? s.dailyBar.t.slice(0, 10) : null, volume: s.dailyBar?.v ?? null, dailyClose: s.dailyBar?.c ?? null, mid };
       }
     }
     return out;

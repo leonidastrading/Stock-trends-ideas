@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { chartUrl } from "@/config/links";
 
 interface Item { id: string; at: string; headline: string; url: string; symbols: string[]; source: string; why: string; kind: string }
 
@@ -52,13 +53,14 @@ export default function NewsTicker() {
   const duration = Math.max(28, Math.round(chars / 10));
 
   const row = (copy: number) => shown.map((i) => (
-    <a key={`${copy}-${i.id}`} className={`newsbar-item${isNew(i.id) ? " is-new" : ""}`} href={i.url} target="_blank" rel="noreferrer" tabIndex={copy ? -1 : 0} aria-hidden={copy ? true : undefined} title={`${i.source} · ${new Date(i.at).toLocaleString("en-US", { timeZone: "America/New_York" })} ET`}>
+    // Each ticker opens its chart (TradingView); the headline opens the story.
+    <span key={`${copy}-${i.id}`} className={`newsbar-item${isNew(i.id) ? " is-new" : ""}`} aria-hidden={copy ? true : undefined}>
       {isNew(i.id) && <span className="newsbar-new">NEW</span>}
       <span className="newsbar-time">{time(i.at)}</span>
-      {i.symbols.length > 0 && <span className="newsbar-sym">{i.symbols.join(" ")}</span>}
-      <span className="newsbar-headline">{i.headline}</span>
+      {i.symbols.length > 0 && <span className="newsbar-sym">{i.symbols.map((sym, k) => <a key={sym} href={chartUrl(sym)} target="_blank" rel="noreferrer" tabIndex={copy ? -1 : 0} title={`${sym} chart on TradingView`}>{k ? " " : ""}{sym}</a>)}</span>}
+      <a className="newsbar-headline" href={i.url} target="_blank" rel="noreferrer" tabIndex={copy ? -1 : 0} title={`${i.source} · ${new Date(i.at).toLocaleString("en-US", { timeZone: "America/New_York" })} ET`}>{i.headline}</a>
       {i.why && <span className="newsbar-why">{i.why}</span>}
-    </a>
+    </span>
   ));
 
   return (

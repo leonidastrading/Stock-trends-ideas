@@ -6,11 +6,26 @@
 import { marketDataFromEnv, type MarketData, type Snapshot } from "../alpaca";
 import { toEt } from "../time";
 
-export interface Quote { price: number; changePct: number | null; at: string | null; sessionDate: string | null }
+/**
+ * changePct: the session's move against the close before it. Before the open or after the close, the price is a thin
+ * extended-hours trade: extPct is its move against the last regular close, labelled extLabel ("after hours",
+ * "pre-market"), and changePct stays the regular session's.
+ */
+export interface Quote { price: number; changePct: number | null; at: string | null; sessionDate: string | null; extPct?: number | null; extLabel?: string | null }
 
-/** Pure: a snapshot as a quote (change against the previous session's close). */
+const pctOf = (a: number, b: number) => Math.round((a / b - 1) * 10000) / 100;
+
+/** Pure: a snapshot as a quote. */
 export function toQuote(s: Snapshot): Quote {
-  return { price: s.price, changePct: s.prevClose ? Math.round((s.price / s.prevClose - 1) * 10000) / 100 : null, at: s.at, sessionDate: s.sessionDate };
+  const base: Quote = { price: s.price, changePct: s.prevClose ? pctOf(s.price, s.prevClose) : null, at: s.at, sessionDate: s.sessionDate, extPct: null, extLabel: null };
+  if (!s.at || !s.dailyClose) return base;
+  const et = toEt(new Date(s.at));
+  const off = Math.abs(s.price / s.dailyClose - 1) > 0.0005;
+  // After the close: the daily bar ends at today's close (when the bar does not already include the late trades).
+  if (et.minutes >= 16 * 60 && s.sessionDate === et.date && off) return { ...base, changePct: s.prevClose ? pctOf(s.dailyClose, s.prevClose) : null, extPct: pctOf(s.price, s.dailyClose), extLabel: "after hours" };
+  // Before today's first regular trade: the daily bar is the last session's.
+  if (s.sessionDate && et.date > s.sessionDate && off) return { ...base, changePct: s.prevClose ? pctOf(s.dailyClose, s.prevClose) : null, extPct: pctOf(s.price, s.dailyClose), extLabel: "pre-market" };
+  return base;
 }
 
 /** Pure: "today" when the price is from today's session (ET), else the session's weekday, e.g. "Fri". */

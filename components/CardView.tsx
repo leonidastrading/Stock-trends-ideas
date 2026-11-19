@@ -43,14 +43,16 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
     else after(() => lookup);
   }
   const q = await quote(c.primaryTicker);
-  // A 5%+ move today on the card's stock: a banner with the most likely headline from the last 3 hours.
-  const bigMove = q?.changePct !== null && q?.changePct !== undefined && Math.abs(q.changePct) >= 5 ? q.changePct : null;
+  // A 5%+ move on the card's stock (today, or after hours / pre-market against the last close): a banner with the most likely reason.
+  const ext = q?.extPct !== null && q?.extPct !== undefined && Math.abs(q.extPct) >= 5 ? q.extPct : null;
+  const bigMove = ext ?? (q?.changePct !== null && q?.changePct !== undefined && Math.abs(q.changePct) >= 5 && sessionLabel(q) === "today" ? q.changePct : null);
+  const moveWhen = ext !== null ? q!.extLabel! : "today";
   const moveReason = bigMove !== null ? await (async () => {
     const data = marketDataFromEnv();
     if (!data) return null;
     const news = await data.getNews([c.primaryTicker], new Date(Date.now() - 3 * 3600_000), new Date(), 20).catch(() => []);
     const fast = await import("@/lib/sources/wires").then(({ fastNews }) => fastNews()).catch(() => []);
-    return (await import("@/lib/scout/price-watch")).likelyReason(c.primaryTicker, [...news, ...fast], new Date());
+    return (await import("@/lib/scout/price-watch")).reasonFor({ symbol: c.primaryTicker, phase: moveWhen === "pre-market" ? "pre" : moveWhen === "after hours" ? "post" : "regular" }, [...news, ...fast], new Date()).catch(() => null);
   })() : null;
   // Where the paper entry will be: the same day's open for a card written before 9:30 AM ET, else the next session's.
   const cardDay = toEt(new Date(c.createdAt)).date;
@@ -96,7 +98,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
         )}
         {bigMove !== null && (
           <div className={`move-banner ${(bigMove < 0) === (c.direction === "long") ? "against" : "with"}`}>
-            <b>{bigMove < 0 ? "📉" : "📈"} {c.primaryTicker} {bigMove > 0 ? "+" : "−"}{Math.abs(bigMove).toFixed(1)}% today</b>
+            <b>{bigMove < 0 ? "📉" : "📈"} {c.primaryTicker} {bigMove > 0 ? "+" : "−"}{Math.abs(bigMove).toFixed(1)}% {moveWhen}</b>
             <span className="small"> · {(bigMove < 0) === (c.direction === "long") ? `against this ${c.direction}` : `in this ${c.direction}'s favour`}</span>
             <div className="small">{moveReason ? <>Likely reason: {moveReason.url.startsWith("http") ? <a href={moveReason.url} target="_blank" rel="noreferrer">{moveReason.headline}</a> : moveReason.headline} <span className="muted">({moveReason.source})</span></> : "No headline in the scout's feeds yet: the news may be on X, in a short report or a niche outlet."}</div>
           </div>
@@ -107,6 +109,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
             <span className="quote" title={`Last trade ${q.at ? fmtEtAgo(q.at) : ""} (IEX feed; may differ slightly from the consolidated price). Change vs the previous session's close.`}>
               <b>${q.price.toFixed(q.price < 1 ? 4 : 2)}</b>
               {q.changePct !== null && <span className={q.changePct >= 0 ? "pos" : "neg"}> {pct(q.changePct, 2)} {sessionLabel(q)}</span>}
+              {q.extPct !== null && q.extPct !== undefined && <span className={q.extPct >= 0 ? "pos" : "neg"} title={`Last trade ${q.extLabel} (thin trading on IEX), against the last regular close`}> · {pct(q.extPct, 2)} {q.extLabel}</span>}
             </span>
           ) : null}
           {hasDatabase() && <Suspense fallback={null}><CapShort symbol={c.primaryTicker} price={q?.price ?? null} /></Suspense>}

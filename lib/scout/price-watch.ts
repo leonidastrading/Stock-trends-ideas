@@ -4,11 +4,16 @@
  * the stock down 8% minutes later) reach none of the scout's feeds, but the move itself shows up in prices.
  *
  * One snapshot request per 100 of the scout's ~400 large and mid caps, at most once a minute (shared by the News tab,
- * the breaking strip and the phone alerts). A move counts once per stock, day and level (5%, then 10%), and keeps the
- * time it was first seen.
+ * the breaking strip and the phone alerts). A move counts once per stock, day, session part and level (5%, then 10%),
+ * and keeps the time it was first seen.
+ *
+ * Pre-market and after-hours trading is thin on IEX, so (ROST, Nov 19 2026: "down 12.2% today" was an after-hours
+ * drop on earnings, measured from the day before's close): a move is labelled by session part (pre-market, today,
+ * after hours), after hours is measured from today's close, a move the quote midpoint does not back is ignored, and a
+ * phone alert waits until the move has held for two checks.
  */
 import type { MarketData, NewsItem } from "../alpaca";
-import { toEt } from "../time";
+import { addDays, toEt } from "../time";
 import { UNIVERSE } from "@/config/universe";
 import * as store from "./store";
 
@@ -17,21 +22,43 @@ export const BIG_NAMES = new Set(Object.values(UNIVERSE).flat());
 
 export const PRICE_WATCH = { levels: [5, 10], refreshMs: 60_000 };
 
-export interface BigMove { symbol: string; pct: number; price: number; prevClose: number; date: string; level: number; key: string; firstSeen: string }
-interface Snap { price: number; prevClose: number | null; sessionDate?: string | null; at?: string | null }
+/** When the price is from: before the open, the regular session, or after the close (US Eastern). */
+export type Phase = "pre" | "regular" | "post";
+export interface BigMove { symbol: string; pct: number; price: number; prevClose: number; date: string; level: number; key: string; firstSeen: string; phase: Phase; vs: string }
+interface Snap { price: number; prevClose: number | null; sessionDate?: string | null; at?: string | null; dailyClose?: number | null; mid?: number | null }
 
-/** Pure: the big names that have moved past a level today (the highest level each has reached). */
-export function bigMoves(snaps: Record<string, Snap>, today: string, levels = PRICE_WATCH.levels): Array<Omit<BigMove, "firstSeen">> {
+export const phaseOf = (at: Date): Phase => { const m = toEt(at).minutes; return m < 9 * 60 + 30 ? "pre" : m >= 16 * 60 ? "post" : "regular"; };
+export const PHASE_LABEL: Record<Phase, string> = { pre: "pre-market", regular: "today", post: "after hours" };
+
+/**
+ * Pure: the big names that have moved past a level today (the highest level each has reached), by session part:
+ * pre-market and the regular session against the last close, after hours against today's close.
+ */
+export function bigMoves(snaps: Record<string, Snap>, today: string, levels = PRICE_WATCH.levels, now = new Date()): Array<Omit<BigMove, "firstSeen">> {
   const out: Array<Omit<BigMove, "firstSeen">> = [];
   for (const [symbol, s] of Object.entries(snaps)) {
-    if (!s.prevClose || !s.price || (s.sessionDate && s.sessionDate !== today)) continue;
-    const pct = Math.round((s.price / s.prevClose - 1) * 1000) / 10;
+    if (!s.price) continue;
+    const at = s.at ? new Date(s.at) : now;
+    if (toEt(at).date !== today) continue; // no trade today yet: yesterday's move is not news
+    const phase = phaseOf(at);
+    const barToday = s.sessionDate === today;
+    let base: number | null | undefined, vs: string;
+    if (phase === "post" && barToday && s.dailyClose && Math.abs(s.price / s.dailyClose - 1) > 0.0005) { base = s.dailyClose; vs = "today's close"; }
+    else if (barToday || !s.sessionDate) { base = s.prevClose; vs = phase === "post" ? "yesterday's close" : "the last close"; }
+    else { base = s.dailyClose ?? s.prevClose; vs = "the last close"; } // before today's first trade in the bar: the bar is the last session
+    if (!base) continue;
+    const pct = Math.round((s.price / base - 1) * 1000) / 10;
     const level = [...levels].reverse().find((l) => Math.abs(pct) >= l);
     if (!level) continue;
-    out.push({ symbol, pct, price: s.price, prevClose: s.prevClose, date: today, level, key: `move:${symbol}:${today}:${level}` });
+    // One odd trade is not a move: the quote midpoint must agree, when there is a sane quote.
+    if (s.mid && !(Math.abs(s.mid / base - 1) * 100 >= level * 0.8 && Math.sign(s.mid - base) === Math.sign(pct))) continue;
+    out.push({ symbol, pct, price: s.price, prevClose: base, date: today, level, phase, vs, key: `move:${symbol}:${today}:${phase}:${level}` });
   }
   return out.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
 }
+
+/** Pure: a move that has held for two checks (seen at least 90 seconds ago and still there): ready for a phone alert. */
+export const confirmed = (m: BigMove, now: Date) => now.getTime() - Date.parse(m.firstSeen) >= 90_000;
 
 /** Pure: the most recent headline on the stock in the last 3 hours (the likely reason), if any feed has one. */
 export function likelyReason(symbol: string, news: Array<Pick<NewsItem, "ts" | "headline" | "symbols" | "source" | "url">>, now: Date): { headline: string; source: string; url: string } | null {
@@ -48,7 +75,7 @@ export async function priceWatch(data: MarketData | null, now = new Date()): Pro
   const today = toEt(now).date;
   const snaps = await data.getSnapshots([...BIG_NAMES]).catch(() => null);
   if (!snaps) return memo.moves;
-  const moves = bigMoves(snaps as Record<string, Snap>, today);
+  const moves = bigMoves(snaps as Record<string, Snap>, today, PRICE_WATCH.levels, now);
   const seen = (await store.cacheGet<Record<string, string>>("price-watch:first").catch(() => null))?.data ?? {};
   let changed = false;
   for (const m of moves) if (!seen[m.key]) { seen[m.key] = now.toISOString(); changed = true; }
@@ -62,14 +89,36 @@ export async function priceWatch(data: MarketData | null, now = new Date()): Pro
   return memo.moves;
 }
 
+/** Pure: "ROST down 10.4% after hours". */
+export const moveTitle = (m: Pick<BigMove, "symbol" | "pct" | "phase">) => `${m.symbol} ${m.pct >= 0 ? "up" : "down"} ${Math.abs(m.pct).toFixed(1)}% ${PHASE_LABEL[m.phase ?? "regular"]}`;
+
 /** Pure: a move as a news item for the News tab and the breaking strip. */
 export function moveItem(m: BigMove, reason: { headline: string; source: string; url: string } | null): NewsItem {
-  const dir = m.pct >= 0 ? "up" : "down";
+  const thin = m.phase !== "regular" ? " Pre-market and after-hours trading is thin: the price can swing more than it will at the open." : "";
   return {
     id: Math.abs([...m.key].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7)),
     ts: m.firstSeen,
-    headline: `${m.symbol} ${dir} ${Math.abs(m.pct).toFixed(1)}% today${reason ? `: ${reason.headline}` : ", no headline in the scout's feeds yet"}`,
-    summary: `${m.symbol} at $${m.price.toFixed(2)} against $${m.prevClose.toFixed(2)} at the last close (past ${m.level}%).${reason ? ` Likely reason (${reason.source}): ${reason.headline}` : " The news may be on X, in a short report or a niche outlet: check the stock's own news."}`,
+    headline: `${moveTitle(m)}${reason ? `: ${reason.headline}` : ", no headline in the scout's feeds yet"}`,
+    summary: `${m.symbol} at $${m.price.toFixed(2)} against $${m.prevClose.toFixed(2)} at ${m.vs ?? "the last close"} (past ${m.level}%).${reason ? ` Likely reason (${reason.source}): ${reason.headline}` : " The news may be on X, in a short report or a niche outlet: check the stock's own news."}${thin}`,
     symbols: [m.symbol], source: "Scout price watch", url: reason?.url || `/chart?symbol=${m.symbol}`,
   };
+}
+
+/** Pure: an earnings release as the reason for a move (reported today, or yesterday after the close for a pre-market move). */
+export function earningsReason(symbol: string, rows: Array<{ symbol: string; date: string; time?: string | null }>, today: string, phase: Phase): { headline: string; source: string; url: string } | null {
+  const r = rows.find((x) => x.symbol === symbol && (x.date === today || (phase === "pre" && x.date < today && /after|amc|post/i.test(x.time ?? ""))));
+  if (!r) return null;
+  const when = /after|amc|post/i.test(r.time ?? "") ? "after the close" : /pre|bmo|before/i.test(r.time ?? "") ? "before the open" : "";
+  return { headline: `${symbol} reported earnings ${r.date === today ? "today" : "yesterday"}${when ? ` ${when}` : ""}`, source: "earnings calendar", url: `/chart?symbol=${symbol}` };
+}
+
+/** The likely reason for a move: the newest headline on the stock, else an earnings release today. */
+export async function reasonFor(m: Pick<BigMove, "symbol" | "phase">, news: Array<Pick<NewsItem, "ts" | "headline" | "symbols" | "source" | "url">>, now: Date): Promise<{ headline: string; source: string; url: string } | null> {
+  const hit = likelyReason(m.symbol, news, now);
+  if (hit) return hit;
+  const { earningsOn } = await import("../market/sources");
+  const today = toEt(now).date;
+  const days = m.phase === "pre" ? [today, addDays(today, -1), addDays(today, -3)] : [today];
+  const rows = (await Promise.all(days.map((d) => earningsOn(d).catch(() => [])))).flat();
+  return earningsReason(m.symbol, rows, today, m.phase);
 }

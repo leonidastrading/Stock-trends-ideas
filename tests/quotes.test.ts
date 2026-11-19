@@ -13,6 +13,14 @@ describe("card quotes", () => {
     expect(toQuote({ price: 5, prevClose: null, at: null, sessionDate: null }).changePct).toBeNull();
   });
 
+  it("after hours and pre-market moves are kept apart from the session's (ROST after its Nov 19 2026 earnings)", () => {
+    const post = toQuote({ price: 199.85, prevClose: 227.61, dailyClose: 222.5, at: "2026-11-19T21:15:00Z", sessionDate: "2026-11-19" });
+    expect(post).toMatchObject({ changePct: -2.25, extPct: -10.18, extLabel: "after hours" });
+    const pre = toQuote({ price: 205, prevClose: 227.61, dailyClose: 222.5, at: "2026-11-20T12:30:00Z", sessionDate: "2026-11-19" });
+    expect(pre).toMatchObject({ changePct: -2.25, extPct: -7.87, extLabel: "pre-market" });
+    expect(toQuote({ price: 221, prevClose: 227.61, dailyClose: 221, at: "2026-11-19T18:00:00Z", sessionDate: "2026-11-19" })).toMatchObject({ changePct: -2.9, extPct: null });
+  });
+
   it("cards on one page share one snapshot call; a slow source shows no price instead of waiting", async () => {
     const calls: string[][] = [];
     setQuoteSourceForTests(() => ({ getSnapshots: async (s: readonly string[]) => { calls.push([...s]); return { AAON: { price: 95.2, prevClose: 94, at: null, sessionDate: "2026-11-13" }, PRE: { price: 3.1, prevClose: 3.2, at: null, sessionDate: "2026-11-13" } }; } }) as unknown as MarketData);

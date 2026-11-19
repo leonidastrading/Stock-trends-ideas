@@ -14,7 +14,7 @@ import type { MarketData, NewsItem } from "../alpaca";
 import { fastNews } from "../sources/wires";
 import { eventWord } from "./stories";
 import { isRoutinePause, NEWS_EVENT } from "./newsfeed";
-import { BIG_NAMES, likelyReason, priceWatch } from "./price-watch";
+import { BIG_NAMES, confirmed, moveTitle, priceWatch, reasonFor } from "./price-watch";
 import { toEt } from "../time";
 
 export { BIG_NAMES };
@@ -81,16 +81,16 @@ export async function runNewsAlerts(deps: { data: MarketData | null; now: Date; 
   // Price watch: big moves on big companies, from 4 AM to 8 PM ET on weekdays (up to 3 a run, biggest first).
   const et = toEt(deps.now);
   const weekday = ![0, 6].includes(new Date(`${et.date}T12:00:00Z`).getUTCDay());
-  const moves = weekday && et.minutes >= 4 * 60 && et.minutes < 20 * 60 ? (await priceWatch(deps.data, deps.now).catch(() => [])).filter((m) => !sentKeys.includes(m.key)).slice(0, 3) : [];
+  const moves = weekday && et.minutes >= 4 * 60 && et.minutes < 20 * 60 ? (await priceWatch(deps.data, deps.now).catch(() => [])).filter((m) => !sentKeys.includes(m.key) && confirmed(m, deps.now)).slice(0, 3) : [];
   for (const m of moves) {
-    const reason = likelyReason(m.symbol, [...fast, ...alpaca], deps.now);
+    const reason = await reasonFor(m, [...fast, ...alpaca], deps.now).catch(() => null);
     const card = cardBy.get(m.symbol);
-    await sendPush({ title: `${m.pct < 0 ? "📉" : "📈"} ${m.symbol} ${m.pct > 0 ? "+" : "−"}${Math.abs(m.pct).toFixed(1)}% today${card ? ` · card #${card}` : ""}`, message: `${reason ? `${reason.headline}\n${reason.source}` : "No headline in the scout's feeds yet: the news may be on X, in a short report or a niche outlet."}\n$${m.price.toFixed(2)} vs $${m.prevClose.toFixed(2)} at the last close`, click: reason?.url?.startsWith("http") ? reason.url : `${base}/chart?symbol=${m.symbol}`, tags: [m.pct < 0 ? "chart_with_downwards_trend" : "chart_with_upwards_trend"], priority: m.level >= 10 || card ? 5 : 4 }, env).catch(() => undefined);
+    await sendPush({ title: `${m.pct < 0 ? "📉" : "📈"} ${moveTitle(m)}${card ? ` · card #${card}` : ""}`, message: `${reason ? `${reason.headline}\n${reason.source}` : "No headline in the scout's feeds yet: the news may be on X, in a short report or a niche outlet."}\n$${m.price.toFixed(2)} vs $${m.prevClose.toFixed(2)} at ${m.vs}`, click: reason?.url?.startsWith("http") ? reason.url : `${base}/chart?symbol=${m.symbol}`, tags: [m.pct < 0 ? "chart_with_downwards_trend" : "chart_with_upwards_trend"], priority: m.level >= 10 || card ? 5 : 4 }, env).catch(() => undefined);
   }
   // Every item of each story pushed counts as sent (so the other outlets' copies do not push again), plus the story itself.
   const hour = Math.floor(deps.now.getTime() / (ALERTS.bigStoryCooldownH * 3600_000));
   // A move also covers its lower level (a stock first seen at -11% does not push again for 5%).
-  const done = [...picks.flatMap((p) => [p.key, ...(p.cooldown ? [`story:${p.symbol}:${hour}`] : [])]), ...moves.flatMap((m) => [m.key, ...[5, 10].filter((l) => l < m.level).map((l) => `move:${m.symbol}:${m.date}:${l}`)])];
+  const done = [...picks.flatMap((p) => [p.key, ...(p.cooldown ? [`story:${p.symbol}:${hour}`] : [])]), ...moves.flatMap((m) => [m.key, ...[5, 10].filter((l) => l < m.level).map((l) => `move:${m.symbol}:${m.date}:${m.phase}:${l}`)])];
   if (done.length) await store.cachePut("news-alerts:sent", { keys: [...done, ...sentKeys].slice(0, ALERTS.keep) }).catch(() => undefined);
   return `${picks.length + moves.length} alert${picks.length + moves.length === 1 ? "" : "s"} sent${moves.length ? ` (${moves.length} big moves)` : ""} (${fast.length + alpaca.length} items checked, ${mine.size} of your stocks)`;
 }

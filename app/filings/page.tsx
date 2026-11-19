@@ -6,6 +6,7 @@ import { pickSignals } from "@/lib/scout/filings";
 import { OPTIONS_RULES } from "@/lib/scout/options-flow";
 import * as store from "@/lib/scout/store";
 import Ticker from "@/components/Ticker";
+import CardChips from "@/components/CardChips";
 import ResearchButton from "./ResearchButton";
 import { addDays, fmtEtAgo, toEt } from "@/lib/time";
 import { latestFilingWatch, WATCH_LABEL, type WatchRow } from "@/lib/scout/filing-watch";
@@ -31,6 +32,9 @@ export default async function FilingsPage() {
   const RANK = { red_flag: 0, past_due: 1, nt_filed: 2, late_vs_usual: 3, ok: 4 } as const;
   const watch: WatchRow[] = [...(await latestFilingWatch().catch(() => new Map<string, WatchRow>())).values()].sort((a, b) => RANK[a.status] - RANK[b.status] || a.symbol.localeCompare(b.symbol));
   const flagged = watch.filter((w) => w.status !== "ok");
+  // The scout's cards on each watched stock (last 60 days), newest first.
+  const briefs = await store.cardBriefsSince(60).catch(() => [] as store.CardBrief[]);
+  const cardsOn = (sym: string) => briefs.filter((c) => c.primaryTicker === sym || c.tickers.includes(sym));
   return (
     <>
       <h1>Filings</h1>
@@ -44,13 +48,13 @@ export default async function FilingsPage() {
         <h2>Filing watch: card stocks</h2>
         <p className="small muted">Every stock on an open paper trade or a card from the last two weeks, checked every 6 hours against its SEC filings: a 10-Q or 10-K <b>later than usual</b> (earnings are out and the company normally files the report within that many business days), a <b>late-filing notice</b> (NT 10-Q / NT 10-K), a report <b>past the SEC deadline</b>, or an 8-K saying past results can&apos;t be relied on (4.02) or the auditor changed (4.01). A change sends a phone alert and shows on the card. Late filers, especially during an accounting review, have tended to underperform afterwards.</p>
         <div className="table-wrap"><table>
-          <thead><tr><th>Stock</th><th>Status</th><th>Details</th><th className="small">Since</th></tr></thead>
+          <thead><tr><th>Stock</th><th>Status</th><th>Details</th><th>Cards</th><th className="small">Since</th></tr></thead>
           <tbody>
-            {flagged.map((w) => <tr key={w.symbol}><td><Ticker symbol={w.symbol} /></td><td><span className={`tag ${w.status === "late_vs_usual" ? "late" : "error"}`}>{WATCH_LABEL[w.status]}</span></td><td className="small">{w.message}</td><td className="small muted">{fmtEtAgo(w.checkedAt)}</td></tr>)}
-            {flagged.length === 0 && <tr><td colSpan={4} className="muted small">Nothing late: {watch.length ? `all ${watch.length} card stocks checked are on time.` : "no checks yet (they run with the hourly upkeep)."}</td></tr>}
+            {flagged.map((w) => <tr key={w.symbol}><td><Ticker symbol={w.symbol} /></td><td><span className={`tag ${w.status === "late_vs_usual" ? "late" : "error"}`}>{WATCH_LABEL[w.status]}</span></td><td className="small">{w.message}</td><td className="small">{cardsOn(w.symbol).length ? <CardChips cards={cardsOn(w.symbol)} max={3} /> : <span className="muted">—</span>}</td><td className="small muted">{fmtEtAgo(w.checkedAt)}</td></tr>)}
+            {flagged.length === 0 && <tr><td colSpan={5} className="muted small">Nothing late: {watch.length ? `all ${watch.length} card stocks checked are on time.` : "no checks yet (they run with the hourly upkeep)."}</td></tr>}
           </tbody>
         </table></div>
-        {watch.length > flagged.length && <details className="small"><summary>On time ({watch.length - flagged.length})</summary><ul>{watch.filter((w) => w.status === "ok").map((w) => <li key={w.symbol}><b>{w.symbol}</b>: {w.message}</li>)}</ul></details>}
+        {watch.length > flagged.length && <details className="small"><summary>On time ({watch.length - flagged.length})</summary><ul>{watch.filter((w) => w.status === "ok").map((w) => <li key={w.symbol}><b>{w.symbol}</b>: {w.message} <CardChips cards={cardsOn(w.symbol)} max={3} /></li>)}</ul></details>}
       </section>
 
       <section className="card">

@@ -7,6 +7,7 @@ import { fetchFdaCalendar, fetchTrialReadouts, type FdaEvent, type TrialReadout 
 import * as store from "@/lib/scout/store";
 import { daysBetween, fmtEtAgo, toEt } from "@/lib/time";
 import ResearchButton from "@/components/ResearchButton";
+import CardChips from "@/components/CardChips";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,10 +24,6 @@ const BRIEF_RULES = `What our own tests found, to weigh before proposing anythin
 
 const decided = (e: FdaEvent) => !/^pending$/i.test(e.outcome.trim());
 
-/** Cards on a ticker, as small links. */
-function CardChips({ cards }: { cards: store.CardBrief[] }) {
-  return <>{cards.slice(0, 4).map((c) => <a key={c.id} className="tag card-number" style={{ marginRight: 4 }} href={`/ideas?days=365&card=${c.id}#card-${c.id}`} title={`${c.direction} ${c.primaryTicker}, ${c.status.replace("_", " ")}, ${fmtEtAgo(c.createdAt)}`}><span className={c.direction === "long" ? "pos" : "neg"}>{c.direction === "long" ? "▲" : "▼"}</span> #{c.id} <span className="muted">{c.status.replace("_", " ")}</span></a>)}</>;
-}
 
 /** Biopharma catalysts: FDA decision dates and Phase 3 readouts, with the scout's cards on each stock. */
 export default async function PharmaPage() {

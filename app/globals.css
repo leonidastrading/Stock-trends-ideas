@@ -291,7 +291,9 @@ a.button.primary { background: var(--accent); border-color: var(--accent); color
 .newsbar-track { display: inline-flex; align-items: center; height: 100%; white-space: nowrap; will-change: transform; animation: newsbar-scroll var(--newsbar-duration, 120s) linear infinite; }
 .newsbar:hover .newsbar-track, .newsbar:focus-within .newsbar-track { animation-play-state: paused; }
 .newsbar-item { display: inline-flex; align-items: center; gap: 6px; padding: 0 22px 0 0; color: var(--text-primary); text-decoration: none; }
-.newsbar-item:hover .newsbar-headline { text-decoration: underline; }
+.newsbar-headline { color: inherit; text-decoration: none; }
+.newsbar-headline:hover, .newsbar-sym a:hover { text-decoration: underline; }
+.newsbar-sym a { color: inherit; text-decoration: none; }
 .newsbar-item + .newsbar-item::before { content: "◆"; color: var(--text-secondary); font-size: 8px; margin-right: 16px; }
 .newsbar-time { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .newsbar-sym { font-weight: 700; color: var(--warn); }
