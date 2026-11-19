@@ -5,7 +5,7 @@ import { hasDatabase } from "@/lib/db";
 import { panel } from "@/lib/market/panels";
 import { DRIFT, scanDrift, shortLine, type DriftSetup } from "@/lib/scout/drift";
 import * as store from "@/lib/scout/store";
-import { etLabel } from "@/lib/time";
+import { etLabelAgo, dayAgo } from "@/lib/time";
 import DriftResearch from "./DriftResearch";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ export const runtime = "nodejs";
 export const maxDuration = 120;
 
 const pct = (x: number) => `${x > 0 ? "+" : ""}${x}%`;
-const day = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+const day = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }) + ` (${dayAgo(d)})`;
 
 /** Down drift: stocks still falling days after bad news. */
 export default async function DriftPage() {
@@ -52,7 +52,7 @@ export default async function DriftPage() {
         </div>
       </details>
       <p className="small muted">
-        {p.data ? <>{setups.length} setup{setups.length === 1 ? "" : "s"} from {p.data.scanned.toLocaleString("en-US")} stocks, prices to {day(p.data.asOf)}{p.updatedAt ? ` · checked ${etLabel(p.updatedAt)}` : ""}</> : p.error ? <span className="neg">Scan failed: {p.error}</span> : "The first scan runs with the hourly job."}
+        {p.data ? <>{setups.length} setup{setups.length === 1 ? "" : "s"} from {p.data.scanned.toLocaleString("en-US")} stocks, prices to {day(p.data.asOf)}{p.updatedAt ? ` · checked ${etLabelAgo(p.updatedAt)}` : ""}</> : p.error ? <span className="neg">Scan failed: {p.error}</span> : "The first scan runs with the hourly job."}
         {p.data && p.error ? <span className="warn"> · latest refresh failed: {p.error}</span> : null}
       </p>
       {p.data && setups.length === 0 && <p className="small muted">Nothing qualifies right now.</p>}

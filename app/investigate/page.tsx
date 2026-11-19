@@ -5,7 +5,7 @@ import { listInvestigations, reportText, type Investigation } from "@/lib/scout/
 import CardAsk from "@/components/CardAsk";
 import DigDeeper from "./DigDeeper";
 import * as store from "@/lib/scout/store";
-import { etLabel } from "@/lib/time";
+import { etLabelAgo } from "@/lib/time";
 import ExposureResearch from "./ExposureResearch";
 import { inline } from "@/app/chat/render";
 import { tickersIn } from "@/lib/scout/ticker-words";
@@ -67,7 +67,7 @@ function InvestigationView({ inv, open, researched, t }: { inv: Investigation; o
       <summary>
         <b>{r?.headline || inv.title}</b>{" "}
         {inv.status === "running" ? <span className="tag late">digging…</span> : inv.status === "error" ? <span className="tag down">failed</span> : null}
-        <span className="small muted"> · {etLabel(inv.createdAt)}{inv.costUsd ? ` · $${inv.costUsd.toFixed(2)}` : ""}</span>
+        <span className="small muted"> · {etLabelAgo(inv.createdAt)}{inv.costUsd ? ` · $${inv.costUsd.toFixed(2)}` : ""}</span>
       </summary>
       {inv.status === "error" && <p className="small neg">{inv.error}</p>}
       {inv.status === "running" && <p className="small muted">{inv.records ? "Records pulled; writing the report…" : inv.plan ? "Plan made; pulling contracts, lobbying and PAC records…" : "Planning what to look up…"}</p>}

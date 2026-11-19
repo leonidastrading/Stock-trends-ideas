@@ -5,7 +5,7 @@ import { marketDataFromEnv } from "@/lib/alpaca";
 import { hasDatabase } from "@/lib/db";
 import { themeRuns, themeSends, type Theme, type ThemeRun } from "@/lib/scout/themes";
 import { swingConfigured } from "@/lib/scout/swing";
-import { fmtEt } from "@/lib/time";
+import { fmtEtAgo } from "@/lib/time";
 import { ThemeResearch, ThemeSend, ThemesRefresh } from "./ThemeButtons";
 import StockChart from "@/components/StockChart";
 import CardCollapse, { CollapseAll } from "@/components/CardCollapse";
@@ -52,7 +52,7 @@ export default async function ThemesPage() {
       <p className="small secondary">The 3 trade ideas most of your sources are talking about and agree on, for the next 1–2 weeks. Read once each weekday morning from the last 14 days of your inbox files, your websites&apos; articles and Stocktwits chatter. Consensus is not an edge: each idea says how crowded it looks and what would break it, and &quot;Research it&quot; checks what is already priced before anything is tracked.</p>
       <div className="toolbar">
         <ThemesRefresh />
-        {latest && <span className="small muted">Last read {fmtEt(latest.createdAt)} from {latest.sources.documents} documents, {latest.sources.websites} website articles and {latest.sources.stocktwits} Stocktwits posts{latest.costUsd !== null ? ` · $${latest.costUsd.toFixed(2)}` : ""}</span>}
+        {latest && <span className="small muted">Last read {fmtEtAgo(latest.createdAt)} from {latest.sources.documents} documents, {latest.sources.websites} website articles and {latest.sources.stocktwits} Stocktwits posts{latest.costUsd !== null ? ` · $${latest.costUsd.toFixed(2)}` : ""}</span>}
       </div>
       {!latest && <p className="small muted">No themes yet. The first reading runs on the next weekday morning (from 7 AM ET), or press Refresh now.</p>}
       {latest && latest.themes.length === 0 && <p className="small muted">The last reading found no idea that several sources agree on.</p>}

@@ -1,6 +1,6 @@
 import Direction from "@/components/Direction";
 import { paperResult } from "@/lib/scout/paper-result";
-import { fmtEt } from "@/lib/time";
+import { fmtEtAgo } from "@/lib/time";
 import SetupNotice from "@/components/SetupNotice";
 import { hasDatabase } from "@/lib/db";
 import * as store from "@/lib/scout/store";
@@ -36,7 +36,7 @@ export default async function NoticePage() {
               const r = tr ? paperResult(tr, null, null) : null;
               return (
                 <li key={c.id}>
-                  <span className="small muted">{fmtEt(c.createdAt)}</span>
+                  <span className="small muted">{fmtEtAgo(c.createdAt)}</span>
                   <Direction direction={c.direction} ticker={c.primaryTicker} size="small" />
                   <a href={`/ideas?days=365&card=${c.id}#card-${c.id}`}>{c.title}</a>
                   <span className={`tag ${c.status}`}>{c.status.replace("_", " ")}</span>

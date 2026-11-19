@@ -9,7 +9,7 @@ import TickerSearch from "@/components/TickerSearch";
 import { hasDatabase } from "@/lib/db";
 import { upcomingCatalysts } from "@/lib/scout/calendar";
 import * as store from "@/lib/scout/store";
-import { etLabel, toEt } from "@/lib/time";
+import { etLabelAgo, toEt } from "@/lib/time";
 import RememberFilters from "@/components/RememberFilters";
 import SectionLoading from "@/components/SectionLoading";
 import { Suspense } from "react";
@@ -48,7 +48,7 @@ async function Notices() {
   return (
     <>
       {down.length > 0 && <p className="small warn">Sources not reporting: {down.map((h) => `${h.source} (${h.status})`).join(", ")}. See Settings.</p>}
-      {running && <p className="small warn">A scan started at {etLabel(running.startedAt, true)} is still running; refresh in a few minutes.</p>}
+      {running && <p className="small warn">A scan started at {etLabelAgo(running.startedAt, true)} is still running; refresh in a few minutes.</p>}
     </>
   );
 }

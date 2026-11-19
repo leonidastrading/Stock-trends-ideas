@@ -1,7 +1,7 @@
 import LinkedText from "@/components/LinkedText";
 import Pager, { FilterLinks, paginate } from "@/components/Pager";
 import type { Candidate, StoredCard } from "@/lib/scout/store";
-import { fmtEt } from "@/lib/time";
+import { fmtEtAgo } from "@/lib/time";
 
 export const OUTCOMES = [
   { value: "", label: "All" }, { value: "promoted", label: "Promoted" }, { value: "late", label: "Late" }, { value: "not_promoted", label: "Not promoted" },
@@ -34,7 +34,7 @@ export default function ActivityLog({ candidates, cards, params, outcome, lpage,
           <tbody>
             {log.items.map((c) => (
               <tr key={c.id}>
-                <td className="small" style={{ whiteSpace: "nowrap" }}>{fmtEt(c.createdAt)}</td>
+                <td className="small" style={{ whiteSpace: "nowrap" }}>{fmtEtAgo(c.createdAt)}</td>
                 <td className="small">{c.origin}</td>
                 <td>{c.term}{c.observation ? <div className="small muted">“{c.observation}”</div> : null}</td>
                 <td><span className={`tag ${c.outcome === "card" ? (c.reason ?? "") : c.outcome}`}>{c.outcome === "card" ? c.reason?.replace("_", " ") : c.outcome}</span>{c.cardId ? <a className="small" href={cardHref(c.cardId)}>#{c.cardId}</a> : null}</td>

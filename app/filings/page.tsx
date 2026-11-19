@@ -7,7 +7,7 @@ import { OPTIONS_RULES } from "@/lib/scout/options-flow";
 import * as store from "@/lib/scout/store";
 import Ticker from "@/components/Ticker";
 import ResearchButton from "./ResearchButton";
-import { addDays, fmtEt, toEt } from "@/lib/time";
+import { addDays, fmtEtAgo, toEt } from "@/lib/time";
 import { latestFilingWatch, WATCH_LABEL, type WatchRow } from "@/lib/scout/filing-watch";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +46,7 @@ export default async function FilingsPage() {
         <div className="table-wrap"><table>
           <thead><tr><th>Stock</th><th>Status</th><th>Details</th><th className="small">Since</th></tr></thead>
           <tbody>
-            {flagged.map((w) => <tr key={w.symbol}><td><Ticker symbol={w.symbol} /></td><td><span className={`tag ${w.status === "late_vs_usual" ? "late" : "error"}`}>{WATCH_LABEL[w.status]}</span></td><td className="small">{w.message}</td><td className="small muted">{fmtEt(w.checkedAt)}</td></tr>)}
+            {flagged.map((w) => <tr key={w.symbol}><td><Ticker symbol={w.symbol} /></td><td><span className={`tag ${w.status === "late_vs_usual" ? "late" : "error"}`}>{WATCH_LABEL[w.status]}</span></td><td className="small">{w.message}</td><td className="small muted">{fmtEtAgo(w.checkedAt)}</td></tr>)}
             {flagged.length === 0 && <tr><td colSpan={4} className="muted small">Nothing late: {watch.length ? `all ${watch.length} card stocks checked are on time.` : "no checks yet (they run with the hourly upkeep)."}</td></tr>}
           </tbody>
         </table></div>

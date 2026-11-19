@@ -1,5 +1,6 @@
 "use client";
 
+import { fmtEtAgo } from "@/lib/time";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { renderReply } from "./render";
 import { useTickers } from "@/components/useTickers";
@@ -16,7 +17,7 @@ const STARTERS = [
   "Which cards are losing against SPY, and is the thesis still alive?",
 ];
 
-const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+const when = (iso: string) => fmtEtAgo(iso);
 
 export default function ChatWindow({ past, tickers, cardIds = {} }: { past: Past[]; tickers: string[]; cardIds?: Record<string, number> }) {
   const [thread, setThread] = useState<number | null>(null);

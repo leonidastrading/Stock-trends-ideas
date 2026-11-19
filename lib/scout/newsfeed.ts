@@ -18,7 +18,9 @@ export const NEWS_EVENT = /\b(ground stop|grounded|grounding|delist\w*|cyberatta
 export const isRoutinePause = (i: { source: string; headline: string; summary: string }) =>
   i.source === "Nasdaq halts" && /reason code (LUDP|LUDS|M|T5)\b/.test(i.summary);
 
-export interface FeedItem { id: string; at: string; headline: string; summary: string; source: string; url: string; symbols: string[]; event: string | null; cardIds: number[]; buzz: number; score: number; kind: "news" | "trump" | "rumor"; repostedAt?: string }
+export interface FeedItem { id: string; at: string; headline: string; summary: string; source: string; url: string; symbols: string[]; event: string | null; cardIds: number[]; buzz: number; score: number; kind: "news" | "trump" | "rumor"; repostedAt?: string; cardRefs?: CardRef[] }
+/** A card a headline touches: the card's own stock and direction, and the headline's stock it names (when different). */
+export interface CardRef { id: number; ticker: string; direction: "long" | "short"; via: string | null }
 
 /** Pure: score and rank. Freshness halves every 6 hours; an event word, a pile-up on one stock and a card on it each lift a story. */
 export function rankFeed(items: Array<Omit<FeedItem, "score" | "buzz" | "event" | "cardIds">>, cards: Map<string, number[]>, now: Date): FeedItem[] {
@@ -77,7 +79,15 @@ export async function newsFeed(now = new Date()): Promise<FeedItem[]> {
     ...fromRumors.map(({ rumor, check }) => ({ id: `r${rumor.id}`, at: check.checkedAt, headline: check.evidence[0]?.headline ?? rumor.claim, summary: `Found in ${rumor.source || rumor.docSource}: ${rumor.claim}${check.note ? ` (${check.note})` : ""}`, source: check.evidence[0]?.source ?? "news", url: check.evidence[0]?.url ?? "/rumors?truth=already_news", symbols: rumor.tickers.slice(0, 8), kind: "rumor" as const })),
     ...posts.filter((p) => p.read).map((p) => ({ id: `t${p.id}`, at: p.at, headline: `Trump: ${p.read!.summary}`, summary: p.text.slice(0, 400), source: "Truth Social", url: p.url, symbols: p.read!.tickers, kind: "trump" as const })),
   ];
-  cache.items = rankFeed(items, bySym, now);
+  const byId = new Map(cards.map((c) => [c.id, c]));
+  cache.items = rankFeed(items, bySym, now).map((i) => ({
+    ...i,
+    cardRefs: i.cardIds.flatMap((id) => {
+      const c = byId.get(id);
+      if (!c) return [];
+      return [{ id, ticker: c.primaryTicker, direction: c.direction, via: i.symbols.includes(c.primaryTicker) ? null : i.symbols.find((s) => c.card.tickers.some((t) => t.symbol === s)) ?? null }];
+    }),
+  }));
   cache.at = Date.now();
   return cache.items;
 }

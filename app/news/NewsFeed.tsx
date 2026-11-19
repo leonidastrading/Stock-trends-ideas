@@ -5,15 +5,13 @@ import ResearchButton from "@/app/filings/ResearchButton";
 import { chartUrl } from "@/config/links";
 import type { FeedItem } from "@/lib/scout/newsfeed";
 import { useStoredState } from "@/components/useStoredState";
+import { ago, fmtEtAgo, toEt } from "@/lib/time";
+
+const PAGE_SIZE = 10;
 
 const POLL_MS = 15_000;
-const when = (iso: string) => {
-  const mins = Math.round((Date.now() - Date.parse(iso)) / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  if (mins < 24 * 60) return `${Math.floor(mins / 60)}h ${mins % 60}m ago`;
-  return new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
-};
+/** Today: how long ago only ("25m ago", "3h ago"); earlier: the date with how many days ago. */
+const when = (iso: string) => (toEt(new Date(iso)).date === toEt(new Date()).date ? ago(iso) : fmtEtAgo(iso));
 
 export default function NewsFeed({ initial }: { initial: FeedItem[] }) {
   const [items, setItems] = useState<FeedItem[]>(initial);
@@ -24,6 +22,8 @@ export default function NewsFeed({ initial }: { initial: FeedItem[] }) {
   const [error, setError] = useState<string | null>(null);
   const [, tick] = useState(0);
   const unseen = useRef(0);
+  const [page, setPage] = useState(0);
+  const top = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const poll = async () => {
@@ -58,26 +58,41 @@ export default function NewsFeed({ initial }: { initial: FeedItem[] }) {
     const xs = items.filter((i) => !mine || i.cardIds.length > 0);
     return xs.slice().sort((a, b) => (view === "top" ? b.score - a.score : 0) || b.at.localeCompare(a.at)).slice(0, 120);
   }, [items, view, mine]);
+  const pages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+  const at = Math.min(page, pages - 1);
+  const pageItems = shown.slice(at * PAGE_SIZE, (at + 1) * PAGE_SIZE);
+  const go = (n: number) => { setPage(n); top.current?.scrollIntoView({ block: "start" }); };
+  const pager = pages > 1 && (
+    <nav className="small pager news-pager" aria-label="News pages">
+      <button className="chip" disabled={at === 0} onClick={() => go(at - 1)}>← Newer</button>
+      {Array.from({ length: pages }, (_, n) => n).filter((n) => n === 0 || n === pages - 1 || Math.abs(n - at) <= 2).map((n, k, arr) => (
+        <span key={n}>{k && n - arr[k - 1] > 1 ? <span className="muted"> … </span> : null}<button className={`chip${n === at ? " active" : ""}`} aria-current={n === at ? "page" : undefined} onClick={() => go(n)}>{n + 1}</button></span>
+      ))}
+      <button className="chip" disabled={at >= pages - 1} onClick={() => go(at + 1)}>Older →</button>
+      <span className="muted">{shown.length} stories</span>
+    </nav>
+  );
 
   return (
-    <div className="news">
+    <div className="news" ref={top}>
       <div className="toolbar">
         <span className="filter-links small">
-          <button className={`chip${view === "top" ? " active" : ""}`} onClick={() => setView("top")}>Top</button>
-          <button className={`chip${view === "latest" ? " active" : ""}`} onClick={() => setView("latest")}>Latest</button>
-          <button className={`chip${mine ? " active" : ""}`} onClick={() => setMine(!mine)}>On my cards only</button>
+          <button className={`chip${view === "top" ? " active" : ""}`} onClick={() => { setView("top"); setPage(0); }}>Top</button>
+          <button className={`chip${view === "latest" ? " active" : ""}`} onClick={() => { setView("latest"); setPage(0); }}>Latest</button>
+          <button className={`chip${mine ? " active" : ""}`} onClick={() => { setMine(!mine); setPage(0); }}>On my cards only</button>
         </span>
-        <span className="small muted">Live: checks every 15 seconds · last {checked.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}{error ? <span className="warn"> · {error}</span> : null}</span>
+        <span className="small muted" suppressHydrationWarning>Live: checks every 15 seconds · last {checked.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}{error ? <span className="warn"> · {error}</span> : null}</span>
       </div>
       {items.length > 0 && (() => {
         // How fresh each source is: a lagging feed shows at a glance.
         const newest = new Map<string, string>();
         for (const i of items) if (!i.repostedAt && i.kind === "news" && (!newest.has(i.source) || i.at > newest.get(i.source)!)) newest.set(i.source, i.at);
         const list = [...newest].sort((a, b) => b[1].localeCompare(a[1])).slice(0, 6);
-        return <p className="small muted" style={{ margin: "0 0 8px" }}>Newest by source: {list.map(([src, at], k) => <span key={src}>{k ? " · " : ""}{src} {when(at)}</span>)}</p>;
+        return <p className="small muted" style={{ margin: "0 0 8px" }}>Newest by source: {list.map(([src, at], k) => <span key={src} suppressHydrationWarning>{k ? " · " : ""}{src} {when(at)}</span>)}</p>;
       })()}
       {shown.length === 0 && <p className="small muted">{mine ? "No headlines on your cards' stocks in the last 24 hours." : "No headlines yet (the news stream needs the Alpaca keys)."}</p>}
-      {shown.map((i) => (
+      {pager}
+      {pageItems.map((i) => (
         <article key={i.id} className={`news-item card${fresh.has(i.id) ? " fresh" : ""}`} onMouseEnter={() => fresh.has(i.id) && setFresh((f) => { const g = new Set(f); g.delete(i.id); return g; })}>
           <div className="news-meta small muted">
             {fresh.has(i.id) && <span className="tag ok">new</span>}
@@ -85,9 +100,13 @@ export default function NewsFeed({ initial }: { initial: FeedItem[] }) {
             {i.kind === "rumor" && <a className="tag" href="/rumors?truth=already_news" title="Found in your rumor sources; already reported by this outlet">from rumors</a>}
             {i.event && <span className="tag">{i.event}</span>}
             {i.buzz >= 3 && <span className="tag warn" title="headlines on this stock in the last 6 hours">{i.buzz} in 6h</span>}
-            {i.cardIds.slice(0, 3).map((id) => <a key={id} className="tag promoted" href={`/ideas?days=30&card=${id}#card-${id}`}>card #{id}</a>)}
+            {(i.cardRefs ?? i.cardIds.map((id) => ({ id, ticker: "", direction: "long" as const, via: null }))).slice(0, 3).map((r) => (
+              <a key={r.id} className="tag promoted" href={`/ideas?days=30&card=${r.id}#card-${r.id}`} title={r.ticker ? `Card #${r.id}: ${r.direction} ${r.ticker}${r.via ? `. The card also names ${r.via}, which this story is about` : ""}` : undefined}>
+                card #{r.id}{r.ticker ? <> · <span className={r.direction === "long" ? "pos" : "neg"}>{r.direction === "long" ? "▲" : "▼"}</span> {r.ticker}</> : null}{r.via ? <span className="muted"> (names {r.via})</span> : null}
+              </a>
+            ))}
             {i.cardIds.length > 3 && <span className="tag" title={i.cardIds.slice(3).map((id) => `#${id}`).join(", ")}>+{i.cardIds.length - 3} more cards</span>}
-            <span>{i.repostedAt ? <><span className="tag late" title={`Re-posted ${when(i.repostedAt)}; the news itself is from ${new Date(i.at).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: "America/New_York" })}`}>old news, re-posted</span> {new Date(i.at).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/New_York" })} · re-posted {when(i.repostedAt)}</> : when(i.at)} · {i.source}</span>
+            <span suppressHydrationWarning>{i.repostedAt ? <><span className="tag late" title={`Re-posted ${when(i.repostedAt)}; the news itself is from ${new Date(i.at).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: "America/New_York" })}`}>old news, re-posted</span> {new Date(i.at).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/New_York" })} · re-posted {when(i.repostedAt)}</> : when(i.at)} · {i.source}</span>
             <span className="news-action"><ResearchButton ticker={i.symbols.length <= 3 ? i.symbols[0] : null} observation={`${i.kind === "trump" ? "Trump post on Truth Social" : `News headline (${i.source})`}, ${new Date(i.at).toISOString().slice(0, 16).replace("T", " ")} UTC: ${i.headline}.${i.summary ? ` ${i.summary.slice(0, 600)}` : ""}${i.symbols.length ? ` Tickers tagged: ${i.symbols.join(", ")}.` : ""} Link: ${i.url}`} /></span>
           </div>
           <div className="news-headline"><a href={i.url} target="_blank" rel="noreferrer">{i.headline}</a></div>
@@ -95,6 +114,7 @@ export default function NewsFeed({ initial }: { initial: FeedItem[] }) {
           {i.summary && <div className="small secondary news-summary">{i.summary.slice(0, 320)}{i.summary.length > 320 ? "…" : ""}</div>}
         </article>
       ))}
+      {pager}
     </div>
   );
 }

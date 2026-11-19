@@ -84,3 +84,37 @@ export function fmtEt(iso: string | Date): string {
   const d = typeof iso === "string" ? new Date(iso) : iso;
   return Number.isNaN(d.getTime()) ? "" : `${shortFmt.format(d)} ET`;
 }
+
+/**
+ * How long ago (or how far ahead): "just now", "25m ago" under an hour, "3h ago" earlier today (US Eastern), then
+ * "2 days ago" by calendar day ("1 day ago" for yesterday); "in 40m", "in 3h", "in 5 days" for the future.
+ */
+export function ago(iso: string | Date, now = new Date()): string {
+  const d = typeof iso === "string" ? new Date(iso) : iso;
+  if (Number.isNaN(d.getTime())) return "";
+  const ms = now.getTime() - d.getTime();
+  const min = Math.floor(Math.abs(ms) / 60000);
+  if (min < 1) return "just now";
+  const days = Math.abs(daysBetween(toEt(d).date, toEt(now).date));
+  const span = min < 60 ? `${min}m` : days === 0 ? `${Math.floor(min / 60)}h` : `${days} day${days === 1 ? "" : "s"}`;
+  return ms < 0 ? `in ${span}` : `${span} ago`;
+}
+
+/** For a calendar date (YYYY-MM-DD): "today", "1 day ago", "in 3 days". */
+export function dayAgo(date: string, now = new Date()): string {
+  if (!/^\d{4}-\d{2}-\d{2}/.test(date)) return "";
+  const n = daysBetween(date.slice(0, 10), toEt(now).date);
+  return n === 0 ? "today" : n > 0 ? `${n} day${n === 1 ? "" : "s"} ago` : `in ${-n} day${n === -1 ? "" : "s"}`;
+}
+
+/** "Nov 16, 2:01 PM ET · 3 days ago". */
+export function fmtEtAgo(iso: string | Date, now = new Date()): string {
+  const s = fmtEt(iso);
+  return s ? `${s} · ${ago(iso, now)}` : "";
+}
+
+/** etLabel with how long ago. */
+export function etLabelAgo(iso: string | Date, clockOnly = false, now = new Date()): string {
+  const d = typeof iso === "string" ? new Date(iso) : iso;
+  return Number.isNaN(d.getTime()) ? "" : `${etLabel(d, clockOnly)} · ${ago(d, now)}`;
+}

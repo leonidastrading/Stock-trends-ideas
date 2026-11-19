@@ -5,7 +5,7 @@ import Ticker from "@/components/Ticker";
 import { hasDatabase } from "@/lib/db";
 import { CATEGORIES, recentRumorDocs, rumorsSince } from "@/lib/scout/rumors";
 import * as store from "@/lib/scout/store";
-import { etLabel } from "@/lib/time";
+import { etLabelAgo } from "@/lib/time";
 import RumorDrop from "./RumorDrop";
 import RumorResearch from "./RumorResearch";
 import RumorInvestigate from "./RumorInvestigate";
@@ -24,13 +24,13 @@ const TRUTH: Record<string, { label: string; cls: string }> = {
 /** The verdict banner: big and green when the rumor came true. */
 function Verdict({ c }: { c: RumorCheck }) {
   const t = TRUTH[c.status];
-  if (!t) return <div className="small muted">Checked {etLabel(c.checkedAt)}: not confirmed yet{c.evidence.length ? ` (${c.evidence.length} related headline${c.evidence.length === 1 ? "" : "s"})` : ""}.</div>;
+  if (!t) return <div className="small muted">Checked {etLabelAgo(c.checkedAt)}: not confirmed yet{c.evidence.length ? ` (${c.evidence.length} related headline${c.evidence.length === 1 ? "" : "s"})` : ""}.</div>;
   return (
     <div className={`truth ${t.cls}`}>
       <div className="truth-label">{t.label}</div>
       {c.note && <div className="truth-note">{c.note}</div>}
-      {c.evidence.slice(0, 3).map((e, i) => <div key={i} className="truth-ev"><a href={e.url} target="_blank" rel="noreferrer">{e.headline}</a> <span className="small">· {e.source} · {etLabel(e.at)}</span></div>)}
-      <div className="small truth-when">checked {etLabel(c.checkedAt)}</div>
+      {c.evidence.slice(0, 3).map((e, i) => <div key={i} className="truth-ev"><a href={e.url} target="_blank" rel="noreferrer">{e.headline}</a> <span className="small">· {e.source} · {etLabelAgo(e.at)}</span></div>)}
+      <div className="small truth-when">checked {etLabelAgo(c.checkedAt)}</div>
     </div>
   );
 }
@@ -103,7 +103,7 @@ export default async function RumorsPage({ searchParams }: { searchParams: Promi
       {docs.length > 0 && (
         <details className="small" style={{ margin: "0 0 10px" }}>
           <summary>Last documents read ({docs.length})</summary>
-          {docs.map((d) => <div key={d.id}>{etLabel(d.receivedAt)} · {d.source} · {d.chars.toLocaleString("en-US")} chars · <b>{d.rumors}</b> rumor{d.rumors === 1 ? "" : "s"}{d.error ? <span className="neg"> · {d.error}</span> : null}</div>)}
+          {docs.map((d) => <div key={d.id}>{etLabelAgo(d.receivedAt)} · {d.source} · {d.chars.toLocaleString("en-US")} chars · <b>{d.rumors}</b> rumor{d.rumors === 1 ? "" : "s"}{d.error ? <span className="neg"> · {d.error}</span> : null}</div>)}
         </details>
       )}
       <div className="toolbar" id="rumors">
@@ -118,7 +118,7 @@ export default async function RumorsPage({ searchParams }: { searchParams: Promi
         const v = verdicts.get(r.id);
         return (
           <section key={r.id} className={`card rumor-item${v?.status === "confirmed" ? " rumor-true" : ""}`}>
-            <div className="rumor-when"><b>{etLabel(r.createdAt)}</b> <span className="muted">· rumor #{r.id} · from {r.source || r.docSource}</span></div>
+            <div className="rumor-when"><b>{etLabelAgo(r.createdAt)}</b> <span className="muted">· rumor #{r.id} · from {r.source || r.docSource}</span></div>
             {v && v.status !== "open" && <Verdict c={v} />}
             <div>
               <span className="tag">{r.category}</span>{" "}

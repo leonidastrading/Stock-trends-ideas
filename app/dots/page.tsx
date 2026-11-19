@@ -8,7 +8,7 @@ import { marketDataFromEnv } from "@/lib/alpaca";
 import { hasDatabase } from "@/lib/db";
 import { dotsRuns, type Crowd, type DotIdea, type DotsRun } from "@/lib/scout/dots";
 import * as store from "@/lib/scout/store";
-import { fmtEt } from "@/lib/time";
+import { fmtEtAgo } from "@/lib/time";
 import DotsRefresh from "./DotsRefresh";
 
 export const dynamic = "force-dynamic";
@@ -62,7 +62,7 @@ export default async function DotsPage({ searchParams }: { searchParams: Promise
       <p className="small secondary">Trade ideas nobody has connected yet. Each weekday morning the scout scans for what is changing: about 40 news searches across ten lenses (what people buy and fear, supply chains, rules and policy, weather, health, technology, security and outages, labour, geopolitics, culture), world and wire news, what Americans are searching for, what people are suddenly reading on Wikipedia, what they bet on at Polymarket, the Hacker News front page, and the scout&apos;s own rumors and stories. It picks the real changes, writes its own follow-up searches to dig into each, then follows each change to the listed companies it helps or hurts: fear of a cyber or nuclear attack → households buy backup generators → Generac. The opposite of Themes, which shows what the crowd already agrees on. Each stock is checked for how late it is: <span className="tag ok">early</span> means little move and little news so far. These are leads, not evidence: &quot;Research it&quot; checks one into a scored card.</p>
       <div className="toolbar">
         <DotsRefresh />
-        {latest && <span className="small muted">Last read {fmtEt(latest.createdAt)} from {latest.headlines} lines and headlines{latest.costUsd !== null ? ` · $${latest.costUsd.toFixed(2)}` : ""}</span>}
+        {latest && <span className="small muted">Last read {fmtEtAgo(latest.createdAt)} from {latest.headlines} lines and headlines{latest.costUsd !== null ? ` · $${latest.costUsd.toFixed(2)}` : ""}</span>}
       </div>
       {runs.length > 1 && (
         <div className="toolbar small" id="runs">
@@ -70,7 +70,7 @@ export default async function DotsPage({ searchParams }: { searchParams: Promise
           {runs.map((r) => <a key={r.id} className={`chip${r.id === latest?.id ? " active" : ""}`} href={r.id === runs[0].id ? "/dots#runs" : `/dots?run=${r.id}#runs`} title={`${r.ideas.length} ideas`}>{r.etDate.slice(5)}{r.id === runs[0].id ? " (latest)" : ""} · {r.ideas.length}</a>)}
         </div>
       )}
-      {latest && !isNewest && <p className="small warn">Showing the run from {fmtEt(latest.createdAt)}. <a href="/dots">Back to the latest</a>.</p>}
+      {latest && !isNewest && <p className="small warn">Showing the run from {fmtEtAgo(latest.createdAt)}. <a href="/dots">Back to the latest</a>.</p>}
       {latest && latest.changes.length > 0 && (
         <details className="card section">
           <summary><b>What the scout saw changing{isNewest ? " this week" : ` (run of ${latest.etDate})`}</b> <span className="small muted">{latest.changes.length} changes, the searches it ran to dig in, and what it read</span></summary>

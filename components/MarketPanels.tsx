@@ -4,9 +4,9 @@ import Ticker from "@/components/Ticker";
 import { bySymbol } from "@/lib/scout/congress";
 import { loadPanels } from "@/lib/scout/dashboard-warm";
 import * as store from "@/lib/scout/store";
-import { addDays, fmtEt, toEt } from "@/lib/time";
+import { addDays, fmtEtAgo, toEt, dayAgo } from "@/lib/time";
 
-const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }) + ` (${dayAgo(d)})`;
 const money = (v: number) => (v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${Math.round(v / 1e3)}k`);
 const cap = (v: number | null) => (v === null ? "" : v >= 1e12 ? `$${(v / 1e12).toFixed(1)}T` : v >= 1e9 ? `$${Math.round(v / 1e9)}B` : `$${Math.round(v / 1e6)}M`);
 
@@ -14,7 +14,7 @@ function Head({ title, note, updatedAt, error }: { title: string; note?: string;
   return (
     <div className="panel-head">
       <span>{title}</span>
-      <span className="small muted">{error && !updatedAt ? <span className="warn">{error}</span> : updatedAt ? `${note ? `${note} · ` : ""}${fmtEt(updatedAt)}` : note}</span>
+      <span className="small muted">{error && !updatedAt ? <span className="warn">{error}</span> : updatedAt ? `${note ? `${note} · ` : ""}${fmtEtAgo(updatedAt)}` : note}</span>
     </div>
   );
 }
@@ -123,7 +123,7 @@ export default async function MarketPanels() {
                 <b className={p.read!.direction === "up" ? "pos" : p.read!.direction === "down" ? "neg" : ""}>{p.read!.direction === "up" ? "▲ " : p.read!.direction === "down" ? "▼ " : ""}{p.read!.tickers.slice(0, 4).join(", ") || p.read!.sectors.slice(0, 2).join(", ")}</b>{" "}
                 {p.read!.summary}
               </div>
-              <div className="small muted">{"●".repeat(Math.max(1, Math.min(5, p.read!.urgency)))}{"○".repeat(5 - Math.max(1, Math.min(5, p.read!.urgency)))} · <a href={p.url} target="_blank" rel="noreferrer">{fmtEt(p.at)}</a></div>
+              <div className="small muted">{"●".repeat(Math.max(1, Math.min(5, p.read!.urgency)))}{"○".repeat(5 - Math.max(1, Math.min(5, p.read!.urgency)))} · <a href={p.url} target="_blank" rel="noreferrer">{fmtEtAgo(p.at)}</a></div>
             </div>
           ))}
           {!posts.length && <p className="small muted">No market-relevant posts in the last 3 days (read every few minutes from the trumpstruth.org archive of his Truth Social posts).</p>}

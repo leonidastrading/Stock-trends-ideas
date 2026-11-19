@@ -4,7 +4,7 @@ import { marketDataFromEnv } from "@/lib/alpaca";
 import { hasDatabase } from "@/lib/db";
 import { allCards, allDocs, allTracks, EARN, EARN_VERSION, historyCount, isA, peerBench, scansSince, score, snapshotCount, weekOf, type CardRow, type DocRow, type Group, type ScanRow, type TrackRow } from "@/lib/scout/earnings";
 import { calendarDay } from "@/lib/sources/earnings-data";
-import { addDays, etLabel, toEt } from "@/lib/time";
+import { addDays, etLabelAgo, toEt, dayAgo } from "@/lib/time";
 import EarningsSend from "./EarningsSend";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 
 const TIER: Record<string, number> = { "A++": 0, "A+": 1, A: 2 };
 const pct = (x: number | null | undefined, d = 1) => (x === null || x === undefined || Number.isNaN(x) ? "?" : `${x > 0 ? "+" : ""}${x.toFixed(d)}%`);
-const dayLabel = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+const dayLabel = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }) + ` (${dayAgo(d)})`;
 
 /** Earnings drift (up): the nightly earnings scan, its setups, open paper positions, rejected candidates and the scoreboard. */
 export default async function EarningsPage() {
@@ -127,7 +127,7 @@ function SetupCard({ s, t, c, d }: { s: ScanRow; t: TrackRow | null; c: CardRow 
         <span className="small muted">reported {dayLabel(s.reportDate)} {s.timing.replace("_", " ")} · {n.cap_group} · {n.sector ?? "sector ?"}</span>
       </div>
       <div className="small">
-        EPS <b>{n.eps_actual}</b> vs {n.eps_consensus} consensus <span className="muted">(frozen {n.consensus_captured_at ? etLabel(n.consensus_captured_at) : "?"})</span> · surprise rank <b>{n.surprise_pct_rank ?? "?"}</b> · revenue {n.revenue_beat === null ? "not checked" : `${n.revenue_beat ? "beat" : "missed"} (${pct(n.revenue_surprise_pct)})`} · reaction <b>{pct(n.reaction_pct)}</b> vs SPY on {n.volume_ratio}× volume · run-up 10d {pct(n.runup_10d_pct)} (rank {n.runup_pct_rank ?? "?"}) · {n.days_after_quarter_end ?? "?"} days after quarter end · ${n.market_cap_b}B
+        EPS <b>{n.eps_actual}</b> vs {n.eps_consensus} consensus <span className="muted">(frozen {n.consensus_captured_at ? etLabelAgo(n.consensus_captured_at) : "?"})</span> · surprise rank <b>{n.surprise_pct_rank ?? "?"}</b> · revenue {n.revenue_beat === null ? "not checked" : `${n.revenue_beat ? "beat" : "missed"} (${pct(n.revenue_surprise_pct)})`} · reaction <b>{pct(n.reaction_pct)}</b> vs SPY on {n.volume_ratio}× volume · run-up 10d {pct(n.runup_10d_pct)} (rank {n.runup_pct_rank ?? "?"}) · {n.days_after_quarter_end ?? "?"} days after quarter end · ${n.market_cap_b}B
       </div>
       {d && <div className="small muted">Guidance by wording (no model): {d.guidanceNumeric} · {d.pressUrl ? <a href={d.pressUrl} target="_blank" rel="noreferrer">press release read</a> : "press release not found"} · {d.headlines.length} headline(s) before entry</div>}
       {k && (
@@ -142,7 +142,7 @@ function SetupCard({ s, t, c, d }: { s: ScanRow; t: TrackRow | null; c: CardRow 
         {t?.closed ? <> · <b>closed {pct(t.retPct)}</b> (SPY {pct(t.spyPct)}; {t.exitBasis})</> : null}
       </div>
       <div className="small" style={{ marginTop: 4 }}>
-        {t?.tappedAt ? <span className="tag ok">sent to Swing ideas {etLabel(t.tappedAt)}</span> : k?.ai_recommendation === "promote" && !t?.closed ? <EarningsSend id={s.id} /> : null}
+        {t?.tappedAt ? <span className="tag ok">sent to Swing ideas {etLabelAgo(t.tappedAt)}</span> : k?.ai_recommendation === "promote" && !t?.closed ? <EarningsSend id={s.id} /> : null}
       </div>
     </section>
   );

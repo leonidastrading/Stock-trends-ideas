@@ -5,7 +5,7 @@ import { panel } from "@/lib/market/panels";
 import { secTickerList } from "@/lib/sources/edgar";
 import { fetchFdaCalendar, fetchTrialReadouts, type FdaEvent, type TrialReadout } from "@/lib/sources/pharma";
 import * as store from "@/lib/scout/store";
-import { daysBetween, fmtEt, toEt } from "@/lib/time";
+import { daysBetween, fmtEtAgo, toEt } from "@/lib/time";
 import ResearchButton from "@/components/ResearchButton";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +25,7 @@ const decided = (e: FdaEvent) => !/^pending$/i.test(e.outcome.trim());
 
 /** Cards on a ticker, as small links. */
 function CardChips({ cards }: { cards: store.CardBrief[] }) {
-  return <>{cards.slice(0, 4).map((c) => <a key={c.id} className="tag card-number" style={{ marginRight: 4 }} href={`/ideas?days=365&card=${c.id}#card-${c.id}`} title={`${c.direction} ${c.primaryTicker}, ${c.status.replace("_", " ")}, ${fmtEt(c.createdAt)}`}><span className={c.direction === "long" ? "pos" : "neg"}>{c.direction === "long" ? "▲" : "▼"}</span> #{c.id} <span className="muted">{c.status.replace("_", " ")}</span></a>)}</>;
+  return <>{cards.slice(0, 4).map((c) => <a key={c.id} className="tag card-number" style={{ marginRight: 4 }} href={`/ideas?days=365&card=${c.id}#card-${c.id}`} title={`${c.direction} ${c.primaryTicker}, ${c.status.replace("_", " ")}, ${fmtEtAgo(c.createdAt)}`}><span className={c.direction === "long" ? "pos" : "neg"}>{c.direction === "long" ? "▲" : "▼"}</span> #{c.id} <span className="muted">{c.status.replace("_", " ")}</span></a>)}</>;
 }
 
 /** Biopharma catalysts: FDA decision dates and Phase 3 readouts, with the scout's cards on each stock. */
@@ -59,7 +59,7 @@ export default async function PharmaPage() {
       <section className="card section">
         <h2>FDA decisions</h2>
         <div className="history-note small"><b>What history says:</b> {HISTORY_FDA} The one edge left is in options, which tend to be overpriced before decision dates.</div>
-        <p className="small muted">{upcoming.length} upcoming{withCards ? `, ${withCards} on stocks with a scout card` : ""}. From RTTNews&apos; FDA calendar{fda.updatedAt ? `, read ${fmtEt(fda.updatedAt)}` : ""}; some dates are given only as a month or quarter.{fda.error && !fda.data ? <span className="warn"> Could not read the calendar: {fda.error}</span> : null}</p>
+        <p className="small muted">{upcoming.length} upcoming{withCards ? `, ${withCards} on stocks with a scout card` : ""}. From RTTNews&apos; FDA calendar{fda.updatedAt ? `, read ${fmtEtAgo(fda.updatedAt)}` : ""}; some dates are given only as a month or quarter.{fda.error && !fda.data ? <span className="warn"> Could not read the calendar: {fda.error}</span> : null}</p>
         {[...byMonth.entries()].map(([m, evs]) => (
           <div key={m} style={{ marginTop: 10 }}>
             <h3 style={{ margin: "6px 0" }}>{fmtMonth(m)}</h3>
@@ -87,7 +87,7 @@ export default async function PharmaPage() {
         <details open={readouts.length <= 40}>
           <summary><h2 style={{ display: "inline" }}>Phase 3 trials finishing soon</h2> <span className="small muted">{readouts.length} on US-listed companies</span></summary>
           <div className="history-note small"><b>What history says:</b> {HISTORY_TRIALS}</div>
-          <p className="small muted">Company-sponsored Phase 3 trials whose primary completion (the last main measurement) falls in the next six months, from ClinicalTrials.gov, matched to US tickers by company name. Results usually come weeks to months after this date, and the date itself often slips.{trials.updatedAt ? ` Read ${fmtEt(trials.updatedAt)}.` : ""}{trials.error && !trials.data ? <span className="warn"> {trials.error}</span> : null}</p>
+          <p className="small muted">Company-sponsored Phase 3 trials whose primary completion (the last main measurement) falls in the next six months, from ClinicalTrials.gov, matched to US tickers by company name. Results usually come weeks to months after this date, and the date itself often slips.{trials.updatedAt ? ` Read ${fmtEtAgo(trials.updatedAt)}.` : ""}{trials.error && !trials.data ? <span className="warn"> {trials.error}</span> : null}</p>
           <div className="table-wrap"><table>
             <thead><tr><th>Primary completion</th><th>Company</th><th>Trial</th><th>Scout</th></tr></thead>
             <tbody>{readouts.slice(0, 300).map((t) => {

@@ -3,7 +3,7 @@ import Ticker from "@/components/Ticker";
 import { hasDatabase } from "@/lib/db";
 import { panel } from "@/lib/market/panels";
 import { COT_MARKETS, cotReadings, gammaFor, type CotReading, type GammaProfile } from "@/lib/market/positioning";
-import { fmtEt } from "@/lib/time";
+import { fmtEtAgo } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -48,7 +48,7 @@ export default async function PositioningPage() {
 
       <section className="card section">
         <h2>Futures positioning (CFTC Commitments of Traders)</h2>
-        <p className="small muted">Speculators&apos; net position (leveraged funds for financial futures, managed money for commodities) as a percentile of the last 3 years: 90th or higher is crowded long, 10th or lower crowded short. Published Fridays 3:30 PM ET with positions as of the Tuesday before.{cot.updatedAt ? ` Read ${fmtEt(cot.updatedAt)} ET.` : ""}{cot.error && !cot.data ? <span className="warn"> Could not read the CFTC: {cot.error}</span> : null}</p>
+        <p className="small muted">Speculators&apos; net position (leveraged funds for financial futures, managed money for commodities) as a percentile of the last 3 years: 90th or higher is crowded long, 10th or lower crowded short. Published Fridays 3:30 PM ET with positions as of the Tuesday before.{cot.updatedAt ? ` Read ${fmtEtAgo(cot.updatedAt)}.` : ""}{cot.error && !cot.data ? <span className="warn"> Could not read the CFTC: {cot.error}</span> : null}</p>
         <div className="table-wrap"><table>
           <thead><tr><th>Market</th><th>Who</th><th className="num">Net contracts</th><th className="num">% of open interest</th><th>3-year percentile</th><th className="num">Week change</th><th className="small">As of</th><th className="small">Traded through</th></tr></thead>
           <tbody>{rows.map((r) => {

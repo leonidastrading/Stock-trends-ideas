@@ -6,7 +6,7 @@ import { hasDatabase } from "@/lib/db";
 import { opposingCalls } from "@/lib/scout/calendar";
 import * as store from "@/lib/scout/store";
 import { swingConfigured } from "@/lib/scout/swing";
-import { fmtEt } from "@/lib/time";
+import { fmtEtAgo } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -32,7 +32,7 @@ export default async function FavoritesPage() {
         const tr = t.get(c.id) ?? null;
         return (
           <div key={c.id}>
-            <div className="small muted from-line">Starred {fmtEt(f.addedAt)} ET</div>
+            <div className="small muted from-line">Starred {fmtEtAgo(f.addedAt)}</div>
             <CardView c={c} track={tr} feedback={fb.get(`card:${c.id}`) ?? null} opposing={opp.get(c.id)} review={reviews.get(c.id) ?? null} actions={<CardActions cardId={c.id} canSend={c.status !== "not_promoted"} sent={!!tr?.tappedAt} open={!!tr && !tr.exitDate && !tr.invalidatedAt} swingConfigured={sw} excluded={!!tr?.excluded} />} />
           </div>
         );

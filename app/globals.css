@@ -439,3 +439,6 @@ a.chip { text-decoration: none; }
 .history-note { margin: 6px 0 10px; padding: 8px 10px; border-radius: 6px; border-left: 3px solid var(--warn); background: color-mix(in srgb, var(--warn) 9%, transparent); line-height: 1.45; }
 
 .rumor-drop.over { outline: 2px dashed var(--accent); outline-offset: -4px; }
+
+.news-pager { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 8px 0; }
+.news-pager .chip:disabled { opacity: 0.45; cursor: default; }

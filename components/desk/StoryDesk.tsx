@@ -2,7 +2,7 @@ import Direction from "@/components/Direction";
 import Feedback from "@/components/Feedback";
 import Pager, { paginate } from "@/components/Pager";
 import type { Feedback as FeedbackRow } from "@/lib/scout/store";
-import { fmtEt } from "@/lib/time";
+import { fmtEtAgo } from "@/lib/time";
 
 interface StoriesDetail { headlinesRead: number; detected: Array<{ key: string; symbols: string[]; stories: number; mainstream: number; shockHits: number; stage?: number | null; escalation?: string[]; building?: boolean; coverage?: string | null; staleness?: number | null; latest?: string; sample: string[]; samples?: Array<{ at: string; headline: string }> }>; triage: Array<{ key: string; summary: string; skipped: string | null; labels?: { novelty: string; nature: string; complexity: string }; trades: Array<{ ticker: string; direction: string; role: string; play?: string; horizon_days: number }>; attention?: string[] }>; researched: Array<{ term: string; outcome: string; reason?: string; cardId?: number }>; error: string | null }
 interface GapRow { key: string; ticker: string; storyDate: string; ageDays: number; gap: boolean; loud: boolean; building?: boolean; quiet: boolean; why: string }
@@ -23,7 +23,7 @@ export default function StoryDesk({ runs, fb, params, spage }: { runs: Run[]; fb
     <>
       {d && (
         <details className="card section" id="scan">
-          <summary><h2>Story desk · last scan {last ? fmtEt(last.startedAt) : ""} · {d.headlinesRead} headlines read</h2> <span className="small muted">{detected.length} stories</span></summary>
+          <summary><h2>Story desk · last scan {last ? fmtEtAgo(last.startedAt) : ""} · {d.headlinesRead} headlines read</h2> <span className="small muted">{detected.length} stories</span></summary>
           <p className="small muted" style={{ marginTop: -4 }}>Freshest story first; headlines newest first.</p>
           {d.error && <p className="small warn">{d.error}</p>}
           {d.detected.length === 0 && !d.error && <p className="small muted">No story stood out in the last 24 hours.</p>}
@@ -31,9 +31,9 @@ export default function StoryDesk({ runs, fb, params, spage }: { runs: Run[]; fb
             const tr = d.triage.find((x) => x.key === s.key);
             return (
               <div key={s.key} style={{ borderTop: "1px solid var(--grid)", padding: "8px 0" }}>
-                <b>{s.key}</b> {s.stage ? <span className="tag late" title={`institutions acting: ${(s.escalation ?? []).join(", ")}`}>stage {s.stage}</span> : null} {s.building ? <span className="tag late">building</span> : null} {s.latest ? <span className="small">latest {fmtEt(s.latest)}</span> : null} <span className="small muted">{s.stories} headlines · {s.mainstream} mainstream · {s.shockHits} event words{s.symbols.length > 1 ? ` · ${s.symbols.join(", ")}` : ""}</span>
+                <b>{s.key}</b> {s.stage ? <span className="tag late" title={`institutions acting: ${(s.escalation ?? []).join(", ")}`}>stage {s.stage}</span> : null} {s.building ? <span className="tag late">building</span> : null} {s.latest ? <span className="small">latest {fmtEtAgo(s.latest)}</span> : null} <span className="small muted">{s.stories} headlines · {s.mainstream} mainstream · {s.shockHits} event words{s.symbols.length > 1 ? ` · ${s.symbols.join(", ")}` : ""}</span>
                 {s.samples ? (
-                  <ul className="small secondary" style={{ margin: "4px 0", paddingLeft: 18 }}>{s.samples.map((h) => <li key={h.at + h.headline}><span className="muted">{fmtEt(h.at)}</span> {h.headline}</li>)}</ul>
+                  <ul className="small secondary" style={{ margin: "4px 0", paddingLeft: 18 }}>{s.samples.map((h) => <li key={h.at + h.headline}><span className="muted">{fmtEtAgo(h.at)}</span> {h.headline}</li>)}</ul>
                 ) : <div className="small secondary">{s.sample.join(" · ")}</div>}
                 {s.coverage && <div className="small muted">{s.coverage}{s.staleness !== undefined && s.staleness !== null ? ` · staleness ${s.staleness.toFixed(2)}${s.staleness >= 0.45 ? " (mostly re-reported)" : ""}` : ""}</div>}
                 {tr?.labels && <div className="inline" style={{ marginTop: 4 }}><span className={`tag ${tr.labels.novelty === "stale" ? "late" : "ok"}`}>{tr.labels.novelty}</span><span className="tag">{tr.labels.nature}</span><span className="tag">{tr.labels.complexity}</span></div>}
@@ -48,7 +48,7 @@ export default function StoryDesk({ runs, fb, params, spage }: { runs: Run[]; fb
       )}
       {fu && (
         <details className="card section">
-          <summary><h2>Story desk · reaction gaps, checked {daily ? fmtEt(daily.startedAt) : ""}</h2> <span className="small muted">{fu.checked.length} checked · {fu.checked.filter((g) => g.gap).length} gap(s)</span></summary>
+          <summary><h2>Story desk · reaction gaps, checked {daily ? fmtEtAgo(daily.startedAt) : ""}</h2> <span className="small muted">{fu.checked.length} checked · {fu.checked.filter((g) => g.gap).length} gap(s)</span></summary>
           <p className="small secondary" style={{ marginTop: -4 }}>Stories seen 1–10 days ago, looked at again once a day: still loud in the news (recent stories a day at least twice the pre-story pace) or still growing day after day, while the stock has moved less than 5% against SPY. A gap goes back to the desk as a follow-up, once per story.</p>
           {fu.error && <p className="small warn">{fu.error}</p>}
           {fu.checked.length === 0 && !fu.error && <p className="small muted">No recent stories to check yet.</p>}

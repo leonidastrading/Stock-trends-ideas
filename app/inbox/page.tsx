@@ -6,7 +6,7 @@ import { trackRecord } from "@/lib/scout/inbox-record";
 import { botPrompt, INBOX_EXAMPLE, INBOX_FIELDS } from "@/lib/scout/inbox-spec";
 import * as store from "@/lib/scout/store";
 import { DIGEST_DAYS, itemMeta, label, rank, shortSource, type Digest } from "@/lib/scout/inbox-digest";
-import { etLabel, fmtEt, toEt } from "@/lib/time";
+import { etLabelAgo, fmtEtAgo, toEt } from "@/lib/time";
 import ImportForm from "../notice/ImportForm";
 import CopyBox from "./CopyBox";
 import RefreshDigest from "./RefreshDigest";
@@ -61,7 +61,7 @@ export default async function InboxPage() {
     <>
       <h1>Inbox</h1>
       <div className="panel-head" style={{ margin: "0 0 8px" }}>
-        <span className="small secondary">{digest ? <details className="digest-docs"><summary>Summary of {digest.docs.length} document{digest.docs.length === 1 ? "" : "s"} from the last {DIGEST_DAYS} days · written {fmtEt(digest.createdAt)}</summary>{digest.docs.map((d) => <div key={d}>{shortSource(d)} <span className="muted">· {received.get(d) ? `received ${etLabel(received.get(d)!)}` : d.slice(0, 10)}</span></div>)}</details> : files.length ? "Writing the first summary of your documents… refresh in a minute." : "The summary appears after the first documents arrive."}</span>
+        <span className="small secondary">{digest ? <details className="digest-docs"><summary>Summary of {digest.docs.length} document{digest.docs.length === 1 ? "" : "s"} from the last {DIGEST_DAYS} days · written {fmtEtAgo(digest.createdAt)}</summary>{digest.docs.map((d) => <div key={d}>{shortSource(d)} <span className="muted">· {received.get(d) ? `received ${etLabelAgo(received.get(d)!)}` : d.slice(0, 10)}</span></div>)}</details> : files.length ? "Writing the first summary of your documents… refresh in a minute." : "The summary appears after the first documents arrive."}</span>
         <RefreshDigest />
       </div>
       {digest && (
@@ -117,14 +117,14 @@ export default async function InboxPage() {
           <tbody>
             {rows.map((r) => (
               <tr key={`${r.receivedAt}${r.label}`}>
-                <td className="small">{fmtEt(r.receivedAt)}</td>
+                <td className="small">{fmtEtAgo(r.receivedAt)}</td>
                 <td className="small"><b>{r.label}</b><div className="muted">{r.how === "github" ? r.file : "pasted on the page or posted to the import"}</div></td>
                 <td className="small">{r.error ? <span className="neg">{r.error}</span> : r.read}</td>
                 <td className="num">{r.ideas ?? "—"}</td>
                 <td className="small">
                   {r.outcomes.length ? (
                     <details>
-                      <summary>{summary(r.outcomes)}{r.researchedAt ? ` · done ${fmtEt(r.researchedAt)}` : ""}</summary>
+                      <summary>{summary(r.outcomes)}{r.researchedAt ? ` · done ${fmtEtAgo(r.researchedAt)}` : ""}</summary>
                       <ul style={{ margin: "6px 0", paddingLeft: 18 }}>
                         {r.outcomes.map((o, i) => {
                           const c = o.cardId ? cardById.get(o.cardId) : undefined;
