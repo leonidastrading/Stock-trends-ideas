@@ -23,7 +23,8 @@ const writeSeen = (s: Record<string, string>) => { try { localStorage.setItem(KE
 export default function NavBar() {
   const path = usePathname();
   const [counts, setCounts] = useState<Record<string, number>>({});
-  const current = TAB_OF[path] ?? LINKS.find((l) => l.href !== "/" && path.startsWith(l.href))?.badge ?? null;
+  const active = TAB_OF[path] ? LINKS.find((l) => l.badge === TAB_OF[path])?.href : path === "/" ? "/" : LINKS.find((l) => l.href !== "/" && path.startsWith(l.href))?.href;
+  const current = TAB_OF[path] ?? LINKS.find((l) => l.href === active)?.badge ?? null;
 
   const poll = useCallback(async () => {
     const seen = readSeen();
@@ -55,7 +56,7 @@ export default function NavBar() {
       {LINKS.map((l) => {
         const c = l.badge && l.badge !== current ? counts[l.badge] ?? 0 : 0;
         return (
-          <Link key={l.href} href={l.href} className="nav-link">
+          <Link key={l.href} href={l.href} className={`nav-link${l.href === active ? " active" : ""}`} aria-current={l.href === active ? "page" : undefined}>
             {l.label}
             {c > 0 && <span className="nav-badge" title={`${c >= 100 ? "100+" : c} new since you last looked`}>{c >= 100 ? "99+" : c}</span>}
           </Link>

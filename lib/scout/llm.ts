@@ -62,7 +62,8 @@ export const callResearchModel: CallModel = async ({ model, effort, user, purpos
     max_tokens: 16000,
     system: [{ type: "text" as const, text: system, cache_control: { type: "ephemeral" as const } }],
     // Images (base64) go before the text, as the API recommends.
-    messages: [{ role: "user" as const, content: images?.length ? [...images.map((im) => ({ type: "image" as const, source: { type: "base64" as const, media_type: im.mediaType as "image/jpeg", data: im.data } })), { type: "text" as const, text: user }] : user }],
+    // A PDF (a scanned one, with no text layer) goes as a document block.
+    messages: [{ role: "user" as const, content: images?.length ? [...images.map((im) => im.mediaType === "application/pdf" ? ({ type: "document" as const, source: { type: "base64" as const, media_type: "application/pdf" as const, data: im.data } }) : ({ type: "image" as const, source: { type: "base64" as const, media_type: im.mediaType as "image/jpeg", data: im.data } })), { type: "text" as const, text: user }] : user }],
     output_config: { effort, format: { type: "json_schema" as const, schema } },
   };
   let resp: Anthropic.Beta.BetaMessage;

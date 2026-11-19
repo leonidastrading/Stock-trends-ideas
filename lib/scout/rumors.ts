@@ -178,6 +178,18 @@ export function mainstreamFor(r: Pick<RumorItem, "claim" | "tickers">, news: New
 
 export interface RumorDocResult { docId: number; rumors: number; error: string | null }
 
+/** One uploaded piece as readable text: a JSON dump as its posts, a saved web page as its text. */
+export async function partText(text: string): Promise<string> {
+  if (/^\s*[[{]/.test(text)) text = jsonToText(text) ?? text;
+  if (/^\s*<(!doctype|html|head|body)\b/i.test(text) || (text.match(/<\/(div|p|span|a)>/gi)?.length ?? 0) > 50) text = (await import("../sources/site")).htmlText(text);
+  return text;
+}
+
+/** Pure: what an image or scanned page shows, as text for the rumor reader. */
+export function imageAsText(r: { kind: string; what_it_shows: string; text_in_image: string; tickers: string[]; date_shown: string }): string {
+  return [`[${r.kind}${r.date_shown ? `, dated ${r.date_shown}` : ""}] ${r.what_it_shows}`, r.text_in_image ? `Text in it: ${r.text_in_image}` : "", r.tickers.length ? `Tickers shown: ${r.tickers.join(", ")}` : ""].filter(Boolean).join("\n");
+}
+
 /** Read one document: extract rumors (one model call per 90k characters, up to 3), check them against the news, store them. */
 export async function readRumorDoc(text: string, source: string, deps: ResearchDeps & { data: MarketData | null }, path: string | null = null): Promise<RumorDocResult> {
   const settings = await store.loadSettings();
