@@ -134,7 +134,8 @@ export default function StockChart({ symbol, tvSymbol, height = 680, entry }: { 
         s.setData(a === b ? [{ time: a, value }] : [{ time: a, value }, { time: b, value }]);
       };
       // The scout's call: an arrow on the day and a dashed line at the price, labelled on the price axis.
-      const entryPrice = entry?.date ? entry.price ?? bars.find((b) => b[0] >= keyOf(entry.date!))?.[4] ?? null : null;
+      // A pending entry: the open of the session it enters at (no price until that session has opened).
+      const entryPrice = entry?.date ? entry.price ?? bars.find((b) => b[0] >= keyOf(entry.date!))?.[1] ?? null : null;
       if (entry?.date && entryPrice) {
         const long = entry.direction === "long";
         const label = entry.label ?? "scout entry";

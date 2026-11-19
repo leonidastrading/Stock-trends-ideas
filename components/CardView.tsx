@@ -16,7 +16,7 @@ import { hasDatabase } from "@/lib/db";
 import { namesMatch, notCommon } from "@/lib/scout/identity";
 import * as store from "@/lib/scout/store";
 import type { Feedback as FeedbackRow, StoredCard, StoredReview, Track } from "@/lib/scout/store";
-import { daysBetween, fmtEt, toEt } from "@/lib/time";
+import { addDays, daysBetween, fmtEt, toEt } from "@/lib/time";
 import { paperResult } from "@/lib/scout/paper-result";
 import { fallbackThesis } from "@/lib/scout/thesis";
 
@@ -43,6 +43,9 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
     else after(() => lookup);
   }
   const q = await quote(c.primaryTicker);
+  // Where the paper entry will be: the same day's open for a card written before 9:30 AM ET, else the next session's.
+  const cardDay = toEt(new Date(c.createdAt)).date;
+  const pendingEntryDay = (await import("@/lib/scout/tracking")).beforeOpen(cardDay, c.createdAt) ? cardDay : addDays(cardDay, 1);
   const briefs = hasDatabase() ? await recentBriefs() : [];
   const starred = hasDatabase() ? (await favoriteIds()).has(c.id) : false;
   const thesis = (hasDatabase() ? (await allTheses()).get(c.id) : undefined) ?? fallbackThesis(c);
@@ -136,7 +139,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
       </div>
       <div className="card-chart">
         <div className="small muted card-chart-head"><span>{c.primaryTicker} · chart</span><a href={chartUrl(c.primaryTicker)} target="_blank" rel="noreferrer">Open full chart →</a></div>
-        <StockChart symbol={c.primaryTicker} tvSymbol={tvSymbol(c.primaryTicker, info?.exchange)} entry={track?.entryDate && track.entryPrice ? { date: track.entryDate, price: track.entryPrice, direction: track.direction, exitDate: track.exitDate, exitPrice: track.exitPrice, label: "scout entry", cardId: c.id } : { date: toEt(new Date(c.createdAt)).date, price: null, direction: c.direction, label: track ? "card written (entry next open)" : "card written", cardId: c.id }} />
+        <StockChart symbol={c.primaryTicker} tvSymbol={tvSymbol(c.primaryTicker, info?.exchange)} entry={track?.entryDate && track.entryPrice ? { date: track.entryDate, price: track.entryPrice, direction: track.direction, exitDate: track.exitDate, exitPrice: track.exitPrice, label: "scout entry", cardId: c.id } : { date: pendingEntryDay, price: null, direction: c.direction, label: "entry at the next open", cardId: c.id }} />
       </div>
       <div className="actions">{actions}<CardAsk cardId={c.id} symbol={c.primaryTicker} tickers={k.tickers.map((t) => t.symbol)} /></div>
       <Feedback target={`card:${c.id}`} initial={feedback ? { vote: feedback.vote, note: feedback.note } : null} />

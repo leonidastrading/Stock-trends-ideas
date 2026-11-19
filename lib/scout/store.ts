@@ -245,6 +245,8 @@ export interface Track {
   /** Set when the invalidation was marked met (by Vadim or the automatic watch): when, and the note. */
   invalidatedAt?: string | null;
   invalidatedNote?: string | null;
+  /** When the card was written (decides whether it enters the same day's open or the next one). */
+  cardAt?: string | null;
 }
 
 const toTrack = (r: Row): Track => ({
@@ -252,11 +254,13 @@ const toTrack = (r: Row): Track => ({
   deadlineDate: dstr(r.deadline_date)!, exitDate: dstr(r.exit_date), exitPrice: num(r.exit_price), spyExit: num(r.spy_exit), sectorExit: num(r.sector_exit), exitReason: r.exit_reason, maxDrawdownPct: num(r.max_drawdown_pct), tappedAt: iso(r.tapped_at), swingResponse: r.swing_response,
   excluded: r.excluded ?? null,
   invalidatedAt: iso(r.invalidated_at) ?? null, invalidatedNote: r.invalidated_detail ?? null,
+  cardAt: iso(r.card_at) ?? null,
 });
 
 const TRACK_SELECT = `SELECT t.*, (SELECT e.detail FROM track_events e WHERE e.card_id = t.card_id AND e.kind = 'excluded' ORDER BY e.id LIMIT 1) AS excluded,
   (SELECT e.at FROM track_events e WHERE e.card_id = t.card_id AND e.kind = 'invalidated' ORDER BY e.id LIMIT 1) AS invalidated_at,
-  (SELECT e.detail FROM track_events e WHERE e.card_id = t.card_id AND e.kind = 'invalidated' ORDER BY e.id LIMIT 1) AS invalidated_detail FROM tracks t`;
+  (SELECT e.detail FROM track_events e WHERE e.card_id = t.card_id AND e.kind = 'invalidated' ORDER BY e.id LIMIT 1) AS invalidated_detail,
+  (SELECT c.created_at FROM cards c WHERE c.id = t.card_id) AS card_at FROM tracks t`;
 
 export async function insertTrack(t: { cardId: number; symbol: string; sectorEtf: string; direction: "long" | "short"; cardDate: string; deadlineDate: string }): Promise<void> {
   await q(`INSERT INTO tracks (card_id, symbol, sector_etf, direction, card_date, deadline_date) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (card_id) DO NOTHING`, [t.cardId, t.symbol, t.sectorEtf, t.direction, t.cardDate, t.deadlineDate]);

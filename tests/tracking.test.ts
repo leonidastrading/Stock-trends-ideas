@@ -34,3 +34,15 @@ describe("paper tracking", () => {
     expect(s).not.toContain("AAPL");
   });
 });
+
+describe("entry at the next open after the card", () => {
+  it("a card written before 9:30 AM ET enters that day's open; later, or on a weekend, the next session's", async () => {
+    const { beforeOpen, entryBar } = await import("@/lib/scout/tracking");
+    const bars = ["2026-11-18", "2026-11-19", "2026-11-20", "2026-11-23"].map((date, i) => ({ symbol: "HUM", date, o: 441.44 - i, h: 0, l: 0, c: 0, v: 0 }));
+    expect(beforeOpen("2026-11-18", "2026-11-18T11:00:00Z")).toBe(true);  // 6:00 AM ET
+    expect(entryBar(bars, "2026-11-18", "2026-11-18T11:00:00Z")?.date).toBe("2026-11-18");
+    expect(entryBar(bars, "2026-11-18", "2026-11-18T14:31:00Z")?.date).toBe("2026-11-19"); // 9:31 AM ET: next session
+    expect(entryBar(bars, "2026-11-21", "2026-11-21T13:00:00Z")?.date).toBe("2026-11-23"); // Saturday
+    expect(entryBar(bars, "2026-11-18", null)?.date).toBe("2026-11-19");
+  });
+});

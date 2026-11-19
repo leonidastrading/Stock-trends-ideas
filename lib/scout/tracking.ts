@@ -1,5 +1,6 @@
 /**
- * Paper tracking. Entry is the open of the first session after the card.
+ * Paper tracking. Entry is the next open after the card is written: the same day's open for a card written before
+ * 9:30 AM ET on a trading day, otherwise the next session's.
  * Exit is the open of the first session at or after the earlier of: the day
  * after the catalyst, the time limit, or the day after Vadim marked the
  * invalidation. Nothing here talks to a broker. Pure helpers are exported.
@@ -29,6 +30,17 @@ export const firstBarAfter = (bars: DailyBarRow[] | undefined, date: string) => 
 /** First bar at or after `date`. */
 export const firstBarFrom = (bars: DailyBarRow[] | undefined, date: string) => bars?.find((b) => b.date >= date);
 export const barOn = (bars: DailyBarRow[] | undefined, date: string) => bars?.find((b) => b.date === date);
+
+/** Pure: is the card written before that day's 9:30 AM ET open? */
+export function beforeOpen(cardDate: string, cardAt: string | null | undefined): boolean {
+  if (!cardAt) return false;
+  const e = toEt(new Date(cardAt));
+  return e.date === cardDate && e.minutes < 9 * 60 + 30;
+}
+
+/** Pure: the session a card enters at: the next open after it was written. */
+export const entryBar = (bars: DailyBarRow[] | undefined, cardDate: string, cardAt: string | null | undefined) =>
+  beforeOpen(cardDate, cardAt) ? firstBarFrom(bars, cardDate) : firstBarAfter(bars, cardDate);
 
 export const signedReturn = (direction: "long" | "short", entry: number, exit: number) => (direction === "long" ? 1 : -1) * (exit / entry - 1);
 
@@ -113,7 +125,7 @@ export async function updateTracks(data: MarketData, now: Date): Promise<TrackRe
   for (const t of open) {
     let track = t;
     if (!track.entryDate) {
-      const bar = firstBarAfter(bars.get(t.symbol), t.cardDate);
+      const bar = entryBar(bars.get(t.symbol), t.cardDate, t.cardAt);
       if (!bar) continue;
       const e = { entryDate: bar.date, entryPrice: bar.o, spyEntry: barOn(bars.get("SPY"), bar.date)?.o ?? null, sectorEntry: barOn(bars.get(t.sectorEtf), bar.date)?.o ?? null };
       await store.setEntry(t.cardId, e);
