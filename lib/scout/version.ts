@@ -8,9 +8,10 @@ import { TRIAGE_JSON_SCHEMA, TRIAGE_SYSTEM_PROMPT } from "./discovery";
 import { STORY_JSON_SCHEMA, STORY_SYSTEM_PROMPT } from "./stories";
 import { INBOX_JSON_SCHEMA, INBOX_SYSTEM_PROMPT } from "./inbox";
 import { SYSTEM_PROMPT } from "./prompt";
+import { KNOWN_REVISION } from "./known";
 
 export function versionSpec(model: string, effort: string) {
-  return { model, effort, systemPrompt: SYSTEM_PROMPT, replySchema: CARD_JSON_SCHEMA, triagePrompt: TRIAGE_SYSTEM_PROMPT, triageSchema: TRIAGE_JSON_SCHEMA, storyPrompt: STORY_SYSTEM_PROMPT, storySchema: STORY_JSON_SCHEMA, inboxPrompt: INBOX_SYSTEM_PROMPT, inboxSchema: INBOX_JSON_SCHEMA, rules: SCOUT, sources: SOURCE_IDS, sourceRevisions: SOURCE_REVISIONS, sectors: SECTORS, universe: UNIVERSE };
+  return { model, effort, systemPrompt: SYSTEM_PROMPT, replySchema: CARD_JSON_SCHEMA, triagePrompt: TRIAGE_SYSTEM_PROMPT, triageSchema: TRIAGE_JSON_SCHEMA, storyPrompt: STORY_SYSTEM_PROMPT, storySchema: STORY_JSON_SCHEMA, inboxPrompt: INBOX_SYSTEM_PROMPT, inboxSchema: INBOX_JSON_SCHEMA, rules: SCOUT, sources: SOURCE_IDS, sourceRevisions: SOURCE_REVISIONS, sectors: SECTORS, universe: UNIVERSE, known: KNOWN_REVISION };
 }
 
 export function versionHash(spec: unknown): string {

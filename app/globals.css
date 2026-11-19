@@ -28,9 +28,9 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--surface-0); color: var(--text-primary); font: 14px/1.45 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
 a { color: var(--accent); }
-/* Desktop: the page is about two thirds of the screen, centred (never narrower than ~1060 px); phones and small windows use the full width. */
+/* Desktop: the page is a centred column, a bit under two thirds of the window (700-1160 px); phones and small windows use the full width. */
 :root { --page-w: 100%; }
-@media (min-width: 900px) { :root { --page-w: max(720px, 67vw); } }
+@media (min-width: 900px) { :root { --page-w: min(1160px, max(700px, 58vw)); } }
 /* Nothing inside the page may push it wider than the page width (wide tables scroll inside their box). */
 main > * { max-width: 100%; }
 .theme, .card { min-width: 0; overflow-wrap: anywhere; }

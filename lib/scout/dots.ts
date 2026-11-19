@@ -173,11 +173,12 @@ export async function gatherScan(now: Date, fetchImpl?: typeof fetch): Promise<S
   // All the lens searches at once (the shared rate limit spaces them out).
   const byLens: Record<string, Headline[]> = Object.fromEntries(await Promise.all(Object.entries(LENSES).map(async ([lens, terms]) => [lens, (await Promise.all(terms.map((t) => googleNews(t, fetchImpl)))).flat()] as const)));
   const today = toEt(now).date;
-  const [fast, disc, rumors, stories] = await Promise.all([
+  const [fast, disc, rumors, stories, work] = await Promise.all([
     import("../sources/wires").then(({ fastNews }) => fastNews(process.env, fetchImpl, now)).catch(() => []),
     import("../sources/discovery").then(({ discoverySignals }) => discoverySignals(now, fetchImpl)).catch(() => ({ signals: [], failed: ["all"] })),
     import("./rumors").then(({ rumorsSince }) => rumorsSince(7, 60)).catch(() => []),
     store.storyEventsSince(addDays(today, -7)).catch(() => []),
+    import("./known").then(({ recentWork }) => recentWork(now)).catch(() => null),
   ]);
   byLens["world and wire news"] = fast.slice(0, 60).map((n) => ({ at: n.ts, source: n.source ?? "wire", headline: n.headline, url: n.url ?? "" }));
   const feed = (f: string) => disc.signals.filter((x) => x.feed === f).map((x) => x.text);
@@ -188,6 +189,8 @@ export async function gatherScan(now: Date, fetchImpl?: typeof fetch): Promise<S
     { heading: "Hacker News front page", items: feed("hacker_news").slice(0, 25) },
     { heading: "rumors logged this week (unverified)", items: rumors.slice(0, 30).map((r) => r.claim.slice(0, 200)) },
     { heading: "stories the story desk followed this week", items: [...new Map(stories.map((e) => [e.key, e])).values()].slice(-25).map((e) => `${e.symbols.join("/")}: ${e.summary.slice(0, 200)}`) },
+    { heading: "the user's own investigations (follow-the-money reports from public records)", items: (work?.investigations ?? []).slice(0, 10).map((l) => l.slice(0, 260)) },
+    { heading: "new lawsuits (securities class actions, ITC patent cases)", items: (work?.court ?? []).slice(0, 20) },
   ]);
 }
 
