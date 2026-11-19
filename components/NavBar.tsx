@@ -60,7 +60,7 @@ export default function NavBar() {
 
   return (
     <nav>
-      <span className="brand">Trend scout</span>
+      <Link href="/" className="brand" aria-label="Scout home"><img src="/icon.svg" alt="" width={22} height={22} className="brand-logo" /> Scout</Link>
       {stale && <button type="button" className="chip nav-update" onClick={() => window.location.reload()} title="The site was updated since this page was opened">Updated · reload</button>}
       {LINKS.map((l) => {
         const c = l.badge && l.badge !== current ? counts[l.badge] ?? 0 : 0;
