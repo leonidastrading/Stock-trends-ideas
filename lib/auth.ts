@@ -23,8 +23,10 @@ export function checkBasicAuth(header: string | null, env: Record<string, string
 
 /** Vercel cron sends "Authorization: Bearer $CRON_SECRET". */
 export function checkCronSecret(header: string | null, env: Record<string, string | undefined> = process.env): boolean {
-  const secret = env.CRON_SECRET;
-  return !!secret && !!header && safeEqual(header, `Bearer ${secret}`);
+  // Tolerant of a stray space or line break pasted around the secret (in Vercel or the scheduler) and of "bearer".
+  const secret = env.CRON_SECRET?.trim();
+  const got = header?.trim().replace(/^bearer\s+/i, "").trim();
+  return !!secret && !!got && safeEqual(got, secret);
 }
 
 /**
