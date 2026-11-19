@@ -9,7 +9,7 @@ interface BarsReply { symbol: string; bars: Bar[]; raw?: Array<[string, number, 
  * The scout's call on this chart: the paper entry when the trade is open, otherwise the day the card (or theme) was
  * written, priced at that day's close when no price is given.
  */
-export interface ChartEntry { date: string | null; price: number | null; direction: "long" | "short"; exitBy?: string | null; exitDate?: string | null; exitPrice?: number | null; label?: string }
+export interface ChartEntry { date: string | null; price: number | null; direction: "long" | "short"; exitBy?: string | null; exitDate?: string | null; exitPrice?: number | null; label?: string; cardId?: number }
 
 const RANGES = [["1M", 31], ["3M", 92], ["6M", 183], ["YTD", 0], ["1Y", 365], ["2Y", 730], ["All", -1]] as const;
 type Range = (typeof RANGES)[number][0];
@@ -138,11 +138,13 @@ export default function StockChart({ symbol, tvSymbol, height = 680, entry }: { 
       if (entry?.date && entryPrice) {
         const long = entry.direction === "long";
         const label = entry.label ?? "scout entry";
-        marks.push({ time: keyOf(entry.date), position: long ? "belowBar" : "aboveBar", color: accent, shape: long ? "arrowUp" : "arrowDown", text: `${long ? "▲" : "▼"} ${label} $${entryPrice.toFixed(2)}` });
-        candles.createPriceLine({ price: entryPrice, color: accent, lineWidth: 2, lineStyle: lib.LineStyle.Dashed, axisLabelVisible: true, title: `${label} ${long ? "long" : "short"}` });
+        // Just the card number and price: longs under the bar, shorts above it; the axis shows the price alone.
+        void label;
+        marks.push({ time: keyOf(entry.date), position: long ? "belowBar" : "aboveBar", color: accent, shape: long ? "arrowUp" : "arrowDown", text: `${entry.cardId ? `#${entry.cardId} ` : ""}$${entryPrice.toFixed(2)}` });
+        candles.createPriceLine({ price: entryPrice, color: accent, lineWidth: 2, lineStyle: lib.LineStyle.Dashed, axisLabelVisible: true, title: "" });
         if (entry.exitDate) {
-          marks.push({ time: keyOf(entry.exitDate), position: long ? "aboveBar" : "belowBar", color: accent, shape: "square", text: `exit${entry.exitPrice ? ` $${entry.exitPrice.toFixed(2)}` : ""}` });
-          if (entry.exitPrice) candles.createPriceLine({ price: entry.exitPrice, color: muted, lineWidth: 1, lineStyle: lib.LineStyle.Dotted, axisLabelVisible: true, title: "exit" });
+          marks.push({ time: keyOf(entry.exitDate), position: long ? "aboveBar" : "belowBar", color: accent, shape: "square", text: entry.exitPrice ? `$${entry.exitPrice.toFixed(2)}` : "" });
+          if (entry.exitPrice) candles.createPriceLine({ price: entry.exitPrice, color: muted, lineWidth: 1, lineStyle: lib.LineStyle.Dotted, axisLabelVisible: true, title: "" });
         }
       }
       // The crash-and-bounce short setup (daily bars only): peak, first low, the 50% level, and the trade once it starts.
@@ -210,8 +212,9 @@ export default function StockChart({ symbol, tvSymbol, height = 680, entry }: { 
         const b = d ? byDay.get(d) : bars[bars.length - 1];
         if (!b) return d && res.next && keyOf(res.next) === d ? `${fmtDay(res.next)}: next earnings (estimated)` : "";
         const prev = bars[bars.indexOf(b) - 1];
-        const chg = prev ? ((b[4] / prev[4] - 1) * 100).toFixed(1) : null;
-        return `${prefs.weekly ? "Week of " : ""}${fmtDay(b[0])}  O ${b[1].toFixed(2)}  H ${b[2].toFixed(2)}  L ${b[3].toFixed(2)}  C ${b[4].toFixed(2)}${chg ? ` (${Number(chg) >= 0 ? "+" : ""}${chg}%)` : ""}${earnWeeks.has(b[0]) ? "  · earnings" : ""}`;
+        const pct = prev ? Math.round((b[4] / prev[4] - 1) * 1000) / 10 : null;
+        const chg = pct === null ? null : pct === 0 ? "0.0" : `${pct > 0 ? "+" : "−"}${Math.abs(pct).toFixed(1)}`;
+        return `${prefs.weekly ? "Week of " : ""}${fmtDay(b[0])}  O ${b[1].toFixed(2)}  H ${b[2].toFixed(2)}  L ${b[3].toFixed(2)}  C ${b[4].toFixed(2)}${chg ? ` (${chg}%)` : ""}${earnWeeks.has(b[0]) ? "  · earnings" : ""}`;
       };
       setState({ legend: legendFor(null) });
       const dayOf = (t: unknown): string | null => {
@@ -255,7 +258,7 @@ export default function StockChart({ symbol, tvSymbol, height = 680, entry }: { 
           <div className="small muted chart-foot">
             <span className="key-earn" /> earnings (SEC 8-K)
             {res?.next ? <><span className="key-next" /> next report about {fmtDay(res.next)} (estimated)</> : null}
-            {entry?.date ? <><span className="key-entry" /> {entry.label ?? "scout entry"}{entry.price ? ` $${entry.price.toFixed(2)}` : ""}</> : null}
+            {entry?.date ? <><span className="key-entry" /> {entry.cardId ? `card #${entry.cardId} ` : ""}{entry.label ?? "scout entry"}</> : null}
             {res?.feed === "iex" ? <span className="warn"> · prices from IEX only (whole-market data unavailable)</span> : null}
           </div>
           {prefs.setup && setups.length > 0 && (

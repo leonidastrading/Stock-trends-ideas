@@ -136,7 +136,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
       </div>
       <div className="card-chart">
         <div className="small muted card-chart-head"><span>{c.primaryTicker} · chart</span><a href={chartUrl(c.primaryTicker)} target="_blank" rel="noreferrer">Open full chart →</a></div>
-        <StockChart symbol={c.primaryTicker} tvSymbol={tvSymbol(c.primaryTicker, info?.exchange)} entry={track?.entryDate && track.entryPrice ? { date: track.entryDate, price: track.entryPrice, direction: track.direction, exitDate: track.exitDate, exitPrice: track.exitPrice, label: "scout entry" } : { date: toEt(new Date(c.createdAt)).date, price: null, direction: c.direction, label: track ? "card written (entry next open)" : "card written" }} />
+        <StockChart symbol={c.primaryTicker} tvSymbol={tvSymbol(c.primaryTicker, info?.exchange)} entry={track?.entryDate && track.entryPrice ? { date: track.entryDate, price: track.entryPrice, direction: track.direction, exitDate: track.exitDate, exitPrice: track.exitPrice, label: "scout entry", cardId: c.id } : { date: toEt(new Date(c.createdAt)).date, price: null, direction: c.direction, label: track ? "card written (entry next open)" : "card written", cardId: c.id }} />
       </div>
       <div className="actions">{actions}<CardAsk cardId={c.id} symbol={c.primaryTicker} tickers={k.tickers.map((t) => t.symbol)} /></div>
       <Feedback target={`card:${c.id}`} initial={feedback ? { vote: feedback.vote, note: feedback.note } : null} />
