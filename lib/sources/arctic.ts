@@ -82,12 +82,14 @@ export async function ingestReddit(deadline = Date.now() + 25_000, fetchImpl: ty
           out.push(`${sub} +${added}`);
           if (posts.length < 100) break;
         }
-        // One page further back, until 35 days are covered.
+        // One page further back, in a 2-day window (a 35-day range times out on the archive), until 35 days are covered.
         if (s.oldest > floor && Date.now() < deadline) {
-          const older = await page(sub, { before: String(s.oldest), after: String(floor), sort: "desc" }, fetchImpl);
+          const from = Math.max(floor, s.oldest - 2 * 86400);
+          const older = await page(sub, { before: String(s.oldest), after: String(from), sort: "desc" }, fetchImpl);
           await sleep(ARCTIC.gapMs);
-          if (older.length) { await save(older); s.oldest = Math.min(s.oldest, ...older.map((p) => p.created_utc)); }
-          else s.oldest = floor;
+          if (older.length) await save(older);
+          // A full page: more in this window, go on from its oldest post; otherwise the window is done.
+          s.oldest = older.length >= 100 ? Math.min(s.oldest, ...older.map((p) => p.created_utc)) : from;
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
