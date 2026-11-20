@@ -27,7 +27,16 @@ export async function GET(request: Request) {
   }
   const params = new URL(request.url).searchParams;
   // Anything the daily AI budget turned away is worked through once it resets (a no-op when nothing waits).
-  background(() => import("@/lib/scout/catchup").then(({ catchUp }) => catchUp(200_000)));
+  background(async () => {
+    // Reddit first (new posts, a little backfill), then once a day yesterday's rumor subreddits, then the catch-up queue.
+    const { ingestReddit, readRedditRumors } = await import("@/lib/sources/arctic");
+    await ingestReddit(Date.now() + 40_000).catch((err) => console.error(`reddit ingest failed: ${err instanceof Error ? err.message : String(err)}`));
+    const { defaultDeps } = await import("@/lib/scout/engine");
+    const { addDays, toEt } = await import("@/lib/time");
+    const et = toEt(new Date());
+    if (et.minutes >= 60) await readRedditRumors({ ...defaultDeps(), data: defaultDeps().data ?? null }, addDays(et.date, -1)).catch((err) => console.error(`reddit rumors failed: ${err instanceof Error ? err.message : String(err)}`));
+    await import("@/lib/scout/catchup").then(({ catchUp }) => catchUp(150_000));
+  });
   if (params.get("force") !== "1") {
     const last = await store.lastStarted("stories").catch(() => null);
     const ago = last ? (Date.now() - Date.parse(last)) / 60000 : Infinity;

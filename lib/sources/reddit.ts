@@ -1,78 +1,32 @@
 /**
- * Reddit: posts mentioning the term across all subreddits, last 7 days vs the
- * weekly average of the prior month (the search API reaches back one month at
- * most; the 12-month base comes from the scout's own stored history once it
- * has one).
- *
- * Reddit's Responsible Builder Policy requires a request and explicit approval
- * before any Data API access, so this source stays OFF (reported as missing)
- * until REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET from an approved app are set.
- * It then uses OAuth against oauth.reddit.com; the unauthenticated public JSON
- * endpoints are never used.
+ * Reddit: posts mentioning the term in the finance subreddits (title or text), last 7 days vs the weekly average of
+ * the 4 weeks before, from the scout's own copy of Reddit (read through Arctic Shift; see arctic.ts). The 12-month
+ * base comes from the scout's stored history once it has one.
  */
-import { getJson } from "../http";
+import { ARCTIC, coverageDays, mentions } from "./arctic";
 import { change, dateStr, guarded, pct, r1, type Source } from "./types";
-
-const UA = "web:trend-scout:0.1 (research dashboard)";
-let token: { value: string; exp: number } | null = null;
-
-async function auth(env: NodeJS.ProcessEnv, fetchImpl: typeof fetch = fetch): Promise<Record<string, string>> {
-  const id = env.REDDIT_CLIENT_ID;
-  const secret = env.REDDIT_CLIENT_SECRET;
-  if (!id || !secret) throw new Error("Reddit credentials not set");
-  if (!token || token.exp < Date.now()) {
-    const res = await fetchImpl("https://www.reddit.com/api/v1/access_token", {
-      method: "POST",
-      headers: { authorization: `Basic ${Buffer.from(`${id}:${secret}`).toString("base64")}`, "content-type": "application/x-www-form-urlencoded", "user-agent": UA },
-      body: "grant_type=client_credentials",
-    });
-    if (!res.ok) throw new Error(`reddit auth ${res.status}`);
-    const j = (await res.json()) as { access_token: string; expires_in: number };
-    token = { value: j.access_token, exp: Date.now() + (j.expires_in - 60) * 1000 };
-  }
-  return { authorization: `Bearer ${token.value}`, "user-agent": UA };
-}
-
-interface Listing { data: { children: Array<{ data: { title: string; subreddit: string; score: number; num_comments: number; created_utc: number; permalink: string } }>; after: string | null } }
-
-/** Count posts in a window, paging up to `maxPages` (the public API caps at 100 per page). */
-async function count(term: string, t: "week" | "month", headers: Record<string, string>, host: string, fetchImpl?: typeof fetch, maxPages = 3) {
-  let n = 0;
-  let after: string | null = null;
-  const top: Array<{ title: string; subreddit: string; score: number; at: string }> = [];
-  for (let p = 0; p < maxPages; p++) {
-    const url: string = `${host}/search.json?q=${encodeURIComponent(`"${term}"`)}&sort=new&t=${t}&limit=100&raw_json=1${after ? `&after=${after}` : ""}`;
-    const l: Listing = await getJson<Listing>(url, { headers, minIntervalMs: 1100, fetchImpl });
-    const kids = l.data?.children ?? [];
-    n += kids.length;
-    if (p === 0) for (const k of kids.slice(0, 5)) top.push({ title: k.data.title, subreddit: k.data.subreddit, score: k.data.score, at: new Date(k.data.created_utc * 1000).toISOString().slice(0, 10) });
-    after = l.data?.after ?? null;
-    if (!after || kids.length < 100) return { n, top, capped: false };
-  }
-  return { n, top, capped: true };
-}
 
 export const reddit: Source = {
   id: "reddit",
   label: "Reddit",
-  about: "Mention counts across subreddits; growth from a low base, not rank. Off until Reddit approves Data API access (set the approved app's credentials).",
-  configured: (env) => !!(env.REDDIT_CLIENT_ID && env.REDDIT_CLIENT_SECRET),
+  about: `Mentions in ${ARCTIC.finance.length} finance subreddits (r/${ARCTIC.finance.slice(0, 3).join(", r/")}…), from the scout's copy of Reddit via the Arctic Shift archive; growth from a low base, not rank.`,
+  configured: () => true,
   probe: (ctx) =>
     guarded("reddit", async () => {
-      if (!ctx.env.REDDIT_CLIENT_ID || !ctx.env.REDDIT_CLIENT_SECRET) return { source: "reddit", status: "missing", detail: "awaiting Reddit Data API approval: set REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET from the approved app", signals: [] };
-      const headers = await auth(ctx.env, ctx.fetchImpl);
-      const host = "https://oauth.reddit.com";
-      const week = await count(ctx.term, "week", headers, host, ctx.fetchImpl);
-      const month = await count(ctx.term, "month", headers, host, ctx.fetchImpl);
-      const weeklyBase = r1(month.n / 4.35);
-      const ch = change(week.n, weeklyBase);
-      const capped = week.capped || month.capped;
+      const days = await coverageDays(ctx.now);
+      if (days < 7) return { source: "reddit", status: "missing", detail: `collecting posts: ${days} day(s) stored so far, counts start at 7`, signals: [] };
+      const now = ctx.now.getTime();
+      const week = await mentions(ctx.term, new Date(now - 7 * 86400_000), ctx.now);
+      const priorDays = Math.min(28, days - 7);
+      const prior = priorDays >= 7 ? await mentions(ctx.term, new Date(now - (7 + priorDays) * 86400_000), new Date(now - 7 * 86400_000)) : null;
+      const weeklyBase = prior ? r1(prior.n / (priorDays / 7)) : null;
+      const ch = weeklyBase !== null ? change(week.n, weeklyBase) : null;
       return {
-        source: "reddit", status: capped ? "capped" : "ok", detail: capped ? "search pages exhausted; counts are lower bounds" : undefined,
+        source: "reddit", status: "ok", detail: priorDays < 28 ? `building history: ${days} days stored` : undefined,
         signals: [{
           source: "reddit", metric: "posts_7d", value: week.n, baseline: null, changeVs12m: null, asOf: dateStr(ctx.now),
-          note: `${week.n}${week.capped ? "+" : ""} Reddit posts mentioning "${ctx.term}" in 7 days vs ${weeklyBase}/week over the prior month (${pct(ch)}; 12-month base from stored history)`,
-          detail: { month_posts: month.n, weekly_avg_prior_month: weeklyBase, change_vs_prior_month: ch, top: week.top },
+          note: `${week.n} posts mentioning "${ctx.term}" in ${ARCTIC.finance.length} finance subreddits in 7 days${weeklyBase !== null ? ` vs ${weeklyBase}/week over the ${priorDays} days before (${pct(ch)})` : " (no earlier weeks stored yet)"}`,
+          detail: { prior_days: priorDays, weekly_avg_prior: weeklyBase, change_vs_prior: ch, top: week.top },
         }],
       };
     }),

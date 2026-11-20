@@ -671,6 +671,18 @@ CREATE TABLE IF NOT EXISTS catchup_queue (
   result text
 );
 CREATE INDEX IF NOT EXISTS catchup_queue_status_idx ON catchup_queue (status, id);
+-- The scout's copy of Reddit (finance subreddits and the rumor subreddits), read through Arctic Shift; 60 days kept.
+CREATE TABLE IF NOT EXISTS reddit_posts (
+  id text PRIMARY KEY,
+  sub text NOT NULL,
+  created_at timestamptz NOT NULL,
+  title text NOT NULL,
+  body text,
+  score integer,
+  comments integer,
+  url text
+);
+CREATE INDEX IF NOT EXISTS reddit_posts_sub_time_idx ON reddit_posts (sub, created_at);
 CREATE TABLE IF NOT EXISTS earnings_cards (
   scan_id integer PRIMARY KEY,
   created_at timestamptz NOT NULL DEFAULT now(),
