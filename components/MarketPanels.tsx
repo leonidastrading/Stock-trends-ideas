@@ -1,4 +1,4 @@
-import Gauge from "@/components/Gauge";
+import { marketDataFromEnv } from "@/lib/alpaca";
 import { MoversTable, SocialTable } from "@/components/SocialTables";
 import Ticker from "@/components/Ticker";
 import { bySymbol } from "@/lib/scout/congress";
@@ -39,18 +39,20 @@ export default async function MarketPanels() {
   ]);
   const posts = truth.filter((p) => p.read).sort((a, b) => (b.read!.urgency - a.read!.urgency) || b.at.localeCompare(a.at)).slice(0, 6);
   const b = breadth.data;
+  // Live during the day (the price watch checks the big names every minute); the last close otherwise.
+  const live = await import("@/lib/scout/price-watch").then(({ liveBreadth }) => liveBreadth(marketDataFromEnv())).catch(() => null);
+  const adv = live?.advancing ?? b?.advancing ?? 0, dec = live?.declining ?? b?.declining ?? 0;
   return (
     <>
-      <div className="gauges-row">
-        <Gauge value={b?.mood ?? null} title="Fear & greed" note={b ? `Our own reading (not CNN's), the average of: ${b.parts}. From ${b.stocks} large US stocks' daily closes, SPY and Cboe's VIX; as of ${b.asOf}.` : "loads with the after-close job"} />
-        <Gauge value={social.data?.retailGreed ?? null} title="Retail greed" note={social.data ? `Share of bullish posts among the ${social.data.tagged} Stocktwits posts tagged bullish or bearish on today's 20 trending stocks (50 = even; X has no free data)` : "Stocktwits not loaded yet"} />
-        {b ? (
+      {live || b ? (
+        <div className="gauges-row">
           <section className="statbars">
-            <Bar left={<>Advancing <b>{Math.round((b.advancing / Math.max(b.advancing + b.declining, 1)) * 100)}%</b> ({b.advancing})</>} right={<>Declining ({b.declining})</>} share={(b.advancing / Math.max(b.advancing + b.declining, 1)) * 100} />
+            <Bar left={<>Advancing <b>{Math.round((adv / Math.max(adv + dec, 1)) * 100)}%</b> ({adv})</>} right={<>Declining ({dec})</>} share={(adv / Math.max(adv + dec, 1)) * 100} />
           </section>
-        ) : null}
-      </div>
-      {b && <p className="small muted" style={{ margin: "-4px 0 12px" }}>Breadth across the scout&apos;s {b.stocks} large and mid caps on {fmtDay(b.asOf)}, not the whole market.</p>}
+        </div>
+      ) : null}
+      {live ? <p className="small muted" style={{ margin: "-4px 0 12px" }}>Live: the scout&apos;s {live.advancing + live.declining + live.unchanged} large and mid caps that have traded today, against yesterday&apos;s close, as of {fmtEtAgo(live.at)}. Not the whole market.</p>
+        : b ? <p className="small muted" style={{ margin: "-4px 0 12px" }}>At the close on {fmtDay(b.asOf)}: the scout&apos;s {b.stocks} large and mid caps, not the whole market (live from the first trades of the day).</p> : null}
 
       <div className="panels-grid">
         <MoversTable gainers={movers.data?.gainers ?? []} losers={movers.data?.losers ?? []} scope={movers.data?.scope ?? "all US stocks"} />

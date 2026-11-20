@@ -460,3 +460,8 @@ a.chip { text-decoration: none; }
 
 a.source-tag { text-decoration: none; }
 a.source-tag:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+
+/* A panel's table can never widen the page: grid columns may shrink, and a wide table scrolls inside its panel. */
+.panels-grid > * { min-width: 0; }
+.panels-grid .card { overflow-x: auto; }
+.gauges-row .statbars { min-width: 0; }

@@ -88,7 +88,27 @@ export function likelyReason(symbol: string, news: Array<Pick<NewsItem, "ts" | "
   return n ? { headline: n.headline, source: n.source, url: n.url } : null;
 }
 
-const memo = { at: 0, moves: [] as BigMove[], penny: new Set<string>() };
+export interface LiveBreadth { advancing: number; declining: number; unchanged: number; at: string; date: string }
+const memo = { at: 0, moves: [] as BigMove[], penny: new Set<string>(), breadth: null as LiveBreadth | null };
+
+/** Pure: how many of the big names are up and down today against the last close (only names that traded today). */
+export function breadthNow(snaps: Record<string, Snap>, today: string, now: Date): LiveBreadth | null {
+  let advancing = 0, declining = 0, unchanged = 0;
+  for (const s of Object.values(snaps)) {
+    if (!s.price || !s.at || toEt(new Date(s.at)).date !== today) continue;
+    const base = s.sessionDate === today ? s.prevClose : s.dailyClose ?? s.prevClose;
+    if (!base) continue;
+    const ch = s.price / base - 1;
+    if (ch > 0.0005) advancing++; else if (ch < -0.0005) declining++; else unchanged++;
+  }
+  return advancing + declining + unchanged >= 20 ? { advancing, declining, unchanged, at: now.toISOString(), date: today } : null;
+}
+
+/** Today's advancers and decliners among the big names, from the latest price check (null before today's first trades). */
+export async function liveBreadth(data: MarketData | null, now = new Date()): Promise<LiveBreadth | null> {
+  await priceWatch(data, now).catch(() => []);
+  return memo.breadth && memo.breadth.date === toEt(now).date ? memo.breadth : null;
+}
 
 /** The scout's big names last seen under $5 (from the latest price check). */
 export const pennySymbols = (): Set<string> => memo.penny;
@@ -102,6 +122,7 @@ export async function priceWatch(data: MarketData | null, now = new Date()): Pro
   if (!snaps) return memo.moves;
   const moves = bigMoves(snaps as Record<string, Snap>, today, PRICE_WATCH.levels, now);
   memo.penny = new Set(Object.entries(snaps as Record<string, Snap>).filter(([, s]) => s.price > 0 && s.price < PRICE_WATCH.minPrice).map(([sym]) => sym));
+  memo.breadth = breadthNow(snaps as Record<string, Snap>, today, now);
   const seen = (await store.cacheGet<Record<string, string>>("price-watch:first").catch(() => null))?.data ?? {};
   let changed = false;
   for (const m of moves) if (!seen[m.key]) { seen[m.key] = now.toISOString(); changed = true; }

@@ -123,3 +123,16 @@ describe("a stock moving with its whole sector is not its own news", () => {
     expect(by.IBM).toMatchObject({ specific: true, level: 10 }); // its own news: -13% when the sector is -4%
   });
 });
+
+describe("live breadth", () => {
+  it("counts today's advancers and decliners against the last close, only names that traded today", async () => {
+    const { breadthNow } = await import("@/lib/scout/price-watch");
+    const today = "2026-11-20", at = "2026-11-20T15:00:00Z", now = new Date(at);
+    const snaps: Record<string, { price: number; prevClose: number; sessionDate: string; at: string }> = {};
+    for (let i = 0; i < 26; i++) snaps[`U${i}`] = { price: 101, prevClose: 100, sessionDate: today, at };
+    for (let i = 0; i < 330; i++) snaps[`D${i}`] = { price: 98, prevClose: 100, sessionDate: today, at };
+    snaps.OLD = { price: 90, prevClose: 100, sessionDate: "2026-11-19", at: "2026-11-19T20:59:00Z" };
+    expect(breadthNow(snaps, today, now)).toMatchObject({ advancing: 26, declining: 330, unchanged: 0 });
+    expect(breadthNow({ A: snaps.U0 }, today, now)).toBeNull(); // too few names to say
+  });
+});
