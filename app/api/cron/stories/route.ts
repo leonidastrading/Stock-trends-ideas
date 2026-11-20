@@ -30,7 +30,7 @@ export async function GET(request: Request) {
   background(async () => {
     // Reddit first (new posts, a little backfill), then once a day yesterday's rumor subreddits, then the catch-up queue.
     const { ingestReddit, readRedditRumors } = await import("@/lib/sources/arctic");
-    await ingestReddit(Date.now() + 40_000).catch((err) => console.error(`reddit ingest failed: ${err instanceof Error ? err.message : String(err)}`));
+    await ingestReddit(Date.now() + 40_000).then((r) => console.log(`reddit ingest: ${r}`)).catch((err) => console.error(`reddit ingest failed: ${err instanceof Error ? err.message : String(err)}`));
     const { defaultDeps } = await import("@/lib/scout/engine");
     const { addDays, toEt } = await import("@/lib/time");
     const et = toEt(new Date());
