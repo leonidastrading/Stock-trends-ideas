@@ -81,7 +81,15 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   const t = new Map(tracks.map((x) => [x.cardId, x]));
   const termOf = new Map(candidates.filter((c) => c.cardId !== null).map((c) => [c.cardId!, c.term]));
   const candOf = new Map(candidates.filter((c) => c.cardId !== null).map((c) => [c.cardId!, c]));
-  const srcOf = (c: store.StoredCard) => { const x = candOf.get(c.id); return originLink(c.origin, x?.term, x?.observation, x ? { label: x.sourceLabel, url: x.sourceUrl } : null); };
+  const { dotsIdeaFor, recentDotsRuns } = await import("@/lib/scout/dots");
+  const dotRuns = await recentDotsRuns().catch(() => []);
+  const srcOf = (c: store.StoredCard) => {
+    const x = candOf.get(c.id);
+    const o = originLink(c.origin, x?.term, x?.observation, x ? { label: x.sourceLabel, url: x.sourceUrl } : null);
+    // Sent from Dots before the buttons recorded their page: the idea on the same stock and side just before.
+    if (c.origin === "human" && !x?.sourceLabel && /^(Your note|Your image)$/.test(o.tag)) { const d = dotsIdeaFor(dotRuns, c.primaryTicker, c.direction, c.createdAt); if (d) return { ...o, tag: "Dots", url: d.url }; }
+    return o;
+  };
   const playerFor = (c: store.StoredCard) => playerOf(c.origin, termOf.get(c.id));
   // A later card that repeats an earlier call by the same source is folded under the first one (and scored once).
   const repeats = repeatCards(cards, termOf);
