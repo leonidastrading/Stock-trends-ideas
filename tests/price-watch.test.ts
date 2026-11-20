@@ -108,3 +108,18 @@ describe("the card banner reads the whole day's news", () => {
     expect(likelyReason("AADX", news, evening, 20 * 3600_000)?.headline).toMatch(/downgrades/);
   });
 });
+
+describe("a stock moving with its whole sector is not its own news", () => {
+  it("a chip and AI sell-off at the open alerts nobody; a stock falling well beyond its sector still does", async () => {
+    const { bigMoves } = await import("@/lib/scout/price-watch");
+    const today = "2026-11-20", at = "2026-11-20T14:36:00Z", now = new Date("2026-11-20T14:38:00Z");
+    const snap = (pct: number) => ({ price: 100 * (1 + pct / 100), prevClose: 100, sessionDate: today, at });
+    // Technology (Nov 20 2026, 9:36 AM): most names down 3-7%, the sector's median about -4%.
+    const snaps = { GLW: snap(-5.1), LRCX: snap(-5.1), STX: snap(-6.6), ANET: snap(-6.7), NVDA: snap(-4.2), AMD: snap(-3.9), AVGO: snap(-4.4), MU: snap(-3.5), AAPL: snap(-1.2), MSFT: snap(-1.5), IBM: snap(-13.2) };
+    const moves = bigMoves(snaps, today, [5, 10], now);
+    const by = Object.fromEntries(moves.map((m) => [m.symbol, m]));
+    expect(by.GLW).toMatchObject({ sector: "technology", sectorPct: -4.4, specific: false });
+    expect(by.ANET.specific).toBe(false);
+    expect(by.IBM).toMatchObject({ specific: true, level: 10 }); // its own news: -13% when the sector is -4%
+  });
+});

@@ -81,11 +81,11 @@ export async function runNewsAlerts(deps: { data: MarketData | null; now: Date; 
   // Price watch: big moves on big companies, from 4 AM to 8 PM ET on weekdays (up to 3 a run, biggest first).
   const et = toEt(deps.now);
   const weekday = ![0, 6].includes(new Date(`${et.date}T12:00:00Z`).getUTCDay());
-  const moves = weekday && et.minutes >= 4 * 60 && et.minutes < 20 * 60 ? (await priceWatch(deps.data, deps.now).catch(() => [])).filter((m) => !sentKeys.includes(m.key) && confirmed(m, deps.now)).slice(0, 3) : [];
+  const moves = weekday && et.minutes >= 4 * 60 && et.minutes < 20 * 60 ? (await priceWatch(deps.data, deps.now).catch(() => [])).filter((m) => m.specific !== false && !sentKeys.includes(m.key) && confirmed(m, deps.now)).slice(0, 3) : [];
   for (const m of moves) {
     const reason = await reasonFor(m, [...fast, ...alpaca], deps.now).catch(() => null);
     const card = cardBy.get(m.symbol);
-    await sendPush({ title: `${m.pct < 0 ? "📉" : "📈"} ${moveTitle(m)}${card ? ` · card #${card}` : ""}`, message: `${reason ? `${reason.headline}\n${reason.source}` : "No headline in the scout's feeds yet: the news may be on X, in a short report or a niche outlet."}\n$${m.price.toFixed(2)} vs $${m.prevClose.toFixed(2)} at ${m.vs}`, click: reason?.url?.startsWith("http") ? reason.url : `${base}/chart?symbol=${m.symbol}`, tags: [m.pct < 0 ? "chart_with_downwards_trend" : "chart_with_upwards_trend"], priority: m.level >= 10 || card ? 5 : 4 }, env).catch(() => undefined);
+    await sendPush({ title: `${m.pct < 0 ? "📉" : "📈"} ${moveTitle(m)}${card ? ` · card #${card}` : ""}`, message: `${reason ? `${reason.headline}\n${reason.source}` : "No headline in the scout's feeds yet: the news may be on X, in a short report or a niche outlet."}\n$${m.price.toFixed(2)} vs $${m.prevClose.toFixed(2)} at ${m.vs}${m.sectorPct !== null && m.sectorPct !== undefined ? `; its sector ${m.sectorPct > 0 ? "+" : ""}${m.sectorPct}% today` : ""}`, click: reason?.url?.startsWith("http") ? reason.url : `${base}/chart?symbol=${m.symbol}`, tags: [m.pct < 0 ? "chart_with_downwards_trend" : "chart_with_upwards_trend"], priority: m.level >= 10 || card ? 5 : 4 }, env).catch(() => undefined);
   }
   // Every item of each story pushed counts as sent (so the other outlets' copies do not push again), plus the story itself.
   const hour = Math.floor(deps.now.getTime() / (ALERTS.bigStoryCooldownH * 3600_000));

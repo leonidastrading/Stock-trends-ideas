@@ -69,7 +69,8 @@ export async function newsFeed(now = new Date()): Promise<FeedItem[]> {
   const headlines = [...alpaca, ...fast.filter((n) => { const k = bare(n.headline); if (seen.has(k)) return false; seen.add(k); return true; })];
   // Big moves on big companies, each with the likely headline when a feed has one.
   const { reasonFor, moveItem } = await import("./price-watch");
-  const news = [...headlines, ...(await Promise.all(moves.map(async (m) => moveItem(m, await reasonFor(m, headlines, now).catch(() => null)))))];
+  // A stock moving with its whole sector is not a story of its own: only stock-specific moves are listed.
+  const news = [...headlines, ...(await Promise.all(moves.filter((m) => m.specific !== false).map(async (m) => moveItem(m, await reasonFor(m, headlines, now).catch(() => null)))))];
   const originals = new Set(news.filter((n) => !n.repostedAt).map((n) => bare(n.headline)));
   const bySym = new Map<string, number[]>();
   // One card per stock: its latest (a stock with many cards would otherwise list them all on every headline).

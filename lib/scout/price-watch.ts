@@ -20,11 +20,19 @@ import * as store from "./store";
 /** The scout's large and mid caps: big enough that their news, and their moves, are market news even without a card. */
 export const BIG_NAMES = new Set(Object.values(UNIVERSE).flat());
 
-export const PRICE_WATCH = { levels: [5, 10], refreshMs: 60_000, minPrice: 5 };
+/**
+ * specificGap: a move counts as the stock's own news only when it beats the typical move in its sector (the median
+ * of the scout's names in that sector today) by this many points; a stock falling with its whole sector is not news
+ * (Nov 20 2026: GLW, VRT, LRCX, STX and ANET all down 5-7% in a chip and AI sell-off at the open).
+ */
+export const PRICE_WATCH = { levels: [5, 10], refreshMs: 60_000, minPrice: 5, specificGap: 4 };
+
+/** Each big name's sector. */
+const SECTOR_OF: Map<string, string> = new Map(Object.entries(UNIVERSE).flatMap(([sector, syms]) => syms.map((s) => [s, sector] as [string, string])));
 
 /** When the price is from: before the open, the regular session, or after the close (US Eastern). */
 export type Phase = "pre" | "regular" | "post";
-export interface BigMove { symbol: string; pct: number; price: number; prevClose: number; date: string; level: number; key: string; firstSeen: string; phase: Phase; vs: string }
+export interface BigMove { symbol: string; pct: number; price: number; prevClose: number; date: string; level: number; key: string; firstSeen: string; phase: Phase; vs: string; sector?: string | null; sectorPct?: number | null; specific?: boolean }
 interface Snap { price: number; prevClose: number | null; sessionDate?: string | null; at?: string | null; dailyClose?: number | null; mid?: number | null }
 
 export const phaseOf = (at: Date): Phase => { const m = toEt(at).minutes; return m < 9 * 60 + 30 ? "pre" : m >= 16 * 60 ? "post" : "regular"; };
@@ -36,6 +44,7 @@ export const PHASE_LABEL: Record<Phase, string> = { pre: "pre-market", regular: 
  */
 export function bigMoves(snaps: Record<string, Snap>, today: string, levels = PRICE_WATCH.levels, now = new Date()): Array<Omit<BigMove, "firstSeen">> {
   const out: Array<Omit<BigMove, "firstSeen">> = [];
+  const moved: Array<{ symbol: string; pct: number }> = [];
   for (const [symbol, s] of Object.entries(snaps)) {
     if (!s.price) continue;
     const at = s.at ? new Date(s.at) : now;
@@ -48,13 +57,23 @@ export function bigMoves(snaps: Record<string, Snap>, today: string, levels = PR
     else { base = s.dailyClose ?? s.prevClose; vs = "the last close"; } // before today's first trade in the bar: the bar is the last session
     if (!base || base < PRICE_WATCH.minPrice || s.price < PRICE_WATCH.minPrice) continue; // under $5: not market news
     const pct = Math.round((s.price / base - 1) * 1000) / 10;
+    moved.push({ symbol, pct });
     const level = [...levels].reverse().find((l) => Math.abs(pct) >= l);
     if (!level) continue;
     // One odd trade is not a move: the quote midpoint must agree, when there is a sane quote.
     if (s.mid && !(Math.abs(s.mid / base - 1) * 100 >= level * 0.8 && Math.sign(s.mid - base) === Math.sign(pct))) continue;
     out.push({ symbol, pct, price: s.price, prevClose: base, date: today, level, phase, vs, key: `move:${symbol}:${today}:${phase}:${level}` });
   }
-  return out.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
+  // The typical move in each sector today (the median of its names, when at least 5 have a price).
+  const median = (xs: number[]) => { const a = [...xs].sort((x, y) => x - y); const m = Math.floor(a.length / 2); return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
+  const bySector = new Map<string, number[]>();
+  for (const m of moved) { const sec = SECTOR_OF.get(m.symbol); if (sec) bySector.set(sec, [...(bySector.get(sec) ?? []), m.pct]); }
+  const sectorPct = new Map([...bySector].filter(([, xs]) => xs.length >= 5).map(([sec, xs]) => [sec, Math.round(median(xs) * 10) / 10] as const));
+  return out.map((m) => {
+    const sector = SECTOR_OF.get(m.symbol) ?? null;
+    const sp = sector ? sectorPct.get(sector) ?? null : null;
+    return { ...m, sector, sectorPct: sp, specific: sp === null || Math.abs(m.pct - sp) >= PRICE_WATCH.specificGap };
+  }).sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
 }
 
 /** Pure: a move that has held for two checks (seen at least 90 seconds ago and still there): ready for a phone alert. */
