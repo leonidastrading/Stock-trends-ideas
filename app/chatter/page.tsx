@@ -1,4 +1,5 @@
 import SetupNotice from "@/components/SetupNotice";
+import { businessDaysFrom } from "@/lib/market/panels";
 import { CHATTER, CHATTER_UNIVERSE } from "@/config/chatter";
 import type { DailyBar } from "@/lib/alpaca";
 import { hasDatabase } from "@/lib/db";
@@ -80,9 +81,11 @@ export default async function ChatterPage() {
         <h2>Forward test</h2>
         <p className="small">
           {status.days ? <>Recording since {status.firstDate} · {status.days} weekday{status.days === 1 ? "" : "s"} · last day {status.lastDate}: {status.lastDayCount} of {CHATTER_UNIVERSE.length} measured · {events.filter((e) => e.kind === "spike").length} spikes, {events.filter((e) => e.kind === "control").length} controls logged.</> : <>Not started yet: the first batch runs with the next hourly story call or the after-close job.</>}
-          {status.days > 0 && status.days < CHATTER.minHistory && <span className="warn"> Warming up: spikes count once a stock has {CHATTER.minHistory} days of its own history (about {CHATTER.minHistory - status.days} more weekdays).</span>}
+          {status.days > 0 && status.days < CHATTER.minHistory && <span className="warn"> Warming up: spikes count once a stock has {CHATTER.minHistory} days of its own history, about {CHATTER.minHistory - status.days} more weekdays (around {new Date(`${businessDaysFrom(status.lastDate ?? "", CHATTER.minHistory - status.days + 1).at(-1)}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" })}).</span>}
         </p>
-        <ReportTable rows={fwdRows} note="Outcomes fill in as sessions pass (20-session results need four weeks). Bars load with the after-close job. Expect to need two to three months before the spike rows have enough events to mean anything; compare each row with the control row, not with zero." />
+        {events.length > 0
+          ? <ReportTable rows={fwdRows} note="Outcomes fill in as sessions pass (20-session results need four weeks). Bars load with the after-close job. Expect to need two to three months before the spike rows have enough events to mean anything; compare each row with the control row, not with zero." />
+          : <p className="small muted">The results table appears with the first spike or control. Until then the scout is only recording each stock&apos;s chatter rate every weekday; nothing is missing.</p>}
         {spikes.length > 0 && (
           <div className="table-wrap"><table>
             <thead><tr><th>Date</th><th>Stock</th><th className="num">z</th><th className="num">msgs/hour</th><th className="num">usual</th><th className="num">bullish</th><th>Group</th><th className="num">5 sessions vs SPY</th></tr></thead>

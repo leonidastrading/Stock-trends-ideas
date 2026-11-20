@@ -26,7 +26,7 @@ export default function NavBar() {
   // The site was updated since this page was opened (switching tabs keeps the old styles and code): reload.
   const build = useRef<string | null>(null);
   const [stale, setStale] = useState(false);
-  const active = TAB_OF[path] ? LINKS.find((l) => l.badge === TAB_OF[path])?.href : path === "/" ? "/" : LINKS.find((l) => l.href !== "/" && path.startsWith(l.href))?.href;
+  const active = TAB_OF[path] ? LINKS.find((l) => l.badge === TAB_OF[path])?.href : path === "/" ? "/" : LINKS.find((l) => l.href !== "/" && (path === l.href || path.startsWith(`${l.href}/`)))?.href;
   const current = TAB_OF[path] ?? LINKS.find((l) => l.href === active)?.badge ?? null;
 
   const poll = useCallback(async () => {
