@@ -116,7 +116,10 @@ export async function runThemes(deps: { data: MarketData | null; callModel: Call
   const settings = await store.loadSettings();
   const today = toEt(deps.now).date;
   const [all, mine] = await Promise.all([store.spendOn(today), store.spendOnPurpose(today, "themes")]);
-  if (all.cost >= settings.dailyCapUsd) return `skipped: daily AI cap reached ($${all.cost.toFixed(2)})`;
+  if (all.cost >= settings.dailyCapUsd) {
+    await import("./catchup").then(({ enqueue }) => enqueue("job", `themes:${today}`, { job: "themes" })).catch(() => undefined);
+    return `waiting: daily AI cap reached ($${all.cost.toFixed(2)}); Themes runs after the reset`;
+  }
   if (mine >= (settings.themesCapUsd ?? THEMES.capUsd)) return "skipped: today's Themes budget is used";
   const { text, counts } = await gatherSources(deps.now, deps.fetchImpl);
   if (counts.documents + counts.websites + counts.stocktwits === 0) return "skipped: no sources to read";

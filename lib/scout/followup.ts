@@ -215,7 +215,7 @@ export async function runFollowups(deps: ResearchDeps): Promise<FollowupReport> 
       const context = `Follow-up on a story first seen ${g.storyDate} (${g.ageDays} days ago): ${t.summary}\nReaction gap: ${g.why}.${g.attention.map((x) => `\nPublic attention: ${x.line}.`).join("")}\nDesk classification: ${t.novelty} news, ${t.nature}, ${t.complexity}.\nProposed trade (${trade.role}, ${trade.play === "fade" ? "a fade: betting the move reverses" : "a follow: riding the information"}): ${trade.direction} ${trade.ticker}, horizon ${trade.horizon_days} days.\nThesis: ${trade.thesis}\nWhy the market may still misprice it: ${trade.why_not_priced}\nInvalidation: ${trade.invalidation}\nHeadlines since the story:\n${g.headlines.map((h) => `- ${h.at.slice(0, 10)} [${h.source}] ${h.headline}`).join("\n")}`;
       const r = await researchCandidate({ origin: "scout", term, kindHint: "event", tickersHint: [trade.ticker], observation: null, trigger: gapTrigger(g, et.date), context, proposedDirection: trade.direction }, deps);
       report.researched.push(r.outcome === "card" ? { term, outcome: `card: ${r.card.status}`, cardId: r.card.id } : { term, outcome: r.outcome, reason: r.reason });
-      if (r.outcome === "capped") return { ...report, error: r.reason };
+      if (r.outcome === "capped") report.error = r.reason; // queued; the rest are queued too
     }
   }
   return report;

@@ -1,4 +1,5 @@
 import { after, NextResponse } from "next/server";
+import { background } from "@/lib/background";
 import { checkCronSecret, cronAuthProblem } from "@/lib/auth";
 import { runStoriesJob } from "@/lib/scout/engine";
 import * as store from "@/lib/scout/store";
@@ -25,6 +26,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "unauthorized", reason: why.reason }, { status: 401 });
   }
   const params = new URL(request.url).searchParams;
+  // Anything the daily AI budget turned away is worked through once it resets (a no-op when nothing waits).
+  background(() => import("@/lib/scout/catchup").then(({ catchUp }) => catchUp(200_000)));
   if (params.get("force") !== "1") {
     const last = await store.lastStarted("stories").catch(() => null);
     const ago = last ? (Date.now() - Date.parse(last)) / 60000 : Infinity;

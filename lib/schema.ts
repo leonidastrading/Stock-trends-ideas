@@ -658,6 +658,19 @@ ALTER TABLE earnings_tracks ADD COLUMN IF NOT EXISTS exit_moves jsonb NOT NULL D
 -- Where an idea sent to research came from (the page and a link back to it), e.g. "Dots", "/dots?run=12#dot-121".
 ALTER TABLE candidates ADD COLUMN IF NOT EXISTS source_label text;
 ALTER TABLE candidates ADD COLUMN IF NOT EXISTS source_url text;
+-- Anything the daily AI budget turned away, worked through after the midnight reset (nothing is skipped).
+CREATE TABLE IF NOT EXISTS catchup_queue (
+  id serial PRIMARY KEY,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  kind text NOT NULL,
+  key text NOT NULL,
+  payload jsonb NOT NULL,
+  status text NOT NULL DEFAULT 'pending',
+  attempts integer NOT NULL DEFAULT 0,
+  done_at timestamptz,
+  result text
+);
+CREATE INDEX IF NOT EXISTS catchup_queue_status_idx ON catchup_queue (status, id);
 CREATE TABLE IF NOT EXISTS earnings_cards (
   scan_id integer PRIMARY KEY,
   created_at timestamptz NOT NULL DEFAULT now(),

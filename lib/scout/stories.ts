@@ -406,10 +406,7 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
       const context = `Story: ${t.summary}${stages}\nDesk classification: ${t.novelty} news, ${t.nature}, ${t.complexity}${story.staleness !== undefined ? `; ${stalenessLabel(story.staleness)}` : ""}.\nProposed trade (${trade.role}, ${trade.play === "fade" ? "a fade: betting the move reverses" : "a follow: riding the information"}): ${trade.direction} ${trade.ticker}, horizon ${trade.horizon_days} days.\nThesis: ${trade.thesis}\nWhy the market may still misprice it: ${trade.why_not_priced}\nInvalidation: ${trade.invalidation}\nHeadlines:\n${story.headlines.map((h) => `- [${h.source}] ${h.headline}`).join("\n")}`;
       const r = await researchCandidate({ origin: "scout", term: storyTerm(termKey, trade.ticker), kindHint: "event", tickersHint: [trade.ticker], observation: null, trigger: storyTrigger(story, et.date, trade.role), context, proposedDirection: trade.direction }, deps);
       report.researched.push(r.outcome === "card" ? { term: storyTerm(termKey, trade.ticker), outcome: `card: ${r.card.status}`, cardId: r.card.id } : { term: storyTerm(termKey, trade.ticker), outcome: r.outcome, reason: r.reason });
-      if (r.outcome === "capped") {
-        report.error = r.reason;
-        return report;
-      }
+      if (r.outcome === "capped") report.error = r.reason; // queued; the rest are queued too
     }
   }
   return report;

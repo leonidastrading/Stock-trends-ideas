@@ -82,7 +82,6 @@ export async function pollTruth(deps: ResearchDeps, fetchImpl?: typeof fetch, op
       trigger: [{ source: "truthsocial", metric: `trump_post:${p.id}`, value: r.urgency, baseline: null, changeVs12m: null, asOf: p.at.slice(0, 10), note: r.summary }],
     }, deps).catch((err) => ({ outcome: "error" as const, reason: err instanceof Error ? err.message : String(err) }));
     research.push(out.outcome === "card" ? { id: p.id, outcome: `card: ${out.card.status}`, cardId: out.card.id } : { id: p.id, outcome: out.outcome });
-    if (out.outcome === "capped") break;
   }
   return { fresh: fresh.length, judged: toJudge.length, relevant: urgent.length, pushed, research };
 }

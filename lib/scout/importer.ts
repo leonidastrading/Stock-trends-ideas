@@ -111,7 +111,6 @@ export async function runImport(all: ImportItem[], deps: ResearchDeps, label: st
         continue;
       }
       out.push(r.outcome === "card" ? { term: importTerm(it), outcome: `card: ${r.card.status}`, cardId: r.card.id } : { term: importTerm(it), outcome: r.outcome, reason: r.reason });
-      if (r.outcome === "capped") return;
     }
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));

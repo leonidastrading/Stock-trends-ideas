@@ -39,6 +39,8 @@ export interface ResearchInput {
   results?: SourceResult[];
   /** The direction the desk proposes, when it proposes one: a short under $5 is skipped before any AI call. */
   proposedDirection?: "long" | "short";
+  /** Run from the catch-up queue (not queued again when the cap turns it away). */
+  queued?: boolean;
 }
 
 /** The latest price of a stock (snapshot, else the last daily close), or null. */
@@ -73,7 +75,9 @@ export async function researchCandidate(input: ResearchInput, deps: ResearchDeps
   // Spend cap: logged as a rejection so the candidates page shows why nothing happened.
   const spend = await store.spendOn(et.date);
   if (spend.cost >= settings.dailyCapUsd) {
-    const reason = `daily LLM cap reached ($${spend.cost.toFixed(2)} of $${settings.dailyCapUsd}); the scout stopped for ${et.date}`;
+    const reason = `waiting: daily LLM cap reached ($${spend.cost.toFixed(2)} of $${settings.dailyCapUsd}); queued, researched after the midnight ET reset`;
+    // Nothing is skipped: the idea goes on the catch-up queue and is researched once the budget resets.
+    if (!input.queued) await import("./catchup").then(({ enqueue, queuedResearch }) => enqueue("research", `${input.origin}:${input.term.toLowerCase()}:${input.tickersHint.join(",")}`, queuedResearch(input))).catch((err) => console.error(`queue failed: ${err instanceof Error ? err.message : String(err)}`));
     return { outcome: "capped", reason, candidate: await store.addCandidate({ ...base, outcome: "rejected", reason }) };
   }
 

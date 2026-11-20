@@ -230,7 +230,7 @@ export function imageAsText(r: { kind: string; what_it_shows: string; text_in_im
 }
 
 /** Read one document: extract rumors (one model call per 90k characters, up to 3), check them against the news, store them. */
-export async function readRumorDoc(text: string, source: string, deps: ResearchDeps & { data: MarketData | null }, path: string | null = null, opts: { bundle?: number } = {}): Promise<RumorDocResult> {
+export async function readRumorDoc(text: string, source: string, deps: ResearchDeps & { data: MarketData | null }, path: string | null = null, opts: { bundle?: number; queued?: boolean } = {}): Promise<RumorDocResult> {
   const settings = await store.loadSettings();
   const today = toEt(deps.now).date;
   // A JSON dump (Reddit, forum exports, scrapers): the posts and comments, not the metadata.
@@ -243,7 +243,14 @@ export async function readRumorDoc(text: string, source: string, deps: ResearchD
   let error: string | null = null;
   for (const [i, part] of parts.entries()) {
     const spend = await store.spendOn(today);
-    if (spend.cost >= settings.dailyCapUsd) { error = `daily AI cap reached ($${spend.cost.toFixed(2)} of $${settings.dailyCapUsd})`; break; }
+    if (spend.cost >= settings.dailyCapUsd) {
+      error = `daily AI cap reached ($${spend.cost.toFixed(2)} of $${settings.dailyCapUsd}); the unread part is queued for after the reset`;
+      // Nothing is skipped: the parts not read yet go on the catch-up queue.
+      const rest = parts.slice(i).join("\n\n");
+      await import("./catchup").then(({ enqueue }) => enqueue("rumor_doc", `${source}:${rest.length}:${rest.slice(0, 80)}`, { text: rest, source: i ? `${source} (rest)` : source, bundle: opts.bundle ?? 0 })).catch(() => undefined);
+      if (i === 0 && opts.queued) return { docId: 0, rumors: 0, error };
+      break;
+    }
     try {
       const bundleNote = (opts.bundle ?? 0) > 1 ? `\n\nThis document is ${opts.bundle} files uploaded together (each headed "===== name ====="), usually about one story. Treat them as ONE document: give one rumor per distinct thesis on a company, folding the facts, numbers and charts from every file into that rumor's claim, not one rumor per file, chart or fact.` : "";
       const reply = await deps.callModel({ model: settings.model, effort: "low", purpose: "rumors", user: `Document: ${source}${parts.length > 1 ? ` (part ${i + 1} of ${parts.length})` : ""}${bundleNote}\n\n${part}\n\nReply with the JSON object.` });

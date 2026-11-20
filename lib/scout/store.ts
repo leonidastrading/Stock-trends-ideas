@@ -168,7 +168,8 @@ export async function candidatesSince(days: number): Promise<Candidate[]> {
 
 /** Terms researched (any outcome) in the last `days` days, for the cooldown. */
 export async function recentTerms(days: number): Promise<Set<string>> {
-  const rows = await q(`SELECT DISTINCT lower(term) AS t FROM candidates WHERE created_at >= now() - ($1::int * interval '1 day')`, [days]);
+  // Attempts the daily budget turned away do not count: they are queued and researched after the reset.
+  const rows = await q(`SELECT DISTINCT lower(term) AS t FROM candidates WHERE created_at >= now() - ($1::int * interval '1 day') AND coalesce(reason, '') !~* 'daily (llm|ai)( spending)? cap reached'`, [days]);
   return new Set(rows.map((r) => r.t));
 }
 

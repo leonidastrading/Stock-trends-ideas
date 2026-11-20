@@ -232,6 +232,7 @@ export async function runDots(deps: { data: MarketData | null; callModel: CallMo
     return all.cost >= settings.dailyCapUsd ? `skipped: daily AI cap reached ($${all.cost.toFixed(2)})` : mine >= DOTS.capUsd ? "skipped: today's Dots budget is used" : null;
   };
   const stop = await budget();
+  if (stop && /daily AI cap/.test(stop)) await import("./catchup").then(({ enqueue }) => enqueue("job", `dots:${today}`, { job: "dots" })).catch(() => undefined);
   if (stop) return stop;
 
   // 1. Scan: what is changing, and what to search next.

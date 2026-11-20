@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { background } from "@/lib/background";
 import { checkCronSecret, cronAuthProblem } from "@/lib/auth";
 import { runDaily } from "@/lib/scout/engine";
 
@@ -13,6 +14,7 @@ export async function GET(request: Request) {
     console.warn(`cron auth refused ${new URL(request.url).pathname}: ${why.detail}`);
     return NextResponse.json({ error: "unauthorized", reason: why.reason }, { status: 401 });
   }
+  background(() => import("@/lib/scout/catchup").then(({ catchUp }) => catchUp(120_000)));
   try {
     return NextResponse.json(await runDaily());
   } catch (err) {

@@ -98,7 +98,10 @@ export async function refreshInboxDigest(deps: ResearchDeps, fetchImpl: typeof f
   if (!withText.length) return "no document text available";
   const settings = await store.loadSettings();
   const spend = await store.spendOn(today);
-  if (spend.cost >= settings.dailyCapUsd) return `skipped: daily AI cap reached ($${spend.cost.toFixed(2)} of $${settings.dailyCapUsd})`;
+  if (spend.cost >= settings.dailyCapUsd) {
+    await import("./catchup").then(({ enqueue }) => enqueue("job", `inbox_digest:${today}`, { job: "inbox_digest" })).catch(() => undefined);
+    return `waiting: daily AI cap reached ($${spend.cost.toFixed(2)} of $${settings.dailyCapUsd}); the digest runs after the reset`;
+  }
 
   const [cands, cards] = await Promise.all([store.candidatesSince(DIGEST_DAYS + 1), store.cardsSince(DIGEST_DAYS + 1)]);
   const status = new Map(cards.map((c) => [c.id, `${c.status}, ${c.direction} ${c.primaryTicker}`]));

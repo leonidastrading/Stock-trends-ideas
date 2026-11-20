@@ -36,6 +36,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const todaySpend = spend.find((s) => s.date === today);
   const byPurpose = await store.spendByPurpose(7).catch(() => []);
   const weekTotal = byPurpose.reduce((a, b) => a + b.cost, 0);
+  const { queueRows } = await import("@/lib/scout/catchup");
+  const [waiting, caughtUp] = await Promise.all([queueRows("pending", 100).catch(() => []), queueRows("done", 10).catch(() => [])]);
+  const what = (r: { kind: string; payload: unknown }) => r.kind === "research" ? `research: ${(r.payload as { term?: string }).term ?? "?"}` : r.kind === "rumor_doc" ? `rumor document: ${(r.payload as { source?: string }).source ?? "?"}` : `${(r.payload as { job?: string }).job ?? "job"} run`;
   return (
     <>
       <h1>Settings</h1>
@@ -104,6 +107,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       <section className="card">
         <h2>LLM spend</h2>
         <p>Today: <b>${(todaySpend?.cost ?? 0).toFixed(2)}</b> of ${settings.dailyCapUsd} cap over {todaySpend?.calls ?? 0} calls.</p>
+        <p className="small">
+          <b>Waiting for the budget reset: {waiting.length}</b>{waiting.length ? " (worked through, oldest first, after midnight ET; nothing is skipped)" : " (nothing was turned away)"}.
+          {caughtUp.length ? <> Last caught up: {caughtUp.slice(0, 3).map((r) => `${what(r)} → ${r.result ?? "done"}`).join("; ")}.</> : null}
+        </p>
+        {waiting.length > 0 && <details className="small"><summary>What is waiting ({waiting.length})</summary><ul>{waiting.map((r) => <li key={r.id}>{r.createdAt.slice(0, 16).replace("T", " ")} UTC · {what(r)}{r.attempts ? <span className="muted"> · tried {r.attempts}×</span> : null}</li>)}</ul></details>}
         <h3>What it is spent on (last 7 days)</h3>
         <div className="table-wrap"><table><thead><tr><th>For</th><th className="num">Calls</th><th className="num">Cost</th><th className="num">Per call</th><th className="num">Share</th><th className="num">Today</th></tr></thead>
           <tbody>{byPurpose.map((b) => <tr key={b.purpose}><td>{PURPOSE_LABEL[b.purpose] ?? b.purpose}</td><td className="num">{b.calls}</td><td className="num">${b.cost.toFixed(2)}</td><td className="num">${(b.cost / Math.max(1, b.calls)).toFixed(3)}</td><td className="num">{weekTotal ? `${Math.round((b.cost / weekTotal) * 100)}%` : "—"}</td><td className="num">${b.today.toFixed(2)}</td></tr>)}{byPurpose.length === 0 && <tr><td colSpan={6} className="muted">No calls yet.</td></tr>}</tbody></table></div>

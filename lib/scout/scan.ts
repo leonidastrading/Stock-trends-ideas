@@ -120,15 +120,20 @@ export async function runScan(deps: ResearchDeps): Promise<ScanReport> {
   for (const c of candidates.slice(0, settings.maxCandidatesPerScan)) {
     const r: ResearchOutcome = await researchCandidate({ origin: "scout", term: c.term, kindHint: c.kind as never, tickersHint: c.tickers, observation: null, trigger: c.acc.accelerating, results: c.results }, deps);
     report.researched.push(r.outcome === "card" ? { term: c.term, outcome: `card: ${r.card.status}`, cardId: r.card.id } : { term: c.term, outcome: r.outcome, reason: r.reason });
-    if (r.outcome === "capped") {
-      report.stoppedEarly = r.reason;
-      return report;
-    }
+    if (r.outcome === "capped") report.stoppedEarly = r.reason; // queued; the rest are queued too
   }
 
   // Discovery: read the day's news and trending lists, let the model propose what the watch-list would miss.
   if (settings.discoveryPerScan > 0) report.discovery = await runDiscovery(deps, settings.discoveryPerScan, cooldown, report);
   return report;
+}
+
+/** The discovery read on its own (from the catch-up queue, after the cap stopped the daily one). */
+export async function discoveryCatchUp(deps: ResearchDeps): Promise<string> {
+  const settings = await store.loadSettings();
+  const report = { date: toEt(deps.now).date, terms: 0, measured: [], researched: [] } as unknown as ScanReport;
+  const d = await runDiscovery(deps, Math.max(1, settings.discoveryPerScan), await store.recentTerms(SCOUT.candidateCooldownDays), report);
+  return d.error ?? `discovery: ${d.proposed.length} proposed`;
 }
 
 async function runDiscovery(deps: ResearchDeps, max: number, cooldown: Set<string>, report: ScanReport): Promise<NonNullable<ScanReport["discovery"]>> {
@@ -137,7 +142,8 @@ async function runDiscovery(deps: ResearchDeps, max: number, cooldown: Set<strin
   const settings = await store.loadSettings();
   const spend = await store.spendOn(et.date);
   if (spend.cost >= settings.dailyCapUsd) {
-    out.error = `daily LLM cap reached ($${spend.cost.toFixed(2)} of $${settings.dailyCapUsd})`;
+    out.error = `daily LLM cap reached ($${spend.cost.toFixed(2)} of $${settings.dailyCapUsd}); the read is queued for after the reset`;
+    await import("./catchup").then(({ enqueue }) => enqueue("job", "discovery", { job: "discovery" })).catch(() => undefined);
     return out;
   }
   const pulse = await gatherPulse(deps.data, deps.now, deps.fetchImpl);
@@ -170,10 +176,7 @@ async function runDiscovery(deps: ResearchDeps, max: number, cooldown: Set<strin
     if (r.outcome === "card" && r.card.status !== "not_promoted") {
       await store.addWatch({ term: c.term, kind: c.kind, tickers: c.tickers, addedBy: "scout", status: (await store.loadSettings()).autoApproveTerms === false ? "proposed" : "active", note: `discovered ${et.date}: ${c.why.slice(0, 200)}` });
     }
-    if (r.outcome === "capped") {
-      report.stoppedEarly = r.reason;
-      break;
-    }
+    if (r.outcome === "capped") report.stoppedEarly = r.reason; // queued; the rest are queued too
   }
   return out;
 }

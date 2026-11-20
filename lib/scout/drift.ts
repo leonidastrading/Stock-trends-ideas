@@ -253,7 +253,7 @@ export async function runDriftResearch(deps: ResearchDeps, setups: DriftSetup[],
   for (const s of todo.slice(0, room)) {
     const r = await researchDrift(deps, s);
     out.researched.push(r);
-    if (r.outcome === "capped") { out.error = r.reason ?? "capped"; break; }
+    if (r.outcome === "capped") out.error = r.reason ?? "capped"; // queued; the rest are queued too
   }
   return out;
 }

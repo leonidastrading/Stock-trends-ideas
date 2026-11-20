@@ -269,10 +269,7 @@ export async function runFilingResearch(deps: ResearchDeps, maxNow: number = FIL
     }
     const r = await researchCandidate({ origin: "scout", term: s.term, kindHint: "event", tickersHint: [s.symbol], observation: null, trigger: s.trigger, context: `${s.context}${background}\nProposed direction: ${s.direction} ${s.symbol}.`, proposedDirection: s.direction }, deps);
     out.researched.push(r.outcome === "card" ? { term: s.term, outcome: `card: ${r.card.status}`, cardId: r.card.id } : { term: s.term, outcome: r.outcome, reason: r.reason });
-    if (r.outcome === "capped") {
-      out.error = r.reason;
-      break;
-    }
+    if (r.outcome === "capped") out.error = r.reason; // queued; the rest are queued too
   }
   return out;
 }
