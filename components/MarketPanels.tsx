@@ -1,5 +1,5 @@
 import { marketDataFromEnv } from "@/lib/alpaca";
-import { MoversTable, SocialTable } from "@/components/SocialTables";
+import { SocialTable } from "@/components/SocialTables";
 import Ticker from "@/components/Ticker";
 import { bySymbol } from "@/lib/scout/congress";
 import { loadPanels } from "@/lib/scout/dashboard-warm";
@@ -55,7 +55,6 @@ export default async function MarketPanels() {
         : b ? <p className="small muted" style={{ margin: "-4px 0 12px" }}>At the close on {fmtDay(b.asOf)}: the scout&apos;s {b.stocks} large and mid caps, not the whole market (live from the first trades of the day).</p> : null}
 
       <div className="panels-grid">
-        <MoversTable gainers={movers.data?.gainers ?? []} losers={movers.data?.losers ?? []} scope={movers.data?.scope ?? "all US stocks"} />
         <SocialTable rows={social.data?.rows ?? []} />
         <section className="card panel">
           <Head title="Market & rates" note="vs previous close" updatedAt={market.updatedAt} error={market.error} />
