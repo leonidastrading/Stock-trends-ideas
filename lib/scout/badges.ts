@@ -29,8 +29,9 @@ export async function badgeCounts(since: Partial<Record<BadgeTab, string>>, now 
   });
   // The News feed's shared copy (no extra calls): new headlines since the tab was last opened.
   add("news", async (s) => {
-    const { newsFeed } = await import("./newsfeed");
-    return (await newsFeed(now)).filter((x) => x.kind === "news" && !x.repostedAt && Date.parse(x.at) > Date.parse(s)).length;
+    // Only the top stories (big moves, events, your card stocks, pile-ups, Trump), not every headline.
+    const { isTopStory, newsFeed } = await import("./newsfeed");
+    return (await newsFeed(now)).filter((x) => isTopStory(x) && Date.parse(x.at) > Date.parse(s)).length;
   });
   await Promise.all(jobs);
   return out;

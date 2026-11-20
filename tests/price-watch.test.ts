@@ -83,3 +83,19 @@ describe("price watch", () => {
     expect(breakingNews(ranked, now, 30, 1).map((b) => [b.id, b.why])).toContainEqual(["m", "big move"]);
   });
 });
+
+describe("the News badge counts top stories only", () => {
+  it("a big move or an event counts; a plain headline, a pause or a stock under $5 does not", async () => {
+    const { isTopStory } = await import("@/lib/scout/newsfeed");
+    const now = new Date("2026-11-19T16:01:00Z");
+    const at = "2026-11-19T16:00:00Z";
+    const items = [
+      { id: "a", at, headline: "AMD down 8.3% today", summary: "", source: "Scout price watch", url: "", symbols: ["AMD"], kind: "news" as const },
+      { id: "b", at, headline: "Company announces new office in Denver", summary: "", source: "x", url: "", symbols: ["XYZ"], kind: "news" as const },
+      { id: "c", at, headline: "FMC halted, then guidance cut", summary: "", source: "x", url: "", symbols: ["FMC"], kind: "news" as const },
+      { id: "d", at, headline: "Acme cuts guidance", summary: "", source: "x", url: "", symbols: ["ACME"], kind: "news" as const },
+    ];
+    const ranked = rankFeed(items, new Map(), now, new Set(["FMC"]));
+    expect(ranked.filter(isTopStory).map((i) => i.id)).toEqual(["a", "d"]);
+  });
+});
