@@ -33,7 +33,12 @@ a { color: var(--accent); }
 @media (min-width: 900px) { :root { --page-w: min(1160px, max(700px, 58vw)); } }
 /* Nothing inside the page may push it wider than the page width (wide tables scroll inside their box). */
 main > * { max-width: 100%; }
-.theme, .card { min-width: 0; overflow-wrap: anywhere; }
+.theme, .card { min-width: 0; overflow-wrap: break-word; }
+/* Only quotes and file names may break inside a word; table cells and tickers never do (phones squeezed "LHX" into "LH X"). */
+.theme-quotes li, .from-line, .history-note { overflow-wrap: anywhere; }
+.card td, .card th { overflow-wrap: normal; word-break: normal; }
+.card td .ticker, .card td a.ticker, .ticker { white-space: nowrap; }
+.card td.num, .card td .num { white-space: nowrap; }
 main { max-width: var(--page-w); margin: 0 auto; padding: 16px 24px; }
 nav { display: flex; gap: 4px 2px; align-items: center; padding: 8px max(16px, calc((100% - var(--page-w)) / 2 + 12px)); border-bottom: 1px solid var(--border); background: var(--surface-1); flex-wrap: wrap; }
 nav .brand { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; margin-right: 10px; letter-spacing: -0.01em; color: var(--text-primary); text-decoration: none; font-size: 1.05em; }
