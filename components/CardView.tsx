@@ -45,7 +45,12 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
   const q = await quote(c.primaryTicker);
   // Where the idea came from, in a word or two (YouTube, Discord, News scan, Rumors…).
   const src = await import("@/lib/scout/store").then((s) => s.cardSource(c.id)).catch(() => null);
-  const from = (await import("@/lib/scout/origin-tag")).originLink(c.origin, src?.term, src?.observation, src ? { label: src.sourceLabel, url: src.sourceUrl } : null);
+  let from = (await import("@/lib/scout/origin-tag")).originLink(c.origin, src?.term, src?.observation, src ? { label: src.sourceLabel, url: src.sourceUrl } : null);
+  // Cards sent before the buttons recorded their page: a Dots idea on the same stock and side just before the card.
+  if (c.origin === "human" && !src?.sourceLabel && /^(Your note|Your image)$/.test(from.tag)) {
+    const dot = await import("@/lib/scout/dots").then(async ({ dotsIdeaFor, recentDotsRuns }) => dotsIdeaFor(await recentDotsRuns(), c.primaryTicker, c.direction, c.createdAt)).catch(() => null);
+    if (dot) from = { tag: "Dots", note: `Most likely the Dots idea "${dot.title}" (posted ${fmtEtAgo(dot.postedAt)})`, url: dot.url };
+  }
   // "Your note" opens the note itself, on this card.
   const fromUrl = from.tag === "Your note" || from.tag === "Your image" ? `#obs-${c.id}` : from.url;
   // A 5%+ move on the card's stock (today, or after hours / pre-market against the last close): a banner with the most likely reason.

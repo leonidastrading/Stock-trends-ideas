@@ -201,6 +201,28 @@ export async function dotsRuns(limit = 30): Promise<DotsRun[]> {
   return rows.map((r) => ({ id: Number(r.id), createdAt: new Date(r.created_at as string).toISOString(), etDate: r.et_date instanceof Date ? r.et_date.toISOString().slice(0, 10) : String(r.et_date).slice(0, 10), ideas: (r.ideas as DotIdea[]) ?? [], headlines: Number(r.headlines ?? 0), costUsd: r.cost_usd === null ? null : Number(r.cost_usd), changes: (r.changes as Change[]) ?? [], sources: (r.sources as Record<string, number>) ?? {} }));
 }
 
+/**
+ * Pure: the Dots idea a card was most likely sent from (cards sent before the buttons recorded their page): an idea
+ * on the card's stock and direction, posted in the 3 days before the card, the latest such.
+ */
+export function dotsIdeaFor(runs: DotsRun[], symbol: string, direction: string, cardAt: string): { runId: number; index: number; title: string; postedAt: string; url: string } | null {
+  const at = Date.parse(cardAt);
+  for (const r of [...runs].sort((a, b) => b.createdAt.localeCompare(a.createdAt))) {
+    const t = Date.parse(r.createdAt);
+    if (t > at || at - t > 3 * 86400_000) continue;
+    const i = r.ideas.findIndex((x) => x.tickers.includes(symbol) && x.direction === direction);
+    if (i >= 0) return { runId: r.id, index: i, title: r.ideas[i].title, postedAt: r.createdAt, url: `/dots?run=${r.id}#dot-${r.id * 10 + i}` };
+  }
+  return null;
+}
+
+const runsMemo = { at: 0, runs: [] as DotsRun[] };
+/** dotsRuns(30), kept a minute (a page of cards asks once). */
+export async function recentDotsRuns(): Promise<DotsRun[]> {
+  if (Date.now() - runsMemo.at > 60_000) { runsMemo.runs = await dotsRuns(30); runsMemo.at = Date.now(); }
+  return runsMemo.runs;
+}
+
 /** One run: scan, dig, connect, measure how late each stock is, log with today's prices. */
 export async function runDots(deps: { data: MarketData | null; callModel: CallModel; now: Date; fetchImpl?: typeof fetch }): Promise<string> {
   const settings = await store.loadSettings();

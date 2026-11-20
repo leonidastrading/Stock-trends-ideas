@@ -101,3 +101,18 @@ describe("Dots end to end (PGlite, fake news and model)", () => {
     expect(run.ideas[0].evidence[0].url).toMatch(/^https:\/\/news\.example\//);
   });
 });
+
+describe("a card sent from Dots before the page was recorded", () => {
+  it("is matched to the idea on its stock and side posted just before it", async () => {
+    const { dotsIdeaFor } = await import("@/lib/scout/dots");
+    const idea = (title: string, tickers: string[], direction: "long" | "short") => ({ title, tickers, direction }) as never;
+    const runs = [
+      { id: 12, createdAt: "2026-11-19T22:33:00Z", etDate: "2026-11-19", ideas: [idea("Port strike could hand Ollie's cheap holiday closeout inventory", ["OLLI"], "long"), idea("Watchmen strike hits importers", ["MATX"], "short")], headlines: 0, costUsd: null, changes: [], sources: {} },
+      { id: 9, createdAt: "2026-11-10T13:00:00Z", etDate: "2026-11-10", ideas: [idea("Old OLLI idea", ["OLLI"], "long")], headlines: 0, costUsd: null, changes: [], sources: {} },
+    ];
+    expect(dotsIdeaFor(runs, "OLLI", "long", "2026-11-19T22:50:00Z")).toMatchObject({ runId: 12, index: 0, url: "/dots?run=12#dot-120" });
+    expect(dotsIdeaFor(runs, "OLLI", "short", "2026-11-19T22:50:00Z")).toBeNull();
+    expect(dotsIdeaFor(runs, "OLLI", "long", "2026-11-19T20:00:00Z")).toBeNull(); // card before the idea
+    expect(dotsIdeaFor(runs, "OLLI", "long", "2026-11-25T20:00:00Z")).toBeNull(); // too long after
+  });
+});
