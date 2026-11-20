@@ -56,7 +56,7 @@ const PAGE = 25;
 const SPEC = ["", "vague", "loose", "some detail", "specific", "very specific"];
 
 /** Rumors: market-relevant claims from fringe and conspiracy sources, catalogued (never asserted) and checked against the news. */
-export default async function RumorsPage({ searchParams }: { searchParams: Promise<{ days?: string; cat?: string; tickers?: string; truth?: string; page?: string }> }) {
+export default async function RumorsPage({ searchParams }: { searchParams: Promise<{ days?: string; cat?: string; tickers?: string; truth?: string; page?: string; id?: string }> }) {
   if (!hasDatabase()) return <SetupNotice />;
   const sp = await searchParams;
   const days = [7, 30, 90].includes(Number(sp.days)) ? Number(sp.days) : 7;
@@ -74,7 +74,9 @@ export default async function RumorsPage({ searchParams }: { searchParams: Promi
   // Newest first (the came-true ones are one tap away under their filter).
   // A claim already reported by a credible outlet when the scout read it is news, not a rumor: only under its own filter.
   const isNews = (r: Rumor) => verdicts.get(r.id)?.status === "already_news";
-  const rows = all.filter((r) => (!cat || r.category === cat) && (!withTickers || r.tickers.length > 0) && (truth ? verdicts.get(r.id)?.status === truth : !isNews(r)))
+  // ?id=64 shows one rumor (a card's origin link), whatever the filters.
+  const only = Number(sp.id) || 0;
+  const rows = only ? (await rumorsSince(3650, 100000)).filter((r) => r.id === only) : all.filter((r) => (!cat || r.category === cat) && (!withTickers || r.tickers.length > 0) && (truth ? verdicts.get(r.id)?.status === truth : !isNews(r)))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id);
   const tally = (s: string) => all.filter((r) => verdicts.get(r.id)?.status === s).length;
   const rumorsOnly = all.filter((r) => !isNews(r));
@@ -131,7 +133,7 @@ export default async function RumorsPage({ searchParams }: { searchParams: Promi
         const done = checked.get(r.id);
         const v = verdicts.get(r.id);
         return (
-          <section key={r.id} className={`card rumor-item${v?.status === "confirmed" ? " rumor-true" : ""}`}>
+          <section key={r.id} id={`rumor-${r.id}`} className={`card rumor-item${v?.status === "confirmed" ? " rumor-true" : ""}`}>
             <div className="rumor-when"><b>{etLabelAgo(r.createdAt)}</b> <span className="muted">· rumor #{r.id} · from {r.source || r.docSource}</span></div>
             {v && v.status !== "open" && <Verdict c={v} />}
             <div>

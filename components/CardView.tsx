@@ -45,7 +45,9 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
   const q = await quote(c.primaryTicker);
   // Where the idea came from, in a word or two (YouTube, Discord, News scan, Rumors…).
   const src = await import("@/lib/scout/store").then((s) => s.cardSource(c.id)).catch(() => null);
-  const from = (await import("@/lib/scout/origin-tag")).originTag(c.origin, src?.term, src?.observation);
+  const from = (await import("@/lib/scout/origin-tag")).originLink(c.origin, src?.term, src?.observation, src ? { label: src.sourceLabel, url: src.sourceUrl } : null);
+  // "Your note" opens the note itself, on this card.
+  const fromUrl = from.tag === "Your note" || from.tag === "Your image" ? `#obs-${c.id}` : from.url;
   // A 5%+ move on the card's stock (today, or after hours / pre-market against the last close): a banner with the most likely reason.
   const ext = q?.extPct !== null && q?.extPct !== undefined && Math.abs(q.extPct) >= 5 ? q.extPct : null;
   const bigMove = ext ?? (q?.changePct !== null && q?.changePct !== undefined && Math.abs(q.changePct) >= 5 && sessionLabel(q) === "today" ? q.changePct : null);
@@ -87,7 +89,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
           <a className="tag card-number" href={`/ideas?days=365&card=${c.id}#card-${c.id}`} title="Link to this card">#{c.id}</a>
           <span className={`tag ${c.status}`}>{c.status.replace("_", " ")}</span>
           <span className="tag">{KIND_LABEL[c.kind as Kind] ?? c.kind}</span>
-          <span className="tag source-tag" title={`${from.note} · ${c.origin === "human" ? "human-originated" : "found by the scout"}`}>{from.tag}</span>
+          <a className="tag source-tag" href={fromUrl} target={/^https?:/.test(fromUrl) ? "_blank" : undefined} rel="noreferrer" title={`${from.note} · ${c.origin === "human" ? "human-originated" : "found by the scout"} · click to open`}>{from.tag} ↗</a>
           <span className="small muted" title={`card #${c.id} · ${c.model} · version ${c.versionId}`}>{fmtEtAgo(c.createdAt)}</span>
         </div>
         {track?.invalidatedAt && (
@@ -142,7 +144,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
         </div>
       </div>
       <dl>
-        <dt>Observation</dt><dd>{k.observation}</dd>
+        <dt id={`obs-${c.id}`}>Observation <span className="muted small">({from.note})</span></dt><dd>{k.observation}</dd>
         <dt>Why not priced</dt><dd>{k.why_not_priced}</dd>
         <dt>Tickers</dt>
         <dd>{k.tickers.map((t, i) => <div key={t.symbol}><b><Ticker symbol={t.symbol} className={c.direction === "long" ? "pos" : "neg"}>{c.direction === "long" ? "▲" : "▼"} {t.symbol}</Ticker></b> {i === 0 ? <span className="tag">tracked on paper</span> : null}

@@ -18,6 +18,9 @@ const schema = z.object({
   term: z.string().trim().min(1).max(80).optional(),
   kind: z.enum(KINDS).nullable().optional(),
   tickers: z.array(z.string().trim().toUpperCase().regex(/^[A-Z]{1,5}(\.[A-Z])?$/)).max(5).optional(),
+  /** Sent by a page's "Research it" button: researched as it is (never read as a pasted article), with its source. */
+  direct: z.boolean().optional(),
+  from: z.object({ label: z.string().trim().min(1).max(40), url: z.string().trim().max(400).nullable().optional() }).optional(),
 });
 
 /**
@@ -30,9 +33,9 @@ export async function POST(request: Request) {
   if (!hasDatabase()) return NextResponse.json({ ok: false, errors: ["database not connected"] }, { status: 503 });
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ ok: false, errors: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) }, { status: 422 });
-  const { observation, term, kind, tickers } = parsed.data;
+  const { observation, term, kind, tickers, direct, from } = parsed.data;
   try {
-    if (observation.length > PASTE_CHARS) {
+    if (observation.length > PASTE_CHARS && !direct) {
       const deps = defaultDeps();
       const { ideasFrom } = await import("@/lib/scout/inbox");
       const { items } = await ideasFrom(observation, "text pasted into I noticed something", deps);
@@ -45,7 +48,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, extracted: mine.map((m) => ({ term: m.term, tickers: m.tickers, direction: m.direction ?? null })) }, { status: 202 });
     }
     const r = await researchCandidate(
-      { origin: "human", term: term || observation.split(/[.!?\n]/)[0].slice(0, 80), kindHint: kind ?? null, tickersHint: tickers ?? [], observation },
+      { origin: "human", term: term || observation.split(/[.!?\n]/)[0].slice(0, 80), kindHint: kind ?? null, tickersHint: tickers ?? [], observation, source: from ?? { label: "Your note", url: "/notice" } },
       defaultDeps(),
     );
     if (r.outcome === "card") return NextResponse.json({ ok: true, cardId: r.card.id, status: r.card.status });

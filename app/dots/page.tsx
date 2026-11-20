@@ -113,7 +113,7 @@ export default async function DotsPage({ searchParams }: { searchParams: Promise
             <div style={{ marginTop: 10 }}><StockChart symbol={main} tvSymbol={tvSymbol(main, info.get(main)?.exchange)} height={480} entry={{ date: latest.etDate, price: t.prices?.[main] ?? null, direction: t.direction, label: "idea published" }} /></div>
             <div className="small rumor-actions" style={{ marginTop: 8 }}>
               {cards.length ? <span>Scout cards on {t.tickers.join(", ")}: <CardChips cards={cards} max={50} /></span> : <span className="muted">No scout cards on {t.tickers.join(", ")} yet.</span>}
-              <ResearchButton symbol={main} term={`dots: ${t.title}`.slice(0, 80)} observation={details(t, latest)} kind={null} />
+              <ResearchButton from={{ label: "Dots", url: `/dots?run=${latest.id}#dot-${latest.id * 10 + i}` }} symbol={main} term={`dots: ${t.title}`.slice(0, 80)} observation={details(t, latest)} kind={null} />
             </div>
           </CardCollapse>
         );

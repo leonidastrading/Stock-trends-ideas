@@ -1,4 +1,5 @@
 import CardActions from "@/components/CardActions";
+import { originLink } from "@/lib/scout/origin-tag";
 import CardView from "@/components/CardView";
 import { CollapseAll } from "@/components/CardCollapse";
 import Pager, { FilterLinks, hrefWith, paginate } from "@/components/Pager";
@@ -33,9 +34,10 @@ const SHORT_BANDS = [
 const PAGE = 10;
 
 /** Where a card came from, in words: the desk or person, and the story / document / signal behind it. */
-function fromLine(player: Player, term: string): string {
-  const what = term.replace(/^(story|inbox|stream host|stream agent|filing|insider|options|congress|insider\+congress|truth): /, "").replace(/ → .*$/, "");
-  return `${PLAYER_LABEL[player]}${what && what !== term || player === "scout_trend" || player === "you" ? ` · ${what}` : ""}`;
+/** The "From:" line: where the idea came from (and a link to it), what it was, and whose score it counts for. */
+function fromLine(player: Player, term: string, src: { tag: string; url: string } | null): React.ReactNode {
+  const what = term.replace(/^(story|inbox|stream host|stream agent|filing|insider|options|congress|insider\+congress|truth|dots|court|theme|rumor|investigate|drift|site): /, "").replace(/ → .*$/, "");
+  return <>{src ? <a href={src.url}>{src.tag}</a> : PLAYER_LABEL[player]}{what ? ` · ${what}` : ""} <span className="muted">(scored as {PLAYER_LABEL[player]})</span></>;
 }
 
 type SP = { days?: string; source?: string; status?: string; sort?: string; conf?: string; cap?: string; short?: string; dir?: string; penny?: string; page?: string; card?: string };
@@ -78,6 +80,8 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   const opp = opposingCalls(recent, tracks);
   const t = new Map(tracks.map((x) => [x.cardId, x]));
   const termOf = new Map(candidates.filter((c) => c.cardId !== null).map((c) => [c.cardId!, c.term]));
+  const candOf = new Map(candidates.filter((c) => c.cardId !== null).map((c) => [c.cardId!, c]));
+  const srcOf = (c: store.StoredCard) => { const x = candOf.get(c.id); return originLink(c.origin, x?.term, x?.observation, x ? { label: x.sourceLabel, url: x.sourceUrl } : null); };
   const playerFor = (c: store.StoredCard) => playerOf(c.origin, termOf.get(c.id));
   // A later card that repeats an earlier call by the same source is folded under the first one (and scored once).
   const repeats = repeatCards(cards, termOf);
@@ -147,7 +151,7 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
         const tr = t.get(c.id) ?? null;
         return (
           <div key={c.id}>
-            <div className="small muted from-line">From: {fromLine(playerFor(c), termOf.get(c.id) ?? "")}
+            <div className="small muted from-line">From: {fromLine(playerFor(c), termOf.get(c.id) ?? "", (() => { const o = srcOf(c); return { tag: o.tag, url: o.tag === "Your note" || o.tag === "Your image" ? `#obs-${c.id}` : o.url }; })())}
               {angles.get(c.id)?.length ? <> · also {angles.get(c.id)!.map((id, j) => <span key={id}>{j ? ", " : ""}<a href={hrefWith(params, { card: String(id), page: undefined }, `#card-${id}`)}>card #{id}</a></span>)} <span title="Another angle on the same call from the same source within 14 days: kept on file, scored once">(same call, scored once)</span></> : null}
               {repeats.has(c.id) ? <> · <span className="warn">repeat of <a href={hrefWith(params, { card: String(repeats.get(c.id)), page: undefined }, `#card-${repeats.get(c.id)}`)}>card #{repeats.get(c.id)}</a>: not scored</span></> : null}
             </div>

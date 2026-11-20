@@ -17,6 +17,24 @@ export function docLabel(observation: string | null | undefined): string | null 
   return /From the inbox document "([^"]+)"/.exec(o)?.[1] ?? /\(From ([^;)]{2,60});/.exec(o)?.[1] ?? null;
 }
 
+/** Where each kind of source lives on the site (a page to open to see where the idea came from). */
+const PAGE: Record<string, string> = {
+  "News scan": "/", "Trend scan": "/", Options: "/positioning", "Insider buy": "/filings", "Insiders+Congress": "/congress", Congress: "/congress", "SEC filing": "/filings",
+  "Trump post": "/news", "Down drift": "/drift", Drift: "/drift", Rumors: "/rumors", Investigation: "/investigate", Themes: "/themes", Dots: "/dots", Court: "/court", Pharma: "/pharma",
+  "Stream host": "/inbox", "Stream agent": "/inbox", Website: "/settings", "Your note": "/notice", "Your image": "/notice", News: "/news",
+};
+
+/** One or two words for where the idea came from, a longer note for the hover, and a link to it. */
+export function originLink(origin: "scout" | "human", term: string | undefined, observation?: string | null, source?: { label?: string | null; url?: string | null } | null): { tag: string; note: string; url: string } {
+  const t = originTag(origin, term, observation);
+  // A page that sent the idea says so itself (from now on); older cards are worked out from their term.
+  if (source?.label && !(source.label === "Your note" && t.tag !== "Your note")) return { tag: source.label, note: source.label === "Your note" ? "Something you noticed (I noticed something)" : `Sent to research from ${source.label}`, url: source.url || PAGE[source.label] || "/" };
+  const inv = /^investigate: \S+ #(\d+)/i.exec(term ?? "")?.[1];
+  const rumor = /^rumor: \S* ?#(\d+)/i.exec(term ?? "")?.[1];
+  const url = inv ? `/investigate#inv-${inv}` : rumor ? `/rumors?id=${rumor}#rumor-${rumor}` : origin === "human" && t.tag === "Inbox doc" ? "/inbox" : PAGE[t.tag] ?? (/^(YouTube|Discord|Reddit|X|Stocktwits|Telegram|Podcast|Newsletter|Meet Kevin|Email|Transcript|Earnings|Inbox doc)$/.test(t.tag) ? "/inbox" : "/settings");
+  return { ...t, url };
+}
+
 /** Pure: one or two words for where the idea came from, and a longer note for the hover. */
 export function originTag(origin: "scout" | "human", term: string | undefined, observation?: string | null): { tag: string; note: string } {
   const t = (term ?? "").toLowerCase();

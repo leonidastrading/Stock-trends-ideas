@@ -32,6 +32,8 @@ export interface ResearchInput {
   observation: string | null;
   /** Extra context for the model (a story and the trade the story desk proposed). */
   context?: string;
+  /** The page the idea was sent from, with a link back ("Dots", "/dots?run=12#dot-121"). */
+  source?: { label: string; url?: string | null };
   trigger?: Signal[];
   /** Results already gathered by the scan for this term (skips re-probing). */
   results?: SourceResult[];
@@ -66,7 +68,7 @@ export async function researchCandidate(input: ResearchInput, deps: ResearchDeps
   const settings = await store.loadSettings();
   const version = await currentVersion(settings);
   const et = toEt(deps.now);
-  const base = { versionId: version.id, origin: input.origin, term: input.term, kindHint: input.kindHint, tickersHint: input.tickersHint, observation: input.observation, trigger: input.trigger ?? null, cardId: null };
+  const base = { versionId: version.id, origin: input.origin, term: input.term, kindHint: input.kindHint, tickersHint: input.tickersHint, observation: input.observation, trigger: input.trigger ?? null, cardId: null, sourceLabel: input.source?.label ?? null, sourceUrl: input.source?.url ?? null };
 
   // Spend cap: logged as a rejection so the candidates page shows why nothing happened.
   const spend = await store.spendOn(et.date);

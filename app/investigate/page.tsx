@@ -63,7 +63,7 @@ function InvestigationView({ inv, open, researched, t }: { inv: Investigation; o
   const rec = inv.records;
   const n = rec ? { contracts: rec.contracts.reduce((a, c) => a + c.awards.length, 0), lobbying: rec.lobbying.reduce((a, l) => a + l.filings.length, 0), pac: rec.pacs.reduce((a, p) => a + p.spending.length, 0) } : null;
   return (
-    <details className="card section investigation" open={open}>
+    <details className="card section investigation" id={`inv-${inv.id}`} open={open}>
       <summary>
         <b>{r?.headline || inv.title}</b>{" "}
         {inv.status === "running" ? <span className="tag late">digging…</span> : inv.status === "error" ? <span className="tag down">failed</span> : null}

@@ -90,7 +90,7 @@ export default async function FilingsPage() {
                 <td className="num">{usd(b.value)}</td>
                 <td className="num">{b.pctIncrease === null ? "—" : `+${b.pctIncrease}%`}</td>
                 <td className="small">{b.routine === true ? <span className="muted">routine</span> : b.routine === false ? <span className="pos">opportunistic</span> : <span className="muted">no history</span>}</td>
-                <td>{b.symbol ? (researchedSyms.has(b.symbol) ? <span className="small muted">researched</span> : <ResearchButton ticker={b.symbol} observation={buyNote(b)} />) : null}</td>
+                <td>{b.symbol ? (researchedSyms.has(b.symbol) ? <span className="small muted">researched</span> : <ResearchButton from={{ label: "Insider buy", url: "/filings" }} ticker={b.symbol} observation={buyNote(b)} />) : null}</td>
               </tr>
             ))}
             {buys.length === 0 && <tr><td colSpan={6} className="muted">None read yet. The queue is worked through on each hourly story call and after the close.</td></tr>}

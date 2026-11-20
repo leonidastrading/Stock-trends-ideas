@@ -150,14 +150,14 @@ export async function allHealth(): Promise<Health[]> {
 
 // -------------------------------------------------------------- candidates
 
-export interface Candidate { id: number; versionId: number; createdAt: string; origin: "scout" | "human"; term: string; kindHint: string | null; tickersHint: string[]; observation: string | null; trigger: Signal[] | null; outcome: "card" | "rejected" | "error"; reason: string | null; cardId: number | null }
+export interface Candidate { id: number; versionId: number; createdAt: string; origin: "scout" | "human"; term: string; kindHint: string | null; tickersHint: string[]; observation: string | null; trigger: Signal[] | null; outcome: "card" | "rejected" | "error"; reason: string | null; cardId: number | null; sourceLabel?: string | null; sourceUrl?: string | null }
 
-const toCandidate = (r: Row): Candidate => ({ id: Number(r.id), versionId: Number(r.version_id), createdAt: iso(r.created_at)!, origin: r.origin, term: r.term, kindHint: r.kind_hint, tickersHint: r.tickers_hint ?? [], observation: r.observation, trigger: r.trigger, outcome: r.outcome, reason: r.reason, cardId: num(r.card_id) });
+const toCandidate = (r: Row): Candidate => ({ id: Number(r.id), versionId: Number(r.version_id), createdAt: iso(r.created_at)!, origin: r.origin, term: r.term, kindHint: r.kind_hint, tickersHint: r.tickers_hint ?? [], observation: r.observation, trigger: r.trigger, outcome: r.outcome, reason: r.reason, cardId: num(r.card_id), sourceLabel: r.source_label ?? null, sourceUrl: r.source_url ?? null });
 
 export async function addCandidate(c: Omit<Candidate, "id" | "createdAt">): Promise<Candidate> {
   const rows = await q(
-    `INSERT INTO candidates (version_id, origin, term, kind_hint, tickers_hint, observation, trigger, outcome, reason, card_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
-    [c.versionId, c.origin, c.term, c.kindHint, c.tickersHint, c.observation, c.trigger ? JSON.stringify(c.trigger) : null, c.outcome, c.reason, c.cardId],
+    `INSERT INTO candidates (version_id, origin, term, kind_hint, tickers_hint, observation, trigger, outcome, reason, card_id, source_label, source_url) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+    [c.versionId, c.origin, c.term, c.kindHint, c.tickersHint, c.observation, c.trigger ? JSON.stringify(c.trigger) : null, c.outcome, c.reason, c.cardId, c.sourceLabel ?? null, c.sourceUrl ?? null],
   );
   return toCandidate(rows[0]);
 }
@@ -210,9 +210,9 @@ export async function cardsSince(days: number): Promise<StoredCard[]> {
 }
 
 /** The research term and observation a card came from (where the idea started). */
-export async function cardSource(cardId: number): Promise<{ term: string; observation: string | null } | null> {
-  const r = (await q(`SELECT term, observation FROM candidates WHERE card_id = $1 ORDER BY id LIMIT 1`, [cardId]))[0];
-  return r ? { term: String(r.term), observation: (r.observation as string) ?? null } : null;
+export async function cardSource(cardId: number): Promise<{ term: string; observation: string | null; sourceLabel: string | null; sourceUrl: string | null } | null> {
+  const r = (await q(`SELECT term, observation, source_label, source_url FROM candidates WHERE card_id = $1 ORDER BY id LIMIT 1`, [cardId]))[0];
+  return r ? { term: String(r.term), observation: (r.observation as string) ?? null, sourceLabel: (r.source_label as string) ?? null, sourceUrl: (r.source_url as string) ?? null } : null;
 }
 
 export async function favorites(): Promise<Array<{ cardId: number; addedAt: string }>> {

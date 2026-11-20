@@ -655,6 +655,9 @@ ALTER TABLE earnings_tracks ADD COLUMN IF NOT EXISTS ret_close_pct double precis
 ALTER TABLE earnings_tracks ADD COLUMN IF NOT EXISTS spy_close_pct double precision;
 ALTER TABLE earnings_tracks ADD COLUMN IF NOT EXISTS exit_basis text;
 ALTER TABLE earnings_tracks ADD COLUMN IF NOT EXISTS exit_moves jsonb NOT NULL DEFAULT '[]'::jsonb;
+-- Where an idea sent to research came from (the page and a link back to it), e.g. "Dots", "/dots?run=12#dot-121".
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS source_label text;
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS source_url text;
 CREATE TABLE IF NOT EXISTS earnings_cards (
   scan_id integer PRIMARY KEY,
   created_at timestamptz NOT NULL DEFAULT now(),

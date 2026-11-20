@@ -452,3 +452,6 @@ a.chip { text-decoration: none; }
 .nav-update { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 
 .source-tag { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); color: var(--text-primary); font-weight: 600; }
+
+a.source-tag { text-decoration: none; }
+a.source-tag:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }

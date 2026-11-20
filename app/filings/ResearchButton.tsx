@@ -4,11 +4,11 @@ import LinkedText from "@/components/LinkedText";
 import { useState } from "react";
 
 /** Send one lead to research now (as Vadim's observation, so it scores as his). */
-export default function ResearchButton({ observation, ticker }: { observation: string; ticker?: string | null }) {
+export default function ResearchButton({ observation, ticker, from }: { observation: string; ticker?: string | null; from: { label: string; url?: string | null } }) {
   const [state, setState] = useState<"idle" | "busy" | string>("idle");
   async function go() {
     setState("busy");
-    const res = await fetch("/api/notice", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ observation, tickers: ticker ? [ticker] : [], kind: "event" }) });
+    const res = await fetch("/api/notice", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ observation, tickers: ticker ? [ticker] : [], kind: "event", direct: true, from }) });
     const j = await res.json().catch(() => ({ errors: [`HTTP ${res.status}`] }));
     setState(res.ok && j.ok ? `card #${j.cardId}: ${String(j.status).replace("_", " ")}` : (j.errors ?? ["failed"]).join("; "));
   }
