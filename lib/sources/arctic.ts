@@ -18,7 +18,7 @@ export const ARCTIC = {
   rumors: ["conspiracy", "wallstreetbets"],
   keepDays: 60,
   backfillDays: 35,
-  gapMs: 1500,
+  gapMs: 2500,
 };
 
 const UA = { "user-agent": "trend-scout research (Arctic Shift reader)" };
@@ -82,25 +82,31 @@ export async function ingestReddit(deadline = Date.now() + 25_000, fetchImpl: ty
           out.push(`${sub} +${added}`);
           if (posts.length < 100) break;
         }
-        // Up to three pages further back, until 35 days are covered.
-        for (let i = 0; i < 3 && s.oldest > floor && Date.now() < deadline; i++) {
+        // One page further back, until 35 days are covered.
+        if (s.oldest > floor && Date.now() < deadline) {
           const older = await page(sub, { before: String(s.oldest), after: String(floor), sort: "desc" }, fetchImpl);
           await sleep(ARCTIC.gapMs);
           if (older.length) { await save(older); s.oldest = Math.min(s.oldest, ...older.map((p) => p.created_utc)); }
           else s.oldest = floor;
         }
       } catch (err) {
-        out.push(`${sub}: ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`);
+        const msg = err instanceof Error ? err.message : String(err);
+        out.push(`${sub}: ${msg.slice(0, 80)}`);
+        state[sub] = s;
+        // The archive is busy: stop for this call and leave it alone until the next one.
+        if (/slow down|429|422/i.test(msg)) { out.push("stopped: the archive asked to slow down"); break; }
         await sleep(ARCTIC.gapMs * 2);
       }
       state[sub] = s;
       await store.cachePut("reddit:ingest", state);
     }
+    await store.cachePut("reddit:ingest", state);
     await q(`DELETE FROM reddit_posts WHERE created_at < now() - ($1::int * interval '1 day')`, [ARCTIC.keepDays]);
   } finally {
     await store.unlock("lock:reddit-ingest").catch(() => undefined);
   }
-  return out.join(", ") || "nothing new";
+  const days = await coverageDays(now).catch(() => 0);
+  return `${out.join(", ") || "nothing new"} · ${days} of ${ARCTIC.backfillDays} days stored`;
 }
 
 /** How far back the stored copy reaches for the finance subreddits (days), the smallest across them. */

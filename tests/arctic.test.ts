@@ -26,7 +26,7 @@ describe("Reddit through Arctic Shift", () => {
       setQuerierForTests({ query: async (text, params) => (await pg.query(text, params as unknown[])).rows as Record<string, unknown>[] });
       ARCTIC.gapMs = 0;
     });
-    afterAll(() => { setQuerierForTests(null); ARCTIC.gapMs = 1500; });
+    afterAll(() => { setQuerierForTests(null); ARCTIC.gapMs = 2500; });
 
     it("stores new posts and backfills older ones, then counts mentions for the Reddit source", async () => {
       const calls: string[] = [];
