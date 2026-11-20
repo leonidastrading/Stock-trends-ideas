@@ -99,3 +99,12 @@ describe("the News badge counts top stories only", () => {
     expect(ranked.filter(isTopStory).map((i) => i.id)).toEqual(["a", "d"]);
   });
 });
+
+describe("the card banner reads the whole day's news", () => {
+  it("a morning headline is found in the evening with a day-long window, not with the 3-hour one", () => {
+    const evening = new Date("2026-11-20T02:30:00Z"); // 9:30 PM ET Nov 19
+    const news = [{ ts: "2026-11-19T14:10:00Z", headline: "Jefferies downgrades Applied Aerospace, halves target", symbols: ["AADX"], source: "fiscal.ai", url: "u" }];
+    expect(likelyReason("AADX", news, evening)).toBeNull();
+    expect(likelyReason("AADX", news, evening, 20 * 3600_000)?.headline).toMatch(/downgrades/);
+  });
+});

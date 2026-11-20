@@ -50,13 +50,18 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
   const ext = q?.extPct !== null && q?.extPct !== undefined && Math.abs(q.extPct) >= 5 ? q.extPct : null;
   const bigMove = ext ?? (q?.changePct !== null && q?.changePct !== undefined && Math.abs(q.changePct) >= 5 && sessionLabel(q) === "today" ? q.changePct : null);
   const moveWhen = ext !== null ? q!.extLabel! : "today";
+  // The day's headlines (since 4 AM ET, not just the last 3 hours: the banner is read in the evening too), then an
+  // earnings release; failing those, a move in the card's favour is most likely still the card's own story.
   const moveReason = bigMove !== null ? await (async () => {
     const data = marketDataFromEnv();
     if (!data) return null;
-    const news = await data.getNews([c.primaryTicker], new Date(Date.now() - 3 * 3600_000), new Date(), 20).catch(() => []);
+    const now = new Date();
+    const dayStart = new Date(Math.min(now.getTime() - 3 * 3600_000, Date.parse(`${toEt(now).date}T09:00:00Z`)));
+    const news = await data.getNews([c.primaryTicker], dayStart, now, 30).catch(() => []);
     const fast = await import("@/lib/sources/wires").then(({ fastNews }) => fastNews()).catch(() => []);
-    return (await import("@/lib/scout/price-watch")).reasonFor({ symbol: c.primaryTicker, phase: moveWhen === "pre-market" ? "pre" : moveWhen === "after hours" ? "post" : "regular" }, [...news, ...fast], new Date()).catch(() => null);
+    return (await import("@/lib/scout/price-watch")).reasonFor({ symbol: c.primaryTicker, phase: moveWhen === "pre-market" ? "pre" : moveWhen === "after hours" ? "post" : "regular" }, [...news, ...fast], now, now.getTime() - dayStart.getTime()).catch(() => null);
   })() : null;
+  const ownStory = bigMove !== null && !moveReason && (bigMove < 0) === (c.direction === "short") && Date.now() - Date.parse(c.createdAt) < 10 * 86400_000;
   // Where the paper entry will be: the same day's open for a card written before 9:30 AM ET, else the next session's.
   const cardDay = toEt(new Date(c.createdAt)).date;
   const pendingEntryDay = (await import("@/lib/scout/tracking")).beforeOpen(cardDay, c.createdAt) ? cardDay : addDays(cardDay, 1);
@@ -103,7 +108,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
           <div className={`move-banner ${(bigMove < 0) === (c.direction === "long") ? "against" : "with"}`}>
             <b>{bigMove < 0 ? "📉" : "📈"} {c.primaryTicker} {bigMove > 0 ? "+" : "−"}{Math.abs(bigMove).toFixed(1)}% {moveWhen}</b>
             <span className="small"> · {(bigMove < 0) === (c.direction === "long") ? `against this ${c.direction}` : `in this ${c.direction}'s favour`}</span>
-            <div className="small">{moveReason ? <>Likely reason: {moveReason.url.startsWith("http") ? <a href={moveReason.url} target="_blank" rel="noreferrer">{moveReason.headline}</a> : moveReason.headline} <span className="muted">({moveReason.source})</span></> : "No headline in the scout's feeds yet: the news may be on X, in a short report or a niche outlet."}</div>
+            <div className="small">{moveReason ? <>Likely reason: {moveReason.url.startsWith("http") ? <a href={moveReason.url} target="_blank" rel="noreferrer">{moveReason.headline}</a> : moveReason.headline} <span className="muted">({moveReason.source})</span></> : ownStory ? <>No new headline today: most likely still this card&apos;s own story, &ldquo;{c.card.title}&rdquo; ({from.tag}, card written {fmtEtAgo(c.createdAt)}).</> : "No headline in the scout's feeds today: the news may be on X, in a short report or a niche outlet."}</div>
           </div>
         )}
         {track?.excluded && <div className="small neg" style={{ marginTop: 6 }}><b>Excluded from scoring: wrong security.</b> {track.excluded}</div>}

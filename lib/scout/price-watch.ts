@@ -64,8 +64,8 @@ export const confirmed = (m: BigMove, now: Date) => now.getTime() - Date.parse(m
 export const LAW_FIRM_AD = /\b(law firms?|investigation on behalf of|on behalf of (?:investors|shareholders)|class action|lead plaintiff|shareholder alert|investor alert|securities litigation|investors? who (?:lost|purchased)|encourages? .{0,40}investors|reminds? .{0,40}(?:investors|shareholders)|contact the firm|recover(?:ing)? (?:their )?losses)\b/i;
 
 /** Pure: the most recent headline on the stock in the last 3 hours (the likely reason), if any feed has one; law-firm ads are skipped. */
-export function likelyReason(symbol: string, news: Array<Pick<NewsItem, "ts" | "headline" | "symbols" | "source" | "url">>, now: Date): { headline: string; source: string; url: string } | null {
-  const n = news.filter((x) => x.symbols.includes(symbol) && x.source !== "Nasdaq halts" && !LAW_FIRM_AD.test(x.headline) && now.getTime() - Date.parse(x.ts) <= 3 * 3600_000).sort((a, b) => b.ts.localeCompare(a.ts))[0];
+export function likelyReason(symbol: string, news: Array<Pick<NewsItem, "ts" | "headline" | "symbols" | "source" | "url">>, now: Date, windowMs = 3 * 3600_000): { headline: string; source: string; url: string } | null {
+  const n = news.filter((x) => x.symbols.includes(symbol) && x.source !== "Nasdaq halts" && !LAW_FIRM_AD.test(x.headline) && now.getTime() - Date.parse(x.ts) <= windowMs).sort((a, b) => b.ts.localeCompare(a.ts))[0];
   return n ? { headline: n.headline, source: n.source, url: n.url } : null;
 }
 
@@ -120,8 +120,8 @@ export function earningsReason(symbol: string, rows: Array<{ symbol: string; dat
 }
 
 /** The likely reason for a move: the newest headline on the stock, else an earnings release today. */
-export async function reasonFor(m: Pick<BigMove, "symbol" | "phase">, news: Array<Pick<NewsItem, "ts" | "headline" | "symbols" | "source" | "url">>, now: Date): Promise<{ headline: string; source: string; url: string } | null> {
-  const hit = likelyReason(m.symbol, news, now);
+export async function reasonFor(m: Pick<BigMove, "symbol" | "phase">, news: Array<Pick<NewsItem, "ts" | "headline" | "symbols" | "source" | "url">>, now: Date, windowMs?: number): Promise<{ headline: string; source: string; url: string } | null> {
+  const hit = likelyReason(m.symbol, news, now, windowMs);
   if (hit) return hit;
   const { earningsOn } = await import("../market/sources");
   const today = toEt(now).date;
