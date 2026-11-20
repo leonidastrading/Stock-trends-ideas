@@ -10,8 +10,11 @@
 import * as store from "./store";
 import { addDays, toEt } from "../time";
 
-/** 1 = investigations, cards, themes, dots, rumors, court, pharma, filing watch, insiders, Congress, favourites. */
-export const KNOWN_REVISION = 1;
+/**
+ * 1 = investigations, cards, themes, dots, rumors, court, pharma, filing watch, insiders, Congress, favourites;
+ * 2 = research is also told which page an idea was sent from (Dots, Court, Pharma, News, Filings).
+ */
+export const KNOWN_REVISION = 2;
 
 const cut = (s: string | null | undefined, n: number) => { const t = (s ?? "").replace(/\s+/g, " ").trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 const on = (sym: string, xs: string[] | undefined | null) => (xs ?? []).map((x) => x.toUpperCase()).includes(sym);

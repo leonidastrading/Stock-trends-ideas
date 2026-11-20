@@ -107,7 +107,9 @@ export async function researchCandidate(input: ResearchInput, deps: ResearchDeps
     // Investigations, earlier cards, themes, Dots, rumors, lawsuits, FDA dates, filings, insiders, Congress: background.
     input.tickersHint.length ? import("./known").then(({ whatTheScoutKnows }) => whatTheScoutKnows(input.tickersHint, deps.now)).catch(() => null) : Promise.resolve(null),
   ]);
-  const prompt = buildUserPrompt({ origin: input.origin, term: input.term, kindHint: input.kindHint, tickersHint: input.tickersHint, observation: input.observation, context: input.context, today: et.date, results, trigger: input.trigger })
+  // Name the page an idea was sent from, so the card credits it ("the scout's Dots tab found…"), not "Vadim reports".
+  const sourceNote = input.source && input.source.label !== "Your note" ? `Where this idea came from: the ${input.source.label} tab of this scout${input.source.url ? ` (${input.source.url})` : ""}, sent to research by Vadim. Credit it to that page when you describe where the idea came from; the facts in it are what that page read. ` : "";
+  const prompt = buildUserPrompt({ origin: input.origin, term: input.term, kindHint: input.kindHint, tickersHint: input.tickersHint, observation: input.observation ? `${sourceNote}${input.observation}` : input.observation, context: input.context, today: et.date, results, trigger: input.trigger })
     + (optionsLine ? `\n\nOptions pricing (for the "expression" note only; not evidence): ${optionsLine}` : "")
     + (positioning ? `\n\nPositioning (who is already in the trade; say whether the call goes with or against it, and treat a crowded side as a risk, not proof): ${positioning.text}` : "")
     + (known ? `\n\n${known}\nUse it to build a complete picture: say in the thesis or risks when it supports, contradicts or changes the call (an earlier card on the same stock that failed, an investigation's confirmed findings, a lawsuit, an FDA date), and never cite it as if it were news or a source.` : "");
