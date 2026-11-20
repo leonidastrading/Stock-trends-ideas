@@ -1,4 +1,5 @@
 import LinkedText from "@/components/LinkedText";
+import CardChips from "@/components/CardChips";
 import { after } from "next/server";
 import SetupNotice from "@/components/SetupNotice";
 import { hasDatabase } from "@/lib/db";
@@ -21,7 +22,9 @@ export default async function InboxPage() {
   const repo = process.env.GITHUB_INBOX_REPO?.trim() || null;
   const path = (process.env.GITHUB_INBOX_PATH?.trim() || "inbox").replace(/^\/|\/$/g, "");
   const tokenSet = !!process.env.GITHUB_INBOX_TOKEN?.trim();
-  const [files, runs, cards] = await Promise.all([store.inboxRecent(100), store.runsByAction("import", 100), store.cardsSince(365)]);
+  const [files, runs, cards, briefs] = await Promise.all([store.inboxRecent(100), store.runsByAction("import", 100), store.cardsSince(365), store.cardBriefsSince(60).catch(() => [] as store.CardBrief[])]);
+  // Every scout card from the last 60 days on any of an item's stocks, newest first.
+  const cardsOn = (tickers: string[]) => briefs.filter((c) => tickers.some((t) => c.primaryTicker === t || c.tickers.includes(t)));
   const rows = trackRecord(files, runs);
   // When each document arrived, by its label, for the summary's time stamps.
   const received = new Map<string, string>();
@@ -80,8 +83,9 @@ export default async function InboxPage() {
                   <div className="small">{x.summary}</div>
                   <div className="small muted">
                     {itemMeta(x, received)}
-                    {c ? <> · <a href={`/ideas?days=365&card=${c.id}#card-${c.id}`}>card #{c.id} ({c.status.replace("_", " ")})</a></> : null}
+                    {c ? <> · researched: <a href={`/ideas?days=365&card=${c.id}#card-${c.id}`}>card #{c.id} ({c.status.replace("_", " ")})</a></> : null}
                   </div>
+                  {cardsOn(x.tickers).filter((b) => b.id !== c?.id).length > 0 && <div className="small">Scout cards on {x.tickers.slice(0, 4).join(", ")}: <CardChips cards={cardsOn(x.tickers).filter((b) => b.id !== c?.id)} max={6} /></div>}
                 </div>
               );
             })}
@@ -94,6 +98,7 @@ export default async function InboxPage() {
                 <div>{x.breaking && <span className="tag not_promoted">breaking</span>}<b>{x.headline}</b>{x.tickers.length ? <span className="small"> · {x.tickers.slice(0, 4).map((tk, j) => <span key={tk}>{j ? ", " : ""}<Ticker symbol={tk} /></span>)}</span> : null}</div>
                 <div className="small">{x.summary}</div>
                 <div className="small muted">{itemMeta(x, received)}</div>
+                {cardsOn(x.tickers).length > 0 && <div className="small">Scout cards on {x.tickers.slice(0, 4).join(", ")}: <CardChips cards={cardsOn(x.tickers)} max={6} /></div>}
               </div>
             ))}
           </section>
