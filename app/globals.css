@@ -450,3 +450,5 @@ a.chip { text-decoration: none; }
 .news-pager .chip:disabled { opacity: 0.45; cursor: default; }
 
 .nav-update { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+.source-tag { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); color: var(--text-primary); font-weight: 600; }

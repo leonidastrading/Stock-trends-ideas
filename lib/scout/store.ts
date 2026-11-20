@@ -209,6 +209,12 @@ export async function cardsSince(days: number): Promise<StoredCard[]> {
   return (await q(`SELECT ${CARD_COLS} FROM cards WHERE created_at >= now() - ($1::int * interval '1 day') ORDER BY created_at DESC`, [days])).map(toCard);
 }
 
+/** The research term and observation a card came from (where the idea started). */
+export async function cardSource(cardId: number): Promise<{ term: string; observation: string | null } | null> {
+  const r = (await q(`SELECT term, observation FROM candidates WHERE card_id = $1 ORDER BY id LIMIT 1`, [cardId]))[0];
+  return r ? { term: String(r.term), observation: (r.observation as string) ?? null } : null;
+}
+
 export async function favorites(): Promise<Array<{ cardId: number; addedAt: string }>> {
   return (await q(`SELECT card_id, added_at FROM favorites ORDER BY added_at DESC`)).map((r) => ({ cardId: Number(r.card_id), addedAt: iso(r.added_at)! }));
 }
