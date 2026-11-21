@@ -144,10 +144,22 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
         </div>
         <h2 style={{ margin: "6px 0 2px" }}>{k.title}</h2>
         <div className={`card-thesis card-thesis-${c.direction}`}><span className="card-thesis-label">{c.direction === "long" ? "▲" : "▼"} Thesis</span> {thesis}</div>
-        <div className="scores">
-          <span>novelty <b>{k.scores.novelty}</b></span><span>materiality <b>{k.scores.materiality}</b></span><span>breadth <b>{k.scores.breadth_of_evidence}</b></span>
-          <span>lateness <b>{k.scores.lateness}</b></span><span>confidence <b>{k.confidence}</b></span><span>rank <b>{c.rankScore}</b></span>
-        </div>
+        {/* Each score out of its maximum; tap the row for what they mean. "lateness" is shown as "early" (10 = nobody is talking about it yet). */}
+        <details className="scores-details">
+          <summary className="scores">
+            <span title="How far ahead of consensus (0-10)">novelty <b>{k.scores.novelty}/10</b></span><span title="How much it moves the company's numbers (0-10)">materiality <b>{k.scores.materiality}/10</b></span><span title="How many independent sources back it (0-10)">evidence <b>{k.scores.breadth_of_evidence}/10</b></span>
+            <span title="How early: 10 = nobody is talking about it yet, 0 = everyone is">early <b>{k.scores.lateness}/10</b></span><span title="The AI's stated chance the trade beats the S&P 500 over the time limit">confidence <b>{k.confidence}%</b></span><span title="novelty x materiality, used to order cards">rank <b>{c.rankScore}/100</b></span>
+          </summary>
+          <ul className="small secondary" style={{ margin: "4px 0 8px", paddingLeft: 18 }}>
+            <li><b>Novelty</b>: how far ahead of what most people already think (10 = hardly anyone has this idea).</li>
+            <li><b>Materiality</b>: how much it moves the company&apos;s revenue or profit (10 = changes the whole business).</li>
+            <li><b>Evidence</b>: how many independent sources back it up (10 = many, 2 = one or two).</li>
+            <li><b>Early</b>: how early the idea is (10 = nobody is talking about it yet, 0 = everyone is). Measured separately below under Lateness.</li>
+            <li><b>Confidence</b>: the AI&apos;s stated chance that the trade beats the S&amp;P 500 within the card&apos;s time limit. The Scoreboard checks whether these chances come true (calibration).</li>
+            <li><b>Rank</b>: novelty × materiality (out of 100), used to sort cards. It ignores confidence and evidence.</li>
+            <li>Novelty, materiality, evidence and early are the AI&apos;s own ratings when it writes the card, not measurements.</li>
+          </ul>
+        </details>
       </div>
       <dl>
         <dt id={`obs-${c.id}`}>Observation <span className="muted small">({from.note})</span></dt><dd>{k.observation}</dd>

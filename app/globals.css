@@ -472,3 +472,7 @@ a.source-tag:hover { background: color-mix(in srgb, var(--accent) 14%, transpare
 
 .expand-row:hover td { background: var(--surface-hover, rgba(127,127,127,0.08)); }
 .expand-panel > td { padding: 10px 4px 16px; }
+
+.scores-details > summary.scores { cursor: pointer; list-style: none; }
+.scores-details > summary.scores::-webkit-details-marker { display: none; }
+.scores-details > summary.scores::after { content: "ⓘ"; color: var(--text-muted); }
