@@ -1,4 +1,5 @@
 import { after, NextResponse } from "next/server";
+import { quietReply } from "@/lib/quiet-hours";
 import { checkCronSecret, cronAuthProblem } from "@/lib/auth";
 import { hasDatabase } from "@/lib/db";
 
@@ -16,6 +17,9 @@ export async function GET(request: Request) {
     console.warn(`cron auth refused ${new URL(request.url).pathname}: ${why.detail}`);
     return NextResponse.json({ error: "unauthorized", reason: why.reason }, { status: 401 });
   }
+  // Quiet hours: nothing from 8 PM to 6 AM ET, hourly on weekends, so the database can sleep (lib/quiet-hours.ts).
+  const resting = quietReply(request, "minutes");
+  if (resting) return NextResponse.json(resting);
   if (!hasDatabase()) return NextResponse.json({ ok: false, errors: ["database not connected"] }, { status: 503 });
   after(async () => {
     const store = await import("@/lib/scout/store");

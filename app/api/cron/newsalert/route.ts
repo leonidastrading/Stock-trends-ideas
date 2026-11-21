@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { quietReply } from "@/lib/quiet-hours";
 import { checkCronSecret, cronAuthProblem } from "@/lib/auth";
 import { marketDataFromEnv } from "@/lib/alpaca";
 
@@ -16,6 +17,9 @@ export async function GET(request: Request) {
     console.warn(`cron auth refused ${new URL(request.url).pathname}: ${why.detail}`);
     return NextResponse.json({ error: "unauthorized", reason: why.reason }, { status: 401 });
   }
+  // Quiet hours: nothing from 8 PM to 6 AM ET, hourly on weekends, so the database can sleep (lib/quiet-hours.ts).
+  const resting = quietReply(request, "minute");
+  if (resting) return NextResponse.json(resting);
   // The catch-up queue is worked by the stories job (every 5 minutes, 2.5-minute budget): a research call can outlast
   // this job's 60 seconds, which timed it out.
   try {

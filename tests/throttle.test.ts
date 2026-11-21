@@ -3,6 +3,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { setQuerierForTests } from "@/lib/db";
 import * as store from "@/lib/scout/store";
 
+// These tests call the cron routes at the real clock time: quiet hours would make them rest.
+process.env.QUIET_HOURS = "off";
+
 describe("story scans called too often", () => {
   let pg: PGlite;
   beforeAll(() => {

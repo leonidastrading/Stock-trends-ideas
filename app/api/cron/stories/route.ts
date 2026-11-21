@@ -1,4 +1,5 @@
 import { after, NextResponse } from "next/server";
+import { quietReply } from "@/lib/quiet-hours";
 import { background } from "@/lib/background";
 import { checkCronSecret, cronAuthProblem } from "@/lib/auth";
 import { runStoriesJob } from "@/lib/scout/engine";
@@ -25,6 +26,9 @@ export async function GET(request: Request) {
     console.warn(`cron auth refused ${new URL(request.url).pathname}: ${why.detail}`);
     return NextResponse.json({ error: "unauthorized", reason: why.reason }, { status: 401 });
   }
+  // Quiet hours: nothing from 8 PM to 6 AM ET, hourly on weekends, so the database can sleep (lib/quiet-hours.ts).
+  const resting = quietReply(request, "minutes");
+  if (resting) return NextResponse.json(resting);
   const params = new URL(request.url).searchParams;
   // Anything the daily AI budget turned away is worked through once it resets (a no-op when nothing waits).
   background(async () => {
