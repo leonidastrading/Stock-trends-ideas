@@ -11,7 +11,7 @@ export interface KeyCheckRun { at: string; deployment: string; checks: KeyCheck[
 export const CHECKED_KEYS = ["BRAVE_SEARCH_API_KEY", "COURTLISTENER_TOKEN", "EDINET_API_KEY", "DART_API_KEY"] as const;
 
 export async function checkKeys(env: NodeJS.ProcessEnv, now = new Date(), fetchImpl: typeof fetch = fetch): Promise<KeyCheck[]> {
-  const [{ webSearch }, { courtDockets }, { edinetFilings, dartFilings }] = await Promise.all([import("../sources/websearch"), import("../sources/world-records"), import("../sources/asia-filings")]);
+  const [{ webSearch }, { courtDockets }, { edinetFilings, dartKeyTest }] = await Promise.all([import("../sources/websearch"), import("../sources/world-records"), import("../sources/asia-filings")]);
   const one = async (key: (typeof CHECKED_KEYS)[number], run: () => Promise<string>): Promise<KeyCheck> => {
     if (!env[key]?.trim()) return { key, status: "not set", detail: "" };
     try {
@@ -37,7 +37,7 @@ export async function checkKeys(env: NodeJS.ProcessEnv, now = new Date(), fetchI
     one("BRAVE_SEARCH_API_KEY", async () => `${(await webSearch("Nvidia earnings", env, fetchImpl, 3)).length} search results`),
     one("COURTLISTENER_TOKEN", async () => throwIf(await courtDockets("Nvidia Corporation", env, fetchImpl), "dockets for Nvidia")),
     one("EDINET_API_KEY", async () => throwIf(await edinetFilings("7203", now, env, fetchImpl, 7), "Toyota filings in 7 days")),
-    one("DART_API_KEY", async () => throwIf(await dartFilings("005930", now, env, fetchImpl), "Samsung Electronics filings in 180 days")),
+    one("DART_API_KEY", async () => throwIf(await dartKeyTest(now, env, fetchImpl), "Samsung Electronics filings in 90 days")),
   ]);
 }
 

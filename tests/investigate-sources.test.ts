@@ -163,7 +163,7 @@ describe("key check", () => {
     expect(r.map((c) => [c.key, c.status])).toEqual([["BRAVE_SEARCH_API_KEY", "works"], ["COURTLISTENER_TOKEN", "failed"], ["EDINET_API_KEY", "not set"], ["DART_API_KEY", "works"]]);
     expect(r[0].detail).toBe("1 search results");
     expect(r[1].detail).toContain("401");
-    expect(r[3].detail).toBe("1 Samsung Electronics filings in 180 days");
+    expect(r[3].detail).toBe("1 Samsung Electronics filings in 90 days");
     expect(JSON.stringify(r)).not.toMatch(/b-key|c-key|d-key/);
   });
 });

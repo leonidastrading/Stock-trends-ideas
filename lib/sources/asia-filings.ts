@@ -120,21 +120,71 @@ export function dartRows(j: { status?: string; message?: string; list?: Array<{ 
  * DART's company list: a large zip that is slow to download from Vercel, so it is kept in the database for a week
  * (only the listed companies, a few hundred KB) and downloaded again only when older.
  */
-async function loadCorps(key: string, fetchImpl: typeof fetch): Promise<{ at: number; corps: DartCorp[] }> {
+async function savedCorps(): Promise<{ data: DartCorp[]; updatedAt: number } | null> {
   const db = await import("../db").catch(() => null);
-  const saved = db ? ((await db.query(`SELECT data, updated_at FROM dashboard_cache WHERE key = 'dart:corps'`).catch(() => []))[0] as { data: DartCorp[]; updated_at: string } | undefined) : undefined;
-  if (saved && Array.isArray(saved.data) && saved.data.length > 1000 && Date.now() - Date.parse(saved.updated_at) < 7 * 86400_000) return { at: Date.now(), corps: saved.data };
+  const r = db ? ((await db.query(`SELECT data, updated_at FROM dashboard_cache WHERE key = 'dart:corps'`).catch(() => []))[0] as { data: DartCorp[]; updated_at: string } | undefined) : undefined;
+  return r && Array.isArray(r.data) && r.data.length ? { data: r.data, updatedAt: Date.parse(r.updated_at) } : null;
+}
+
+/** Is the saved company list missing or more than a week old? (Then the background job downloads it.) */
+export async function dartCorpsStale(): Promise<boolean> {
+  const s = await savedCorps();
+  return !s || s.data.length < 1000 || Date.now() - s.updatedAt > 7 * 86400_000;
+}
+
+/** The background job: download DART's company list (slow from Vercel: minutes) and save the listed companies. */
+export async function refreshDartCorps(env: NodeJS.ProcessEnv, fetchImpl: typeof fetch = fetch, timeoutMs = 270_000): Promise<string> {
+  const key = env.DART_API_KEY?.trim();
+  if (!key) return "DART_API_KEY not set";
+  const started = Date.now();
+  const corps = await downloadCorps(key, fetchImpl, timeoutMs);
+  const db = await import("../db");
+  await db.query(`INSERT INTO dashboard_cache (key, data, updated_at) VALUES ('dart:corps', $1::jsonb, now()) ON CONFLICT (key) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`, [JSON.stringify(corps)]);
+  corpCache = { at: Date.now(), corps };
+  return `${corps.length} listed Korean companies saved (${Math.round((Date.now() - started) / 1000)}s)`;
+}
+
+async function downloadCorps(key: string, fetchImpl: typeof fetch, timeoutMs: number): Promise<DartCorp[]> {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), timeoutMs);
   try {
-    const bytes = new Uint8Array(await (await get(`https://opendart.fss.or.kr/api/corpCode.xml?crtfc_key=${encodeURIComponent(key)}`, fetchImpl, 120_000)).arrayBuffer());
-    // A bad key comes back as a small JSON or XML error, not a zip.
+    const res = await fetchImpl(`https://opendart.fss.or.kr/api/corpCode.xml?crtfc_key=${encodeURIComponent(key)}`, { headers: UA, signal: ctl.signal });
+    if (!res.ok) throw new Error(`opendart.fss.or.kr answered ${res.status}`);
+    const bytes = new Uint8Array(await res.arrayBuffer());
     if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) throw new Error(`DART: ${strFromU8(bytes.slice(0, 200)).replace(/\s+/g, " ").slice(0, 120)}`);
     const corps = dartCorps(Object.values(unzipSync(bytes)).map((b) => strFromU8(b)).join(""));
-    if (db && corps.length > 1000) await db.query(`INSERT INTO dashboard_cache (key, data, updated_at) VALUES ('dart:corps', $1::jsonb, now()) ON CONFLICT (key) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`, [JSON.stringify(corps)]).catch(() => undefined);
-    return { at: Date.now(), corps };
+    if (corps.length < 1000) throw new Error(`DART company list looks incomplete (${corps.length} listed companies)`);
+    return corps;
   } catch (e) {
-    // An older saved list is better than none while DART is slow.
-    if (saved && Array.isArray(saved.data) && saved.data.length) return { at: Date.now(), corps: saved.data };
-    throw e;
+    throw new Error(e instanceof Error && e.name === "AbortError" ? `DART company list: no complete download within ${Math.round(timeoutMs / 1000)}s` : errText(e));
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+async function loadCorps(key: string, fetchImpl: typeof fetch): Promise<{ at: number; corps: DartCorp[] }> {
+  const saved = await savedCorps();
+  if (saved) return { at: Date.now(), corps: saved.data };
+  // Not saved yet (the background job fills it): one short try, else the lookup says the list is still loading.
+  try {
+    return { at: Date.now(), corps: await downloadCorps(key, fetchImpl, 25_000) };
+  } catch (e) {
+    // A refused key says so; anything else means the slow download did not finish in time.
+    if (e instanceof Error && e.message.startsWith("DART:")) throw e;
+    throw new Error("the Korean company list is still downloading (a background job; try again in a few minutes)");
+  }
+}
+
+/** The key test: Samsung Electronics' filings by its DART code (no company list needed, answers in seconds). */
+export async function dartKeyTest(now: Date, env: NodeJS.ProcessEnv, fetchImpl: typeof fetch = fetch): Promise<Lookup> {
+  const key = env.DART_API_KEY?.trim();
+  if (!key) return { query: "DART key test", rows: [], error: "DART_API_KEY not set" };
+  try {
+    const d8 = (d: Date) => ymd(d).replace(/-/g, "");
+    const j = await (await get(`https://opendart.fss.or.kr/api/list.json?crtfc_key=${encodeURIComponent(key)}&corp_code=00126380&bgn_de=${d8(new Date(now.getTime() - 90 * 86400_000))}&end_de=${d8(now)}&page_count=10`, fetchImpl, 30_000)).json();
+    return { query: "DART key test", rows: dartRows(j) };
+  } catch (e) {
+    return { query: "DART key test", rows: [], error: errText(e) };
   }
 }
 
