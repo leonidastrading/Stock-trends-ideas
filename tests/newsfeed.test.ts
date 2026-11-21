@@ -58,3 +58,13 @@ describe("news feed fixes", () => {
     expect(r.find((x) => x.id === "p1MU")!.score).toBeGreaterThan(tdth[0].score); // on a card: still low, but above other pauses
   });
 });
+
+describe("top story rule (shared by the News page and the badge)", () => {
+  it("the browser-safe module and the feed module agree", async () => {
+    const pure = await import("@/lib/scout/top-story");
+    const feed = await import("@/lib/scout/newsfeed");
+    const r = rankFeed([item("event", 5, "FDA rejects drug", ["XYZ"]), item("plain", 5, "Company updates its website", ["ABC"])], new Map(), now);
+    expect(r.filter(pure.isTopStory).map((i) => i.id)).toEqual(["event"]);
+    expect(r.filter(feed.isTopStory).map((i) => i.id)).toEqual(["event"]);
+  });
+});

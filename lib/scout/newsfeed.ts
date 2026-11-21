@@ -104,11 +104,8 @@ export interface BreakingItem { id: string; at: string; headline: string; url: s
  * Trump post or a claim from the rumor sources already reported. Re-posts of older news never count. Newest first;
  * topped up with the latest headlines when the hour is quiet.
  */
-/** Pure: why a story is a top story ("" when it is not): Trump, a rumor already reported, an event, a stock on your cards, a pile-up. */
-export const topReason = (i: FeedItem): string => (i.kind === "trump" ? "Trump" : i.kind === "rumor" ? "from rumors" : i.event && i.event !== "paused" ? i.event : i.cardIds.length && i.symbols.length <= 4 ? "on your cards" : i.buzz >= 3 ? `${i.buzz} stories` : "");
-
-/** Pure: a top story for the News badge: a reason to be top, a fresh score of at least 1 (stocks under $5 fall below), not a re-post. */
-export const isTopStory = (i: FeedItem): boolean => !i.repostedAt && i.score >= 1 && topReason(i) !== "";
+import { isTopStory, topReason } from "./top-story";
+export { isTopStory, topReason };
 
 export function breakingNews(items: FeedItem[], now: Date, max = 30, minShown = 10): BreakingItem[] {
   // Routine volatility pauses never make the strip.

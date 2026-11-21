@@ -5,13 +5,19 @@ import ResearchButton from "@/app/filings/ResearchButton";
 import { chartUrl } from "@/config/links";
 import type { FeedItem } from "@/lib/scout/newsfeed";
 import { useStoredState } from "@/components/useStoredState";
+import { isTopStory } from "@/lib/scout/top-story";
 import { ago, fmtEtAgo, toEt } from "@/lib/time";
 
 const PAGE_SIZE = 10;
 
 const POLL_MS = 15_000;
 /** Today: how long ago only ("25m ago", "3h ago"); earlier: the date with how many days ago. */
-const when = (iso: string) => (toEt(new Date(iso)).date === toEt(new Date()).date ? ago(iso) : fmtEtAgo(iso));
+/** The actual time (ET) and how long ago: "4:02 PM ET · 4h ago" today, "Nov 19, 4:02 PM ET · 1 day ago" before. */
+const when = (iso: string) => {
+  const d = new Date(iso);
+  if (toEt(d).date !== toEt(new Date()).date) return fmtEtAgo(iso);
+  return `${d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })} ET · ${ago(iso)}`;
+};
 
 export default function NewsFeed({ initial }: { initial: FeedItem[] }) {
   const [items, setItems] = useState<FeedItem[]>(initial);
@@ -56,7 +62,8 @@ export default function NewsFeed({ initial }: { initial: FeedItem[] }) {
 
   const shown = useMemo(() => {
     const xs = items.filter((i) => !mine || i.cardIds.length > 0);
-    return xs.slice().sort((a, b) => (view === "top" ? b.score - a.score : 0) || b.at.localeCompare(a.at)).slice(0, 120);
+    // Top: only the top stories (big moves, events, your card stocks, pile-ups, Trump); both views newest first.
+    return xs.filter((i) => view !== "top" || isTopStory(i)).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 120);
   }, [items, view, mine]);
   const pages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
   const at = Math.min(page, pages - 1);
