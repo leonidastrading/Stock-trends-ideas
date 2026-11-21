@@ -114,7 +114,7 @@ regulator's move, an indictment, a recall, a pivot, a guidance cut. `lib/scout/s
   header `Authorization: Bearer <CRON_SECRET>` (and `x-vercel-protection-bypass` if the deployment is protected).
 - **Invalidation watch.** Every open card's own invalidation conditions are checked against the live price, moves and
   the week's headlines about every 3 hours (inside the hourly and daily runs), and all of them before the open by
-  `GET /api/cron/premarket` (bearer `CRON_SECRET`): add a cron-job.org job at **9:29 AM America/New_York, Monday–Friday**
+  `GET /api/cron/premarket` (bearer `CRON_SECRET`): add a cron-job.org job at **9:25 AM America/New_York, Monday–Friday**
   with the header `Authorization: Bearer <CRON_SECRET>`. A card whose condition is met gets a big red INVALIDATED banner,
   a phone alert, and its paper trade exits at the next open (the same as the manual button). Own AI budget in Settings.
 - The **Stories** page shows the last detection, the desk's read and trades, and the story cards grouped by story,

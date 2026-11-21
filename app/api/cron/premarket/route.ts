@@ -26,7 +26,7 @@ async function premarket() {
 }
 
 /**
- * Meant for an outside scheduler at 9:29 AM ET on weekdays (cron-job.org; Vercel's own cron on the Hobby plan is daily
+ * Meant for an outside scheduler at 9:25 AM ET on weekdays (five minutes to finish before the open) (cron-job.org; Vercel's own cron on the Hobby plan is daily
  * and can fire anywhere within its hour). Bearer CRON_SECRET. Replies 202 at once and runs after the response;
  * ?wait=1 runs in the foreground and returns the result.
  */
