@@ -28,6 +28,7 @@ export function envStatus(env: NodeJS.ProcessEnv = process.env): EnvStatus[] {
     row("LDA_API_KEY", false, "Investigations: lobbying filings (optional, higher rate limit)"),
     row("BRAVE_SEARCH_API_KEY", false, "Investigations: web search while following leads (Brave Search API)"),
     row("COURTLISTENER_TOKEN", false, "Investigations: federal court dockets (CourtListener, free)"),
+    row("REGULATIONS_GOV_API_KEY", false, "Investigations and the FDA petition watch: regulations.gov (optional; FEC_API_KEY is the same kind of api.data.gov key and is used when this is not set)"),
     row("EDINET_API_KEY", false, "Investigations: Japan exchange filings (EDINET, free)"),
     row("DART_API_KEY", false, "Investigations: Korea exchange filings (Open DART, free)"),
     row("YOUTUBE_API_KEY", false, "YouTube"),

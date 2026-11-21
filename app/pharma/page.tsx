@@ -26,6 +26,32 @@ const decided = (e: FdaEvent) => !/^pending$/i.test(e.outcome.trim());
 
 
 /** Biopharma catalysts: FDA decision dates and Phase 3 readouts, with the scout's cards on each stock. */
+const STATUS_CLASS: Record<string, string> = { "final response": "ok", "interim response": "late", "no response yet": "error" };
+
+/** FDA citizen petitions (regulations.gov): short sellers' petitions with their status, and the last 30 days' petitions. */
+async function Petitions({ cardsOn }: { cardsOn: (sym: string | null) => store.CardBrief[] }) {
+  const w = (await store.cacheGet<import("@/lib/scout/petitions").PetitionWatch>("regs:petitions").catch(() => null))?.data ?? null;
+  const row = (p: import("@/lib/sources/regulations").Petition) => (
+    <tr key={p.docketId}>
+      <td><a href={p.url} target="_blank" rel="noreferrer">{p.docketId}</a><div className="small muted">{p.petitioner}</div></td>
+      <td className="small">{p.request ?? <span className="muted">(request not read)</span>}</td>
+      <td className="small">{p.filed}</td>
+      <td className="small"><span className={`tag ${STATUS_CLASS[p.status] ?? ""}`}>{p.status}</span>{p.statusDate ? <div className="muted">{p.statusDate}</div> : null}{p.past180 ? <div className="warn">open {p.daysOpen} days (past 180)</div> : null}</td>
+      <td className="small">{p.symbols.length ? p.symbols.map((s) => <span key={s} style={{ marginRight: 6 }}><Ticker symbol={s} /> <CardChips cards={cardsOn(s)} max={3} /></span>) : <span className="muted">—</span>}</td>
+    </tr>
+  );
+  const recent = (w?.recent ?? []).filter((p) => !w?.shortSellers.some((s) => s.docketId === p.docketId));
+  return (
+    <section className="card section" id="petitions">
+      <h2>FDA citizen petitions (regulations.gov)</h2>
+      <p className="small muted">Anyone can ask the FDA to act on a drug or device (pull it, add a warning, refuse approval). Short sellers do it to press a thesis: Scorpion Capital has filed against Harmony (pitolisant), TransMedics and Soleno. The FDA must answer within 180 days (21 CFR 10.30), but an interim &quot;still reviewing&quot; letter counts, so petitions often stay open for years. Checked every 6 hours (short sellers&apos; weekly){w ? `, last ${fmtEtAgo(w.at)}` : ""}; a new petition on a card stock or by a short seller, and a response to one, is pushed to your phone.{w?.error ? <span className="warn"> {w.error}</span> : null}</p>
+      {!w && <p className="small muted">Not read yet: the watch runs within the next few minutes.</p>}
+      {w && w.shortSellers.length > 0 && <><h3>Filed by short sellers</h3><div className="table-wrap"><table><thead><tr><th>Docket</th><th>What it asks</th><th>Filed</th><th>FDA status</th><th>Stocks</th></tr></thead><tbody>{w.shortSellers.map(row)}</tbody></table></div></>}
+      {w && <details className="small" open={recent.some((p) => p.symbols.length > 0)}><summary>All FDA citizen petitions in the last 30 days ({recent.length}{recent.some((p) => p.symbols.length) ? `, ${recent.filter((p) => p.symbols.length).length} on stocks the scout knows` : ""})</summary><div className="table-wrap"><table><thead><tr><th>Docket</th><th>What it asks</th><th>Filed</th><th>FDA status</th><th>Stocks</th></tr></thead><tbody>{recent.slice().sort((a, b) => b.symbols.length - a.symbols.length || b.filed.localeCompare(a.filed)).map(row)}</tbody></table></div></details>}
+    </section>
+  );
+}
+
 export default async function PharmaPage() {
   if (!hasDatabase()) return <SetupNotice />;
   const now = new Date();
@@ -52,6 +78,8 @@ export default async function PharmaPage() {
     <>
       <h1>Pharma</h1>
       <p className="small secondary">Upcoming biopharma catalysts: FDA decision dates (PDUFA goal dates, advisory committees, label expansions) and company Phase 3 trials finishing in the next six months, with the scout&apos;s cards on each stock. FDA decisions are binary events: big moves either way, and much of the outcome is often priced in by the date. &quot;Research it&quot; checks a catalyst into a card, tracked on paper like any other.</p>
+
+      <Petitions cardsOn={cardsOn} />
 
       <section className="card section">
         <h2>FDA decisions</h2>

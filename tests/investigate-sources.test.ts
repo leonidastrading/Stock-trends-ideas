@@ -160,7 +160,7 @@ describe("key check", () => {
     }) as typeof fetch;
     const env = { BRAVE_SEARCH_API_KEY: "b-key", COURTLISTENER_TOKEN: "c-key", DART_API_KEY: "d-key" } as unknown as NodeJS.ProcessEnv;
     const r = await checkKeys(env, new Date("2026-11-20T12:00:00Z"), fetchImpl);
-    expect(r.map((c) => [c.key, c.status])).toEqual([["BRAVE_SEARCH_API_KEY", "works"], ["COURTLISTENER_TOKEN", "failed"], ["EDINET_API_KEY", "not set"], ["DART_API_KEY", "works"], ["FINNHUB_API_KEY", "not set"]]);
+    expect(r.map((c) => [c.key, c.status])).toEqual([["BRAVE_SEARCH_API_KEY", "works"], ["COURTLISTENER_TOKEN", "failed"], ["EDINET_API_KEY", "not set"], ["DART_API_KEY", "works"], ["FEC_API_KEY", "not set"], ["FINNHUB_API_KEY", "not set"]]);
     expect(r[0].detail).toBe("1 search results");
     expect(r[1].detail).toContain("401");
     expect(r[3].detail).toBe("1 Samsung Electronics filings in 90 days");

@@ -1,7 +1,7 @@
 /**
  * Public records for "follow the money" investigations. All free, all public:
  * - USAspending (api.usaspending.gov): federal contract awards by keyword or recipient.
- * - Senate Lobbying Disclosure (lda.senate.gov): lobbying filings by client (who paid, how much, on what issues,
+ * - Lobbying Disclosure (lda.gov; the old lda.senate.gov answers 503 since late 2026): lobbying filings by client (who paid, how much, on what issues,
  *   which agencies). LDA_API_KEY optional (higher rate limit).
  * - FEC (api.open.fec.gov): a PAC's or campaign committee's spending, including contributions to candidates.
  *   FEC_API_KEY (free from api.data.gov) is optional; without it the shared DEMO_KEY is used, which is heavily rate-limited.
@@ -83,7 +83,14 @@ export async function lobbyingFor(client: string, fetchImpl: typeof fetch = fetc
   const y = now.getUTCFullYear();
   const out: LobbyingFiling[] = [];
   for (const year of [y, y - 1]) {
-    const j = await getJson<{ results?: Array<Record<string, unknown>> }>(`https://lda.senate.gov/api/v1/filings/?${new URLSearchParams({ client_name: client, filing_year: String(year), page_size: "10" })}`, { headers }, fetchImpl);
+    const qs = new URLSearchParams({ client_name: client, filing_year: String(year), page_size: "10" });
+    // The lobbying database moved to lda.gov; the Senate address is tried only if the new one fails.
+    let j: { results?: Array<Record<string, unknown>> };
+    try {
+      j = await getJson(`https://lda.gov/api/v1/filings/?${qs}`, { headers }, fetchImpl);
+    } catch {
+      j = await getJson(`https://lda.senate.gov/api/v1/filings/?${qs}`, { headers }, fetchImpl);
+    }
     out.push(...parseLda(j));
   }
   return out.slice(0, 12);

@@ -45,7 +45,7 @@ describe("investigations: end to end (PGlite, fake model and records)", () => {
     const fetchImpl = (async (url: string) => {
       hosts.push(new URL(url).host);
       if (url.includes("usaspending")) return Response.json({ results: [{ "Recipient Name": "L3HARRIS TECHNOLOGIES, INC.", "Award Amount": 1.2e9, "Awarding Agency": "Department of Transportation", Description: "FAA TELECOM", "Start Date": "2024-01-01", "End Date": "2030-12-31", generated_internal_id: "CONT_AWD_X" }] });
-      if (url.includes("lda.senate.gov")) return Response.json({ results: [] });
+      if (url.includes("//lda.gov/")) return Response.json({ results: [] });
       if (url.includes("/committees/")) return Response.json({ results: [{ committee_id: "C00999999", name: "ASI PAC", committee_type_full: "PAC - Qualified" }] });
       if (url.includes("schedule_b")) return Response.json({ results: [{ recipient_name: "ALFONSO FOR CONGRESS", disbursement_amount: 5000, disbursement_date: "2026-03-31", disbursement_description: "CONTRIBUTION" }] });
       if (url.includes("federalregister.gov")) return Response.json({ results: [] });
@@ -69,7 +69,7 @@ describe("investigations: end to end (PGlite, fake model and records)", () => {
     expect(inv.status).toBe("done");
     expect(inv.title).toBe("FAA ground stop");
     expect(inv.costUsd).toBeCloseTo(0.08); // plan, two rounds of leads, report
-    expect(new Set(hosts)).toEqual(new Set(["api.usaspending.gov", "lda.senate.gov", "api.open.fec.gov", "www.federalregister.gov", "api.search.brave.com", "news.example.com"]));
+    expect(new Set(hosts)).toEqual(new Set(["api.usaspending.gov", "lda.gov", "api.open.fec.gov", "www.federalregister.gov", "api.search.brave.com", "news.example.com"]));
     expect(hosts).not.toContain("invented.example.com"); // never opens a link it has not seen
     expect(inv.records!.web!.rounds.map((r) => r.opened.length)).toEqual([0, 1]);
     expect(inv.records!.web!.stopped).toBe("done");

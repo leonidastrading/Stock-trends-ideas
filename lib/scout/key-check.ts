@@ -8,7 +8,7 @@ import { query as q } from "../db";
 export interface KeyCheck { key: string; status: "works" | "failed" | "not set"; detail: string }
 export interface KeyCheckRun { at: string; deployment: string; checks: KeyCheck[] }
 
-export const CHECKED_KEYS = ["BRAVE_SEARCH_API_KEY", "COURTLISTENER_TOKEN", "EDINET_API_KEY", "DART_API_KEY", "FINNHUB_API_KEY"] as const;
+export const CHECKED_KEYS = ["BRAVE_SEARCH_API_KEY", "COURTLISTENER_TOKEN", "EDINET_API_KEY", "DART_API_KEY", "FINNHUB_API_KEY", "FEC_API_KEY"] as const;
 
 export async function checkKeys(env: NodeJS.ProcessEnv, now = new Date(), fetchImpl: typeof fetch = fetch): Promise<KeyCheck[]> {
   const [{ webSearch }, { courtDockets }, { edinetFilings, dartKeyTest }] = await Promise.all([import("../sources/websearch"), import("../sources/world-records"), import("../sources/asia-filings")]);
@@ -38,6 +38,7 @@ export async function checkKeys(env: NodeJS.ProcessEnv, now = new Date(), fetchI
     one("COURTLISTENER_TOKEN", async () => throwIf(await courtDockets("Nvidia Corporation", env, fetchImpl), "dockets for Nvidia")),
     one("EDINET_API_KEY", async () => throwIf(await edinetFilings("7203", now, env, fetchImpl, 7), "Toyota filings in 7 days")),
     one("DART_API_KEY", async () => throwIf(await dartKeyTest(now, env, fetchImpl), "Samsung Electronics filings in 90 days")),
+    one("FEC_API_KEY", async () => { const { searchRegs } = await import("../sources/regulations"); return `regulations.gov (with this key): ${throwIf(await searchRegs("Scorpion Capital", env, fetchImpl, "FDA"), "FDA documents naming Scorpion Capital")}`; }),
     one("FINNHUB_API_KEY", async () => { const { fetchCoverage } = await import("../sources/coverage"); const c = await fetchCoverage("AAPL", env, fetchImpl); return `${c.analysts} analysts cover Apple`; }),
   ]);
 }

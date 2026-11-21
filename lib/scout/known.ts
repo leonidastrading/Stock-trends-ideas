@@ -15,9 +15,10 @@ import { addDays, toEt } from "../time";
  * 2 = research is also told which page an idea was sent from (Dots, Court, Pharma, News, Filings);
  * 3 = filing changes (10-K / 10-Q vs a year earlier), crowding (score and stage) and analyst coverage;
  * 4 = research also reads the AI-trade backdrop (lib/scout/backdrop.ts) and the open paper calls (no related ticker
- *     may contradict one; lib/scout/conflicts.ts).
+ *     may contradict one; lib/scout/conflicts.ts);
+ * 5 = FDA citizen petitions on the stock (regulations.gov), with the FDA's response status.
  */
-export const KNOWN_REVISION = 4;
+export const KNOWN_REVISION = 5;
 
 const cut = (s: string | null | undefined, n: number) => { const t = (s ?? "").replace(/\s+/g, " ").trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 const on = (sym: string, xs: string[] | undefined | null) => (xs ?? []).map((x) => x.toUpperCase()).includes(sym);
@@ -48,6 +49,8 @@ export async function whatTheScoutKnows(symbols: string[], now = new Date(), max
     safe(() => import("./crowding").then(async ({ latestCrowding }) => new Map(await Promise.all(syms.map(async (s) => [s, await latestCrowding(s)] as const)))), new Map()),
     safe(() => import("../sources/coverage").then(({ coverageOf }) => coverageOf(syms)), new Map()),
   ]);
+  const petitions = await safe(() => store.cacheGet<import("./petitions").PetitionWatch>("regs:petitions"), null);
+  const { petitionLine } = await import("./petitions");
   const { diffLine } = await import("./filing-diff");
   const { crowdingLine } = await import("./crowding");
   const [invs, cards, tracks, themes, dots, rumors, checks, classes, itc, fda, trials, watch, buys, congress, favs] = await Promise.all([
@@ -104,6 +107,7 @@ export async function whatTheScoutKnows(symbols: string[], now = new Date(), max
       ...itcs.slice(0, 3).map((n) => `ITC patent case ${n.investigation ?? ""} ${n.date}, ${n.stage}: ${cut(n.product, 100)}; ${on(sym, n.complainantTickers) ? `${sym} is the complainant` : `${sym} is a respondent (an import ban is possible)`}`),
     ] });
 
+    sections.push({ title: `${sym}: FDA citizen petitions naming it (regulations.gov)`, lines: [...new Map([...(petitions?.data.shortSellers ?? []), ...(petitions?.data.recent ?? [])].filter((p) => p.symbols.includes(sym)).map((p) => [p.docketId, p])).values()].slice(0, 4).map(petitionLine) });
     sections.push({ title: `${sym}: FDA dates and trial readouts (Pharma tab)`, lines: [
       ...(fda?.data ?? []).filter((e) => e.symbol === sym || on(sym, e.otherSymbols)).slice(0, 3).map((e) => `FDA ${e.date ?? e.when}: ${cut(e.drug, 60)}, ${cut(e.event, 100)}${e.outcome && !/^pending$/i.test(e.outcome) ? ` → ${cut(e.outcome, 80)}` : ""}`),
       ...(trials?.data ?? []).filter((t) => t.symbol === sym).slice(0, 3).map((t) => `Phase 3 ${t.nct} primary completion ${t.completion}: ${cut(t.drugs.join(", "), 60)} in ${cut(t.conditions.slice(0, 2).join(", "), 80)}`),
