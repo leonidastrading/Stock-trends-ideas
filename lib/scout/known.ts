@@ -12,9 +12,10 @@ import { addDays, toEt } from "../time";
 
 /**
  * 1 = investigations, cards, themes, dots, rumors, court, pharma, filing watch, insiders, Congress, favourites;
- * 2 = research is also told which page an idea was sent from (Dots, Court, Pharma, News, Filings).
+ * 2 = research is also told which page an idea was sent from (Dots, Court, Pharma, News, Filings);
+ * 3 = filing changes (10-K / 10-Q vs a year earlier), crowding (score and stage) and analyst coverage.
  */
-export const KNOWN_REVISION = 2;
+export const KNOWN_REVISION = 3;
 
 const cut = (s: string | null | undefined, n: number) => { const t = (s ?? "").replace(/\s+/g, " ").trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 const on = (sym: string, xs: string[] | undefined | null) => (xs ?? []).map((x) => x.toUpperCase()).includes(sym);
@@ -40,6 +41,13 @@ export async function whatTheScoutKnows(symbols: string[], now = new Date(), max
   if (!syms.length) return null;
   const today = toEt(now).date;
   const safe = async <T,>(f: () => Promise<T>, fallback: T): Promise<T> => { try { return await f(); } catch { return fallback; } };
+  const [diffs, crowd, cov] = await Promise.all([
+    safe(() => import("./filing-diff").then(({ diffsFor }) => diffsFor(syms, 6)), []),
+    safe(() => import("./crowding").then(async ({ latestCrowding }) => new Map(await Promise.all(syms.map(async (s) => [s, await latestCrowding(s)] as const)))), new Map()),
+    safe(() => import("../sources/coverage").then(({ coverageOf }) => coverageOf(syms)), new Map()),
+  ]);
+  const { diffLine } = await import("./filing-diff");
+  const { crowdingLine } = await import("./crowding");
   const [invs, cards, tracks, themes, dots, rumors, checks, classes, itc, fda, trials, watch, buys, congress, favs] = await Promise.all([
     safe(() => import("./investigate").then(({ listInvestigations }) => listInvestigations(40)), []),
     safe(() => store.cardsSince(120), []),
@@ -97,6 +105,15 @@ export async function whatTheScoutKnows(symbols: string[], now = new Date(), max
     sections.push({ title: `${sym}: FDA dates and trial readouts (Pharma tab)`, lines: [
       ...(fda?.data ?? []).filter((e) => e.symbol === sym || on(sym, e.otherSymbols)).slice(0, 3).map((e) => `FDA ${e.date ?? e.when}: ${cut(e.drug, 60)}, ${cut(e.event, 100)}${e.outcome && !/^pending$/i.test(e.outcome) ? ` → ${cut(e.outcome, 80)}` : ""}`),
       ...(trials?.data ?? []).filter((t) => t.symbol === sym).slice(0, 3).map((t) => `Phase 3 ${t.nct} primary completion ${t.completion}: ${cut(t.drugs.join(", "), 60)} in ${cut(t.conditions.slice(0, 2).join(", "), 80)}`),
+    ] });
+
+    // What changed in its 10-K / 10-Q against a year earlier, how crowded it is, and who covers it.
+    const cr = crowd.get(sym);
+    const cv = cov.get(sym);
+    sections.push({ title: `${sym}: filing changes, crowding and analyst coverage`, lines: [
+      ...diffs.filter((d) => d.ticker === sym).slice(0, 2).map((d) => `filing changes: ${cut(diffLine(d), 500)}`),
+      ...(cr ? [`crowding (rule-of-thumb gauge, not proof): ${cut(crowdingLine(cr), 400)}`] : []),
+      ...(cv && cv.analysts !== null ? [`analyst coverage: ${cv.analysts} analysts (${cv.band}; thinly covered stocks digest news more slowly)`] : []),
     ] });
 
     const w = watch.get(sym);

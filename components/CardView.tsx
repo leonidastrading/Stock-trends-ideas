@@ -1,4 +1,5 @@
 import { KIND_LABEL, SCOUT, type Kind } from "@/config/scout";
+import CardSignals from "@/components/CardSignals";
 import Direction from "@/components/Direction";
 import CardAsk from "@/components/CardAsk";
 import CardCollapse from "@/components/CardCollapse";
@@ -156,6 +157,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
           {otherCards(t.symbol.toUpperCase()).slice(0, 6).map((b) => <a key={b.id} className="tag card-number" style={{ marginLeft: 4 }} href={`/ideas?days=90&card=${b.id}#card-${b.id}`} title={`Card #${b.id}, ${b.direction} ${b.primaryTicker}, ${b.status.replace("_", " ")}, ${fmtEtAgo(b.createdAt)}`}><span className={b.direction === "long" ? "pos" : "neg"}>{b.direction === "long" ? "▲" : "▼"}</span> #{b.id} <span className="muted">{fmtDay(toEt(new Date(b.createdAt)).date).replace(/, \d{4}$/, "")}</span></a>)} <span className="small muted">({t.sector.replace("_", " ")}{t.revenue_share_pct === null ? ", share unknown" : `, ${t.revenue_share_pct}% of revenue${t.share_is_estimate ? " (estimate)" : ""}`})</span> — {t.why}</div>)}</dd>
         <dt>Lateness</dt>
         <dd className={k.lateness.already_obvious ? "warn" : ""}>{pct(k.lateness.stock_move_30d_pct)} over 30 days, {pct(k.lateness.stock_move_90d_pct)} over 90 days, {k.lateness.news_stories_30d} mainstream stories in 30 days{k.lateness.already_obvious ? " — already obvious" : ""}</dd>
+        <CardSignals cardId={c.id} symbol={c.primaryTicker} />
         <dt>Catalyst</dt><dd>{k.catalyst.what} <span className="muted">({k.catalyst.date})</span></dd>
         <dt>Invalidation</dt><dd>{k.invalidation}</dd>
         <dt>Time limit</dt><dd>{k.time_limit_days} days</dd>

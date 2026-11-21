@@ -1,4 +1,5 @@
 import CardCollapse, { CollapseAll } from "@/components/CardCollapse";
+import Readthrough from "@/components/Readthrough";
 import ResearchButton from "@/components/ResearchButton";
 import SetupNotice from "@/components/SetupNotice";
 import Ticker from "@/components/Ticker";
@@ -118,6 +119,8 @@ export default async function DotsPage({ searchParams }: { searchParams: Promise
           </CardCollapse>
         );
       })}
+
+      <Readthrough />
 
       {all.length > 0 && (
         <section className="card section" id="all-ideas">

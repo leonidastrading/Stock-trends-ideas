@@ -739,6 +739,88 @@ CREATE TABLE IF NOT EXISTS runs (
   error text
 );
 
+-- The filing-change reader: each 10-K / 10-Q compared with the same form a year earlier (one row per filing).
+CREATE TABLE IF NOT EXISTS filing_diffs (
+  accession text PRIMARY KEY,
+  cik text NOT NULL,
+  ticker text,
+  company text,
+  form text NOT NULL,
+  filed date NOT NULL,
+  url text,
+  prior_accession text,
+  prior_filed date,
+  prior_url text,
+  similarity double precision,
+  added integer,
+  removed integer,
+  mechanical jsonb,
+  ai jsonb,
+  flag text NOT NULL,
+  source text NOT NULL,
+  error text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS filing_diffs_ticker_idx ON filing_diffs (ticker, filed DESC);
+
+-- Stocktwits attention for stocks on cards, once a weekday (the crowding score's baseline builds from these).
+CREATE TABLE IF NOT EXISTS card_attention (
+  date date NOT NULL,
+  symbol text NOT NULL,
+  per_hour double precision NOT NULL,
+  bullish_share double precision,
+  watchers integer,
+  sampled integer,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (date, symbol)
+);
+
+-- Crowding score and stage per card: one row at entry (when the card is written) and one per weekday while open. Append-only.
+CREATE TABLE IF NOT EXISTS card_crowding (
+  id serial PRIMARY KEY,
+  card_id integer NOT NULL,
+  symbol text NOT NULL,
+  kind text NOT NULL,
+  measured_on date NOT NULL,
+  score integer,
+  stage integer,
+  parts jsonb NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS card_crowding_once ON card_crowding (card_id, kind, measured_on);
+CREATE OR REPLACE TRIGGER card_crowding_ro BEFORE UPDATE OR DELETE ON card_crowding FOR EACH ROW EXECUTE FUNCTION forbid_change();
+
+-- Analyst coverage (Finnhub recommendation counts), refreshed weekly per symbol.
+CREATE TABLE IF NOT EXISTS analyst_coverage (
+  symbol text PRIMARY KEY,
+  analysts integer,
+  period text,
+  fetched_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Supply-chain read-through: who supplies whom (from filings, web search and the model), and each capex-raise event.
+CREATE TABLE IF NOT EXISTS supply_links (
+  customer text NOT NULL,
+  supplier text NOT NULL,
+  name text,
+  evidence text,
+  url text,
+  confidence integer,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (customer, supplier)
+);
+CREATE TABLE IF NOT EXISTS readthrough_events (
+  id serial PRIMARY KEY,
+  customer text NOT NULL,
+  et_date date NOT NULL,
+  headline text NOT NULL,
+  url text,
+  suppliers jsonb,
+  researched jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (customer, et_date)
+);
+
 CREATE TABLE IF NOT EXISTS emails_sent (
   key text PRIMARY KEY,
   subject text NOT NULL,

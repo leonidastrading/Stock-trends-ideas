@@ -2,7 +2,8 @@ import SetupNotice from "@/components/SetupNotice";
 import { KIND_LABEL, type Kind } from "@/config/scout";
 import { hasDatabase } from "@/lib/db";
 import { loadIdeas } from "@/lib/scout/ideas-load";
-import { byKind, calibration, PLAYER_LABEL, PLAYERS, playerOf, STAKE, standings, toRound, type Round, type Standing } from "@/lib/scout/scoreboard";
+import { byKind, calibration, PLAYER_LABEL, PLAYERS, playerOf, splitBy, STAKE, standings, toRound, type Round, type SplitRow, type Standing } from "@/lib/scout/scoreboard";
+import { crowdingFor, STAGE_LABEL, timing } from "@/lib/scout/crowding";
 import * as store from "@/lib/scout/store";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,18 @@ function luckText(s: Standing): string {
   if (s.luck === null) return "—";
   if (s.luck < 0.05) return `a coin does this ${pc(s.luck)} of the time: looks like skill`;
   return `a coin does this ${pc(s.luck)} of the time: could be luck`;
+}
+
+function SplitTable({ title, rows }: { title: string; rows: SplitRow[] }) {
+  return (
+    <div className="table-wrap"><table>
+      <thead><tr><th>{title}</th><th className="num">Calls</th><th className="num">Closed</th><th className="num">Won</th><th className="num">Hit rate</th><th className="num">Banked</th><th className="num">Per call</th></tr></thead>
+      <tbody>
+        {rows.map((r) => <tr key={r.key}><td>{r.key}</td><td className="num">{r.calls}</td><td className="num">{r.closed}</td><td className="num">{r.wins}</td><td className="num">{pc(r.hitRate)}</td><td className={`num ${cls(r.banked)}`}>{pts(r.banked)}</td><td className={`num ${cls(r.avg)}`}>{pts(r.avg)}</td></tr>)}
+        {rows.length === 0 && <tr><td colSpan={7} className="muted small">No calls with a reading yet.</td></tr>}
+      </tbody>
+    </table></div>
+  );
 }
 
 function Call({ r }: { r: Round }) {
@@ -38,6 +51,13 @@ export default async function ScoreboardPage() {
   const calib = calibration(rounds);
   const calibN = calib.reduce((a, b) => a + b.n, 0);
   const kinds = byKind(rounds);
+  // Crowding and analyst coverage when each card was written (cards from before these were measured have none).
+  const crowd = await crowdingFor(rounds.map((r) => r.cardId)).catch(() => new Map());
+  const entryOf = (r: Round) => crowd.get(r.cardId)?.entry ?? null;
+  const byTiming = splitBy(rounds, (r) => { const t = timing(entryOf(r)?.stage ?? null); return t; }, ["early", "middle", "late"]);
+  const byStage = splitBy(rounds, (r) => { const s = entryOf(r)?.stage; return s === null || s === undefined ? null : `${s} · ${STAGE_LABEL[s]}`; }, STAGE_LABEL.map((l, i) => `${i} · ${l}`));
+  const byCoverage = splitBy(rounds, (r) => entryOf(r)?.parts.coverage?.band ?? null, ["low", "moderate", "high"]);
+  const measured = rounds.filter((r) => entryOf(r)).length;
   const active = PLAYERS.filter((p) => rounds.some((r) => r.player === p));
   const recent = rounds.filter((r) => r.closed && r.points !== null).sort((a, b) => (b.exitDate ?? "").localeCompare(a.exitDate ?? "")).slice(0, 15);
   const inPlay = rounds.filter((r) => !r.closed && r.points !== null).sort((a, b) => b.points! - a.points!);
@@ -115,6 +135,14 @@ export default async function ScoreboardPage() {
           </table>
         </div>
         <p className="small secondary">Wins / closed calls, and points. Lean into the rows that win, and give the rows that keep losing to someone else.</p>
+      </section>
+
+      <section className="card" id="crowding">
+        <h2>Does being early help? Results by crowding and analyst coverage when the card was written</h2>
+        <p className="small secondary">The research behind it says edges live where attention is scarce: calls made while a stock is early (crowding stage 0–1) and thinly covered should do better than late, well-covered ones. These are rules of thumb until our own paper results agree. {measured} of {rounds.length} calls have a reading at entry (cards from before Nov 21, 2026 have none; they are never back-filled).</p>
+        <SplitTable title="Timing" rows={byTiming} />
+        <SplitTable title="Crowding stage" rows={byStage} />
+        <SplitTable title="Analyst coverage" rows={byCoverage} />
       </section>
 
       <section className="card">

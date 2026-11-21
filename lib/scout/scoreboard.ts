@@ -9,7 +9,7 @@
 import type { IdeaResult } from "./scoring";
 
 export const STAKE = 1000;
-export const PLAYERS = ["scout_trend", "scout_story", "scout_options", "scout_filings", "scout_truth", "scout_sites", "scout_drift", "scout_rumors", "scout_investigations", "scout_themes", "you", "stream_host", "stream_agent", "inbox_bot"] as const;
+export const PLAYERS = ["scout_trend", "scout_story", "scout_options", "scout_filings", "scout_truth", "scout_sites", "scout_drift", "scout_rumors", "scout_investigations", "scout_themes", "scout_filing_changes", "scout_readthrough", "you", "stream_host", "stream_agent", "inbox_bot"] as const;
 export type Player = (typeof PLAYERS)[number];
 export const PLAYER_LABEL: Record<Player, string> = {
   scout_trend: "Scout · trend desk",
@@ -22,6 +22,8 @@ export const PLAYER_LABEL: Record<Player, string> = {
   scout_rumors: "Scout · rumors (checked)",
   scout_themes: "Scout · themes (consensus)",
   scout_investigations: "Scout · investigations",
+  scout_filing_changes: "Scout · filing changes",
+  scout_readthrough: "Scout · supply-chain read-through",
   you: "You",
   stream_host: "Stream file · host",
   stream_agent: "Stream file · agent",
@@ -31,6 +33,8 @@ export const PLAYER_LABEL: Record<Player, string> = {
 /** Who made the call: by origin, and by the candidate term the card came from. */
 export function playerOf(origin: "scout" | "human", term: string | undefined): Player {
   const t = (term ?? "").toLowerCase();
+  if (origin === "scout" && t.startsWith("filing change:")) return "scout_filing_changes";
+  if (origin === "scout" && t.startsWith("readthrough:")) return "scout_readthrough";
   if (origin === "scout") return t.startsWith("story:") ? "scout_story" : t.startsWith("options:") ? "scout_options" : /^(filing|insider|congress|insider\+congress): /.test(t) ? "scout_filings" : t.startsWith("truth:") ? "scout_truth" : t.startsWith("site:") ? "scout_sites" : t.startsWith("drift:") ? "scout_drift" : t.startsWith("rumor:") ? "scout_rumors" : t.startsWith("investigate:") ? "scout_investigations" : t.startsWith("theme:") ? "scout_themes" : "scout_trend";
   if (t.startsWith("stream host:")) return "stream_host";
   if (t.startsWith("stream agent:")) return "stream_agent";
@@ -109,6 +113,21 @@ export function calibration(rounds: Round[]): Bucket[] {
   return BUCKETS.map((b) => {
     const inB = r.filter((x) => x.confidence! >= b.lo && x.confidence! < b.hi);
     return { label: b.label, n: inB.length, said: inB.length ? inB.reduce((a, x) => a + x.confidence!, 0) / inB.length / 100 : null, hit: inB.length ? inB.filter((x) => x.win).length / inB.length : null };
+  });
+}
+
+export interface SplitRow { key: string; calls: number; closed: number; wins: number; hitRate: number | null; banked: number; avg: number | null }
+
+/** Closed and open calls grouped by a label (crowding stage at entry, analyst coverage): does it change the results? */
+export function splitBy(rounds: Round[], keyOf: (r: Round) => string | null, order: string[]): SplitRow[] {
+  const rows = new Map<string, Round[]>();
+  for (const r of rounds) { const k = keyOf(r); if (k) rows.set(k, [...(rows.get(k) ?? []), r]); }
+  return order.filter((k) => rows.has(k)).map((key) => {
+    const rs = rows.get(key)!;
+    const closed = rs.filter((r) => r.closed && r.points !== null);
+    const wins = closed.filter((r) => r.win).length;
+    const banked = closed.reduce((a, r) => a + r.points!, 0);
+    return { key, calls: rs.length, closed: closed.length, wins, hitRate: closed.length ? wins / closed.length : null, banked, avg: closed.length ? Math.round(banked / closed.length) : null };
   });
 }
 

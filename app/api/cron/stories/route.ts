@@ -35,12 +35,14 @@ export async function GET(request: Request) {
       if (!process.env.DART_API_KEY?.trim()) return;
       const { dartCorpsStale } = await import("@/lib/sources/asia-filings");
       if (!(await dartCorpsStale()) || !(await store.tryLock("lock:dartcorps", 6))) return;
-      const secret = process.env.CRON_SECRET?.trim();
-      // Not awaited to the end: the download runs in that call's own 5 minutes; this only starts it.
-      void fetch(`${new URL(request.url).origin}/api/cron/dartcorps`, { headers: secret ? { authorization: `Bearer ${secret}` } : {} }).catch(() => undefined);
-      await new Promise((r) => setTimeout(r, 1500));
-      console.log("dart corps: download started");
+      const { startJob } = await import("@/lib/scout/jobs");
+      if (await startJob(new URL(request.url).origin, "/api/cron/dartcorps", "lock:dartcorps:start", 1)) console.log("dart corps: download started");
     })().catch((err) => console.error(`dart corps start failed: ${err instanceof Error ? err.message : String(err)}`));
+    // Filing changes, crowding for open cards and the supply-chain read-through, each in its own time limit.
+    await (async () => {
+      const { JOBS, startJob } = await import("@/lib/scout/jobs");
+      for (const [name, j] of Object.entries(JOBS)) await startJob(new URL(request.url).origin, `/api/cron/job/${name}`, `lock:job:${name}`, j.everyMin);
+    })().catch((err) => console.error(`jobs start failed: ${err instanceof Error ? err.message : String(err)}`));
     // Reddit first (new posts, a little backfill), then once a day yesterday's rumor subreddits, then the catch-up queue.
     const { ingestReddit, readRedditRumors } = await import("@/lib/sources/arctic");
     await ingestReddit(Date.now() + 40_000).then((r) => console.log(`reddit ingest: ${r}`)).catch((err) => console.error(`reddit ingest failed: ${err instanceof Error ? err.message : String(err)}`));

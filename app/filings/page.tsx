@@ -1,4 +1,5 @@
 import LinkedText from "@/components/LinkedText";
+import FilingChanges from "@/components/FilingChanges";
 import SetupNotice from "@/components/SetupNotice";
 import { hasDatabase } from "@/lib/db";
 import { OPTIONS_UNIVERSE } from "@/config/options";
@@ -56,6 +57,8 @@ export default async function FilingsPage() {
         </table></div>
         {watch.length > flagged.length && <details className="small"><summary>On time ({watch.length - flagged.length})</summary><ul>{watch.filter((w) => w.status === "ok").map((w) => <li key={w.symbol}><b>{w.symbol}</b>: {w.message} <CardChips cards={cardsOn(w.symbol)} max={3} /></li>)}</ul></details>}
       </section>
+
+      <FilingChanges />
 
       <section className="card">
         <h2>Signals now</h2>
