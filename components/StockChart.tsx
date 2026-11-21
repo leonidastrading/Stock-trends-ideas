@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import TvChart from "@/components/TvChart";
 import { findCrashBounce, type Bar, type CrashBounce } from "@/lib/market/crash-bounce";
 
-interface BarsReply { symbol: string; bars: Bar[]; raw?: Array<[string, number, number]>; feed?: string; earnings: string[]; next: string | null; nextBasis: string | null; error?: string }
+interface BarsReply { symbol: string; bars: Bar[]; raw?: Array<[string, number, number]>; feed?: string; earnings: string[]; next: string | null; nextBasis: string | null; error?: string; name?: string | null; ext?: { price: number; pct: number; label: string; at: string | null } | null }
 /**
  * The scout's call on this chart: the paper entry when the trade is open, otherwise the day the card (or theme) was
  * written, priced at that day's close when no price is given.
@@ -119,6 +119,8 @@ export default function StockChart({ symbol, tvSymbol, height = 680, entry }: { 
         if (d > until) pad++;
       }
       const candles = chart.addCandlestickSeries({ upColor: pos, downColor: neg, wickUpColor: pos, wickDownColor: neg, borderVisible: false });
+      // The latest pre-market or after-hours trade, as a dotted line (only on the daily chart, where it belongs to today).
+      if (res.ext && !prefs.weekly) candles.createPriceLine({ price: res.ext.price, color: res.ext.pct >= 0 ? pos : neg, lineWidth: 1, lineStyle: lib.LineStyle.Dotted, axisLabelVisible: true, title: res.ext.label === "pre-market" ? "PM" : "AH" });
       candles.setData([...bars.map(([time, open, high, low, close]) => ({ time, open, high, low, close })), ...future.map((time) => ({ time }))]);
       if (prefs.volume) {
         const vol = chart.addHistogramSeries({ priceScaleId: "vol", priceFormat: { type: "volume" }, lastValueVisible: false, priceLineVisible: false });
@@ -217,13 +219,15 @@ export default function StockChart({ symbol, tvSymbol, height = 680, entry }: { 
         const chg = pct === null ? null : pct === 0 ? "0.0" : `${pct > 0 ? "+" : "−"}${Math.abs(pct).toFixed(1)}`;
         return `${prefs.weekly ? "Week of " : ""}${fmtDay(b[0])}  O ${b[1].toFixed(2)}  H ${b[2].toFixed(2)}  L ${b[3].toFixed(2)}  C ${b[4].toFixed(2)}${chg ? ` (${chg}%)` : ""}${earnWeeks.has(b[0]) ? "  · earnings" : ""}`;
       };
-      setState({ legend: legendFor(null) });
+      // Not hovering: the last session, then the pre-market or after-hours trade against its close.
+      const extLine = res.ext ? `  · ${res.ext.label === "pre-market" ? "Pre-market" : "After hours"} ${res.ext.price.toFixed(2)} (${res.ext.pct > 0 ? "+" : res.ext.pct < 0 ? "−" : ""}${Math.abs(res.ext.pct).toFixed(1)}%)` : "";
+      setState({ legend: legendFor(null) + extLine });
       const dayOf = (t: unknown): string | null => {
         if (typeof t === "string") return t;
         const v = t as { year?: number; month?: number; day?: number } | null;
         return v?.year && v.month && v.day ? `${v.year}-${String(v.month).padStart(2, "0")}-${String(v.day).padStart(2, "0")}` : null;
       };
-      chart.subscribeCrosshairMove((p) => setState((s) => ({ ...s, legend: legendFor(dayOf(p.time)) })));
+      chart.subscribeCrosshairMove((p) => setState((s) => ({ ...s, legend: legendFor(dayOf(p.time)) + (p.time ? "" : extLine) })));
       cleanup = () => { cancelAnimationFrame(raf); ro.disconnect(); chart.remove(); if (overlay.current) overlay.current.innerHTML = ""; };
     })().catch((err) => !dead && setState({ error: String(err).slice(0, 120) }));
     return () => { dead = true; cleanup(); };
@@ -253,6 +257,8 @@ export default function StockChart({ symbol, tvSymbol, height = 680, entry }: { 
         <>
           <div className="tv-chart scout-chart" style={{ height: h }}>
             <div className="chart-legend small">{state.error ? <span className="warn">Chart unavailable: {state.error}</span> : state.legend ?? `Chart of ${symbol} loads as you scroll…`}</div>
+            {/* The ticker and company name, faint, behind the candles (the chart's background is transparent). */}
+            <div className="chart-mark" aria-hidden="true"><div className="chart-mark-sym">{symbol}</div>{res?.name ? <div className="chart-mark-name">{res.name}</div> : null}</div>
             <div ref={host} className="chart-host" aria-label={`${symbol} chart with earnings dates`} />
             <div ref={overlay} className="chart-overlay" />
           </div>

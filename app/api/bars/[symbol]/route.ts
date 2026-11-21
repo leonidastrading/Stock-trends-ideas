@@ -38,11 +38,18 @@ export async function GET(request: Request, ctx: { params: Promise<{ symbol: str
   ]);
   if (!bars.data?.bars.length) return NextResponse.json({ error: bars.error ?? "no bars" }, { status: 502 });
   const next = info?.nextEarnings && info.nextEarnings >= today ? info.nextEarnings : null;
+  // The company's name (for the chart's background) and the latest pre-market or after-hours trade.
+  const [name, q] = await Promise.all([
+    info?.name ? Promise.resolve(info.name) : (data.getAsset?.(sym) ?? Promise.resolve(null)).then((a) => a?.name ?? null).catch(() => null),
+    import("@/lib/market/quotes").then(({ quote }) => quote(sym, 4000)).catch(() => null),
+  ]);
+  const ext = q && q.extPct !== null && q.extPct !== undefined ? { price: q.price, pct: q.extPct, label: q.extLabel ?? "after hours", at: q.at } : null;
   return NextResponse.json({
     symbol: sym,
     bars: bars.data.bars.map((b) => [b.date, b.o, b.h, b.l, b.c, b.v]),
     raw: bars.data.raw, feed: bars.data.feed,
     earnings: earn.data ?? [],
     next, nextBasis: next ? info?.nextBasis ?? null : null,
-  }, { headers: { "cache-control": "private, max-age=300" } });
+    name, ext,
+  }, { headers: { "cache-control": "private, max-age=120" } });
 }
