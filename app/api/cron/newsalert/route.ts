@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { background } from "@/lib/background";
 import { checkCronSecret, cronAuthProblem } from "@/lib/auth";
 import { marketDataFromEnv } from "@/lib/alpaca";
 
@@ -17,8 +16,8 @@ export async function GET(request: Request) {
     console.warn(`cron auth refused ${new URL(request.url).pathname}: ${why.detail}`);
     return NextResponse.json({ error: "unauthorized", reason: why.reason }, { status: 401 });
   }
-  // Anything the daily AI budget turned away is worked through once it resets (a no-op when nothing waits).
-  background(() => import("@/lib/scout/catchup").then(({ catchUp }) => catchUp(40_000)));
+  // The catch-up queue is worked by the stories job (every 5 minutes, 2.5-minute budget): a research call can outlast
+  // this job's 60 seconds, which timed it out.
   try {
     const { runNewsAlerts } = await import("@/lib/scout/news-alerts");
     return NextResponse.json({ status: "ok", result: await runNewsAlerts({ data: marketDataFromEnv(), now: new Date() }) });
