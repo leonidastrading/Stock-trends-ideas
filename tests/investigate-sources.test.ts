@@ -107,3 +107,40 @@ describe("automatic investigations", () => {
     expect([...done.urls]).toEqual(["https://n.com/b"]);
   });
 });
+
+describe("Japan and Korea filings", () => {
+  it("EDINET: a bad key is an error, a company is found by code or name, links are the public viewer", async () => {
+    const { edinetDay, edinetMatch, edinetPdfUrl, edinetFilings } = await import("@/lib/sources/asia-filings");
+    expect(() => edinetDay({ StatusCode: 401, message: "Access denied due to invalid subscription key." })).toThrow("EDINET 401");
+    const docs = [
+      { docID: "S100AAA1", secCode: "72030", filerName: "トヨタ自動車株式会社", docDescription: "臨時報告書", submitDateTime: "2026-11-18 15:00" },
+      { docID: "S100AAA2", secCode: "67580", filerName: "ソニーグループ株式会社", docDescription: "有価証券報告書", submitDateTime: "2026-11-19 09:00" },
+    ];
+    expect(edinetMatch(docs, "7203")).toEqual([{ date: "2026-11-18", title: "臨時報告書", detail: "トヨタ自動車株式会社 (7203)", url: "https://disclosure2.edinet-fsa.go.jp/WZEK0040.aspx?S1=S100AAA1" }]);
+    expect(edinetMatch(docs, "ソニー").map((r) => r.url)).toEqual(["https://disclosure2.edinet-fsa.go.jp/WZEK0040.aspx?S1=S100AAA2"]);
+    expect(edinetPdfUrl("https://disclosure2.edinet-fsa.go.jp/WZEK0040.aspx?S1=S100AAA1", {} as NodeJS.ProcessEnv)).toBeNull();
+    expect(edinetPdfUrl("https://disclosure2.edinet-fsa.go.jp/WZEK0040.aspx?S1=S100AAA1", { EDINET_API_KEY: "k" } as unknown as NodeJS.ProcessEnv)).toBe("https://api.edinet-fsa.go.jp/api/v2/documents/S100AAA1?type=2&Subscription-Key=k");
+    // The key never shows up in an error.
+    const r = await edinetFilings("7203", new Date("2026-11-20T12:00:00Z"), { EDINET_API_KEY: "secret-key" } as unknown as NodeJS.ProcessEnv, (async () => Response.json({ StatusCode: 401, message: "bad key" })) as typeof fetch, 2);
+    expect(r.error).toContain("EDINET 401");
+    expect(JSON.stringify(r)).not.toContain("secret-key");
+    expect((await edinetFilings("7203", new Date(), {} as NodeJS.ProcessEnv)).error).toContain("not set");
+  });
+
+  it("DART: listed companies from the code list, found by stock code or name; filings as rows", async () => {
+    const { dartCorps, dartFind, dartRows, dartFilings } = await import("@/lib/sources/asia-filings");
+    const xml = `<result><list><corp_code>00126380</corp_code><corp_name>삼성전자</corp_name><corp_eng_name>SAMSUNG ELECTRONICS CO,.LTD</corp_eng_name><stock_code>005930</stock_code><modify_date>20260101</modify_date></list><list><corp_code>00999999</corp_code><corp_name>비상장</corp_name><corp_eng_name>Private Co</corp_eng_name><stock_code> </stock_code></list><list><corp_code>00164779</corp_code><corp_name>SK하이닉스</corp_name><corp_eng_name>SK hynix Inc.</corp_eng_name><stock_code>000660</stock_code></list></result>`;
+    const corps = dartCorps(xml);
+    expect(corps.map((c) => c.stock)).toEqual(["005930", "000660"]);
+    expect(dartFind(corps, "005930")?.code).toBe("00126380");
+    expect(dartFind(corps, "SK Hynix")?.code).toBe("00164779");
+    expect(dartFind(corps, "삼성전자")?.code).toBe("00126380");
+    expect(dartFind(corps, "Nonexistent Holdings")).toBeNull();
+    expect(dartRows({ status: "000", list: [{ rcept_dt: "20261119", report_nm: "주요사항보고서(유상증자결정)", corp_name: "삼성전자", flr_nm: "삼성전자", rcept_no: "20261119000123" }] })).toEqual([{ date: "2026-11-19", title: "주요사항보고서(유상증자결정)", detail: "삼성전자", url: "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20261119000123" }]);
+    expect(dartRows({ status: "013", message: "조회된 데이타가 없습니다." })).toEqual([]);
+    expect(() => dartRows({ status: "010", message: "등록되지 않은 인증키입니다." })).toThrow("DART 010");
+    const r = await dartFilings("005930", new Date(), { DART_API_KEY: "secret-key" } as unknown as NodeJS.ProcessEnv, (async () => Response.json({ status: "010", message: "bad key" })) as typeof fetch);
+    expect(r.error).toContain("DART");
+    expect(JSON.stringify(r)).not.toContain("secret-key");
+  });
+});

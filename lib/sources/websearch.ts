@@ -4,6 +4,7 @@
  * model can read them. Public addresses only; nothing is sent but the query and the address.
  */
 import { cleanSiteUrl, htmlText } from "./site";
+import { edinetPdfUrl } from "./asia-filings";
 
 const UA = { "user-agent": "Mozilla/5.0 (compatible; research-reader/1.0)" };
 export interface SearchHit { title: string; url: string; snippet: string; age: string }
@@ -44,13 +45,15 @@ export function pageText(html: string): string {
 }
 
 /** Open a public page or document. Text is cut to `max` characters; a scanned PDF or an image comes back as bytes. */
-export async function openDocument(raw: string, fetchImpl: typeof fetch = fetch, max = 8000): Promise<Opened> {
+export async function openDocument(raw: string, fetchImpl: typeof fetch = fetch, max = 8000, env: NodeJS.ProcessEnv = {} as NodeJS.ProcessEnv): Promise<Opened> {
   const url = cleanSiteUrl(raw);
   if (!url) return { url: raw, kind: "error", error: "not a public web address" };
+  // An EDINET filing is read as its PDF through the API (the key is added here and never leaves this function).
+  const target = edinetPdfUrl(url, env) ?? url;
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), 20_000);
   try {
-    const res = await fetchImpl(url, { headers: { ...UA, accept: "text/html,application/pdf,image/*,text/plain;q=0.8,*/*;q=0.5" }, signal: ctl.signal, redirect: "follow" });
+    const res = await fetchImpl(target, { headers: { ...UA, accept: "text/html,application/pdf,image/*,text/plain;q=0.8,*/*;q=0.5" }, signal: ctl.signal, redirect: "follow" });
     if (!res.ok) return { url, kind: "error", error: `${new URL(url).host} answered ${res.status}` };
     const type = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
     const bytes = new Uint8Array(await res.arrayBuffer());

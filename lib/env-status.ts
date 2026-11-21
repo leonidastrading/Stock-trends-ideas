@@ -28,6 +28,8 @@ export function envStatus(env: NodeJS.ProcessEnv = process.env): EnvStatus[] {
     row("LDA_API_KEY", false, "Investigations: lobbying filings (optional, higher rate limit)"),
     row("BRAVE_SEARCH_API_KEY", false, "Investigations: web search while following leads (Brave Search API)"),
     row("COURTLISTENER_TOKEN", false, "Investigations: federal court dockets (CourtListener, free)"),
+    row("EDINET_API_KEY", false, "Investigations: Japan exchange filings (EDINET, free)"),
+    row("DART_API_KEY", false, "Investigations: Korea exchange filings (Open DART, free)"),
     row("YOUTUBE_API_KEY", false, "YouTube"),
     row("REDDIT_CLIENT_ID", false, "Reddit (after Data API approval)"),
     row("REDDIT_CLIENT_SECRET", false, "Reddit (after Data API approval)"),
