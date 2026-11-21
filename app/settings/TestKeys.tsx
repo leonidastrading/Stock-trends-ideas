@@ -25,7 +25,7 @@ export default function TestKeys() {
   return (
     <p className="small">
       <button className="chip" onClick={run} disabled={state === "busy"}>{state === "busy" ? "Testing keys…" : "Test keys"}</button>{" "}
-      <span className={state === "error" ? "neg" : "muted"}>{msg || "Brave Search, CourtListener, EDINET and DART: one small real call each (about 10–60 seconds)."}</span>
+      <span className={state === "error" ? "neg" : "muted"}>{msg || "Brave Search, CourtListener, EDINET and DART: one small real call each (usually under a minute; up to 2 minutes the first time for DART)."}</span>
     </p>
   );
 }

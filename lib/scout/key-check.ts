@@ -15,9 +15,9 @@ export async function checkKeys(env: NodeJS.ProcessEnv, now = new Date(), fetchI
   const one = async (key: (typeof CHECKED_KEYS)[number], run: () => Promise<string>): Promise<KeyCheck> => {
     if (!env[key]?.trim()) return { key, status: "not set", detail: "" };
     try {
-      // Each test gets 60 seconds; a hung service is a failure, not a silent wait.
+      // Each test gets 2 minutes (DART's first company-list download is slow); a hung service is a failure, not a silent wait.
       let timer: ReturnType<typeof setTimeout> | undefined;
-      const limit = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("no answer within 60 seconds")), 60_000); });
+      const limit = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("no answer within 2 minutes")), 120_000); });
       try {
         return { key, status: "works", detail: await Promise.race([run(), limit]) };
       } finally {

@@ -4,7 +4,7 @@ import { runKeyCheck } from "@/lib/scout/key-check";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+export const maxDuration = 180;
 
 /** Settings → Test keys: one small real call per investigation key. Answers only works / failed and why, never a key. */
 export async function POST(request: Request) {

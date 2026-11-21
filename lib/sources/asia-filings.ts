@@ -116,19 +116,34 @@ export function dartRows(j: { status?: string; message?: string; list?: Array<{ 
   });
 }
 
+/**
+ * DART's company list: a large zip that is slow to download from Vercel, so it is kept in the database for a week
+ * (only the listed companies, a few hundred KB) and downloaded again only when older.
+ */
+async function loadCorps(key: string, fetchImpl: typeof fetch): Promise<{ at: number; corps: DartCorp[] }> {
+  const db = await import("../db").catch(() => null);
+  const saved = db ? ((await db.query(`SELECT data, updated_at FROM dashboard_cache WHERE key = 'dart:corps'`).catch(() => []))[0] as { data: DartCorp[]; updated_at: string } | undefined) : undefined;
+  if (saved && Array.isArray(saved.data) && saved.data.length > 1000 && Date.now() - Date.parse(saved.updated_at) < 7 * 86400_000) return { at: Date.now(), corps: saved.data };
+  try {
+    const bytes = new Uint8Array(await (await get(`https://opendart.fss.or.kr/api/corpCode.xml?crtfc_key=${encodeURIComponent(key)}`, fetchImpl, 120_000)).arrayBuffer());
+    // A bad key comes back as a small JSON or XML error, not a zip.
+    if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) throw new Error(`DART: ${strFromU8(bytes.slice(0, 200)).replace(/\s+/g, " ").slice(0, 120)}`);
+    const corps = dartCorps(Object.values(unzipSync(bytes)).map((b) => strFromU8(b)).join(""));
+    if (db && corps.length > 1000) await db.query(`INSERT INTO dashboard_cache (key, data, updated_at) VALUES ('dart:corps', $1::jsonb, now()) ON CONFLICT (key) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`, [JSON.stringify(corps)]).catch(() => undefined);
+    return { at: Date.now(), corps };
+  } catch (e) {
+    // An older saved list is better than none while DART is slow.
+    if (saved && Array.isArray(saved.data) && saved.data.length) return { at: Date.now(), corps: saved.data };
+    throw e;
+  }
+}
+
 export async function dartFilings(who: string, now: Date, env: NodeJS.ProcessEnv, fetchImpl: typeof fetch = fetch): Promise<Lookup> {
   const key = env.DART_API_KEY?.trim();
   const query = `DART "${who}"`;
   if (!key) return { query, rows: [], error: "DART_API_KEY not set" };
   try {
-    if (!corpCache || Date.now() - corpCache.at > 24 * 3600_000) {
-      const bytes = new Uint8Array(await (await get(`https://opendart.fss.or.kr/api/corpCode.xml?crtfc_key=${encodeURIComponent(key)}`, fetchImpl, 30_000)).arrayBuffer());
-      // A bad key comes back as a small JSON or XML error, not a zip.
-      if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) throw new Error(`DART: ${strFromU8(bytes.slice(0, 200)).replace(/\s+/g, " ").slice(0, 120)}`);
-      const files = unzipSync(bytes);
-      const xml = Object.values(files).map((b) => strFromU8(b)).join("");
-      corpCache = { at: Date.now(), corps: dartCorps(xml) };
-    }
+    if (!corpCache || Date.now() - corpCache.at > 24 * 3600_000) corpCache = await loadCorps(key, fetchImpl);
     const corp = dartFind(corpCache.corps, who);
     if (!corp) return { query, rows: [], error: "no listed Korean company by that name or code" };
     const d8 = (d: Date) => ymd(d).replace(/-/g, "");
