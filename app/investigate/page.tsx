@@ -1,7 +1,7 @@
 import SetupNotice from "@/components/SetupNotice";
 import Ticker from "@/components/Ticker";
 import { hasDatabase } from "@/lib/db";
-import { listInvestigations, reportText, type Investigation } from "@/lib/scout/investigate";
+import { listInvestigations, reportText, type Investigation, MORE_LABEL } from "@/lib/scout/investigate";
 import CardAsk from "@/components/CardAsk";
 import DigDeeper from "./DigDeeper";
 import * as store from "@/lib/scout/store";
@@ -44,8 +44,12 @@ export default async function InvestigatePage() {
             <li><b>Lobbying filings</b> (Senate LDA): who paid lobbyists, on which issues, which agencies they lobbied.</li>
             <li><b>PAC and campaign money</b> (FEC): who a company&apos;s PAC or a campaign gave money to. Set FEC_API_KEY (free from api.data.gov) for reliable results; the shared demo key allows only a few lookups an hour.</li>
             <li><b>Headlines</b> on the listed companies involved.</li>
+            <li><b>Export controls</b>: US Entity List additions and export rules (Federal Register).</li>
+            <li><b>Federal court dockets</b> (CourtListener; needs COURTLISTENER_TOKEN, free).</li>
+            <li><b>Exchange filings</b>: Hong Kong (HKEXnews), mainland China (cninfo), and SEC full-text search across all filers (through the EDGAR relay on your computer).</li>
+            <li><b>Following leads</b>: then the investigator searches the web (needs BRAVE_SEARCH_API_KEY) and opens pages and documents — filings on any exchange, dockets, government notices, PDFs, scanned pages — for up to four rounds, following each new name it finds, before it writes.</li>
           </ul>
-          <p>Each finding is marked <span className="pos">confirmed by records</span>, <span className="warn">partly confirmed</span> or <span className="muted">the story only</span>, with a link to the record. Then it names the listed companies exposed and how. <b>Research</b> sends one to the normal research step; those cards score as &quot;Scout · investigations&quot;. Two AI calls per investigation, within the daily cap. Video sites block automated readers: paste the transcript (YouTube: … → Show transcript).</p>
+          <p>Each finding is marked <span className="pos">confirmed by records</span>, <span className="warn">partly confirmed</span> or <span className="muted">the story only</span>, with a link to the record. Then it names the listed companies exposed and how. <b>Research</b> sends one to the normal research step; those cards score as &quot;Scout · investigations&quot;. About three to six AI calls per investigation (plan, up to four rounds of leads, report, plus any scanned pages read), within the daily cap. Video sites block automated readers: paste the transcript (YouTube: … → Show transcript).</p>
         </div>
       </details>
       <InvestigateForm running={invs.some((i) => i.status === "running")} />
@@ -66,11 +70,12 @@ function InvestigationView({ inv, open, researched, t }: { inv: Investigation; o
     <details className="card section investigation" id={`inv-${inv.id}`} open={open}>
       <summary>
         <b>{r?.headline || inv.title}</b>{" "}
+        {inv.input.startsWith("Auto-investigation (") && <span className="tag" title={inv.input.split("\n")[0]}>started by the scout</span>}{" "}
         {inv.status === "running" ? <span className="tag late">digging…</span> : inv.status === "error" ? <span className="tag down">failed</span> : null}
         <span className="small muted"> · {etLabelAgo(inv.createdAt)}{inv.costUsd ? ` · $${inv.costUsd.toFixed(2)}` : ""}</span>
       </summary>
       {inv.status === "error" && <p className="small neg">{inv.error}</p>}
-      {inv.status === "running" && <p className="small muted">{inv.records ? "Records pulled; writing the report…" : inv.plan ? "Plan made; pulling contracts, lobbying and PAC records…" : "Planning what to look up…"}</p>}
+      {inv.status === "running" && <p className="small muted">{inv.records?.web ? `Following leads (${inv.records.web.rounds.length} round${inv.records.web.rounds.length === 1 ? "" : "s"} done${inv.records.web.rounds.at(-1)?.why ? `: ${inv.records.web.rounds.at(-1)!.why}` : ""})…` : inv.records ? "Records pulled; following leads…" : inv.plan ? "Plan made; pulling public records…" : "Planning what to look up…"}</p>}
       {r && (
         <>
           <p>{t(r.what_happened)}</p>
@@ -116,6 +121,23 @@ function InvestigationView({ inv, open, researched, t }: { inv: Investigation; o
           {rec.pacs.map((p, k) => (
             <div key={`p${k}`} style={{ marginTop: 6 }}><b>PAC / campaign, &quot;{p.name}&quot;</b>{p.error ? <span className="neg"> · {p.error}</span> : !p.committees.length ? <span className="muted"> · no committee found</span> : <span className="muted"> · {p.committees.map((c) => c.name).join("; ")}</span>}
               {p.spending.slice(0, 25).map((s, j) => <div key={j}>{s.date} · {s.committee} → {s.recipient}{s.candidate ? ` (${s.candidate})` : ""} · {usd(s.amount)} · {s.purpose} · <a href={s.url} target="_blank" rel="noreferrer">FEC</a></div>)}
+            </div>
+          ))}
+          {(rec.more ?? []).map((m, k) => (
+            <div key={`m${k}`} style={{ marginTop: 6 }}><b>{MORE_LABEL[m.source]}, {m.lookup.query}</b>{m.lookup.error ? <span className="neg"> · {m.lookup.error}</span> : !m.lookup.rows.length ? <span className="muted"> · none</span> : null}
+              {m.lookup.rows.map((x, j) => <div key={j}>{x.date} · <a href={x.url} target="_blank" rel="noreferrer">{x.title}</a>{x.detail ? <span className="muted"> · {x.detail.slice(0, 200)}</span> : null}</div>)}
+            </div>
+          ))}
+        </details>
+      )}
+      {rec?.web && rec.web.rounds.length > 0 && (
+        <details className="small">
+          <summary>Leads followed ({rec.web.rounds.reduce((a, r) => a + r.searches.length, 0)} searches, {rec.web.rounds.reduce((a, r) => a + r.opened.length, 0)} pages and documents read{rec.web.stopped && rec.web.stopped !== "done" ? `; ${rec.web.stopped}` : ""})</summary>
+          {rec.web.rounds.map((r, k) => (
+            <div key={k} style={{ marginTop: 6 }}>
+              <b>Round {k + 1}</b>{r.why ? <span className="muted"> · {r.why}</span> : null}
+              {r.searches.map((s, j) => <div key={`s${j}`}>🔎 {s.query}{s.error ? <span className="neg"> · {s.error}</span> : <span className="muted"> · {s.hits.length} results</span>}</div>)}
+              {r.opened.map((o, j) => <div key={`o${j}`} className="history-note">📄 <a href={o.url} target="_blank" rel="noreferrer">{o.url.replace(/^https?:\/\/(www\.)?/, "").slice(0, 90)}</a>{o.error ? <span className="neg"> · {o.error}</span> : <span className="muted"> · {o.kind === "scan" ? "scanned, read by the model" : o.kind}</span>}</div>)}
             </div>
           ))}
         </details>

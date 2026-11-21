@@ -26,6 +26,8 @@ export function envStatus(env: NodeJS.ProcessEnv = process.env): EnvStatus[] {
     row("FINNHUB_API_KEY", false, "Earnings drift: revenue vs consensus (optional; without it cards say revenue was not checked)"),
     row("FEC_API_KEY", false, "Investigations: campaign and PAC money (free from api.data.gov; without it a shared demo key)"),
     row("LDA_API_KEY", false, "Investigations: lobbying filings (optional, higher rate limit)"),
+    row("BRAVE_SEARCH_API_KEY", false, "Investigations: web search while following leads (Brave Search API)"),
+    row("COURTLISTENER_TOKEN", false, "Investigations: federal court dockets (CourtListener, free)"),
     row("YOUTUBE_API_KEY", false, "YouTube"),
     row("REDDIT_CLIENT_ID", false, "Reddit (after Data API approval)"),
     row("REDDIT_CLIENT_SECRET", false, "Reddit (after Data API approval)"),

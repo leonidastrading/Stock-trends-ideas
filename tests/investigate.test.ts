@@ -48,21 +48,34 @@ describe("investigations: end to end (PGlite, fake model and records)", () => {
       if (url.includes("lda.senate.gov")) return Response.json({ results: [] });
       if (url.includes("/committees/")) return Response.json({ results: [{ committee_id: "C00999999", name: "ASI PAC", committee_type_full: "PAC - Qualified" }] });
       if (url.includes("schedule_b")) return Response.json({ results: [{ recipient_name: "ALFONSO FOR CONGRESS", disbursement_amount: 5000, disbursement_date: "2026-03-31", disbursement_description: "CONTRIBUTION" }] });
+      if (url.includes("federalregister.gov")) return Response.json({ results: [] });
+      if (url.includes("api.search.brave.com")) return Response.json({ web: { results: [{ title: "FAA <strong>router</strong> outage", url: "https://news.example.com/faa-router", description: "An L3Harris router install", age: "2 days ago" }] } });
+      if (url === "https://news.example.com/faa-router") return new Response("<html><body><article><p>The FAA said the L3Harris router install caused the stop.</p></article></body></html>", { headers: { "content-type": "text/html" } });
       return new Response("no", { status: 404 });
     }) as typeof fetch;
     const seen: Record<string, string> = {};
+    let round = 0;
     const callModel: CallModel = async ({ user, purpose }) => {
       seen[purpose!] = user;
-      const text = purpose === "investigate_plan" ? JSON.stringify(planJson) : JSON.stringify({ headline: "The router, the AI vendor and the $50B ask", what_happened: "w", money_trail: [{ finding: "ASI PAC gave $5,000 to Alfonso for Congress on 2026-03-31", status: "confirmed", source: "https://www.fec.gov/data/disbursements/?committee_id=C00999999" }], listed: [{ ticker: "LHX", direction: "long", why: "prime FAA telecom contractor if Congress funds the rebuild", catalyst: "funding vote", catalyst_date: "", confidence: 45 }], open_questions: ["Who wins the integrator role?"], bottom_line: "b" });
+      // Leads: round 1 searches and opens a link it has not seen (refused) and a page; round 2 opens the found page, then stops.
+      if (purpose === "investigate_leads") round++;
+      const leads = round === 1 ? { why: "check the router claim", searches: ["L3Harris FAA router outage"], open: ["https://invented.example.com/x"], done: false } : { why: "read the report", searches: [], open: ["https://news.example.com/faa-router"], done: true };
+      const text = purpose === "investigate_leads" ? JSON.stringify(leads) : purpose === "investigate_plan" ? JSON.stringify(planJson) : JSON.stringify({ headline: "The router, the AI vendor and the $50B ask", what_happened: "w", money_trail: [{ finding: "ASI PAC gave $5,000 to Alfonso for Congress on 2026-03-31", status: "confirmed", source: "https://www.fec.gov/data/disbursements/?committee_id=C00999999" }], listed: [{ ticker: "LHX", direction: "long", why: "prime FAA telecom contractor if Congress funds the rebuild", catalyst: "funding vote", catalyst_date: "", confidence: 45 }], open_questions: ["Who wins the integrator role?"], bottom_line: "b" });
       return { text, stopReason: "end_turn", modelServed: "m", usage: { input_tokens: 10, output_tokens: 10 }, costUsd: 0.02 };
     };
     const id = await startInvestigation("On Friday every plane in America was ordered to stay on the ground after an L3Harris router install...");
-    await runInvestigation(id, { data: null, sources: [], callModel, now: new Date("2026-11-16T15:00:00Z"), env: {} as NodeJS.ProcessEnv, fetchImpl });
+    await runInvestigation(id, { data: null, sources: [], callModel, now: new Date("2026-11-16T15:00:00Z"), env: { BRAVE_SEARCH_API_KEY: "test" } as unknown as NodeJS.ProcessEnv, fetchImpl });
     const inv = (await getInvestigation(id))!;
     expect(inv.status).toBe("done");
     expect(inv.title).toBe("FAA ground stop");
-    expect(inv.costUsd).toBeCloseTo(0.04);
-    expect(new Set(hosts)).toEqual(new Set(["api.usaspending.gov", "lda.senate.gov", "api.open.fec.gov"]));
+    expect(inv.costUsd).toBeCloseTo(0.08); // plan, two rounds of leads, report
+    expect(new Set(hosts)).toEqual(new Set(["api.usaspending.gov", "lda.senate.gov", "api.open.fec.gov", "www.federalregister.gov", "api.search.brave.com", "news.example.com"]));
+    expect(hosts).not.toContain("invented.example.com"); // never opens a link it has not seen
+    expect(inv.records!.web!.rounds.map((r) => r.opened.length)).toEqual([0, 1]);
+    expect(inv.records!.web!.stopped).toBe("done");
+    expect(seen.investigate_report).toContain("WHAT THE INVESTIGATOR SEARCHED AND READ");
+    expect(seen.investigate_report).toContain('SEARCH "L3Harris FAA router outage":\n- FAA router outage [2 days ago]: An L3Harris router install (https://news.example.com/faa-router)');
+    expect(seen.investigate_report).toContain("OPENED https://news.example.com/faa-router (html):\nThe FAA said the L3Harris router install caused the stop.");
     expect(seen.investigate_report).toContain("L3HARRIS TECHNOLOGIES, INC. [LHX]: $1.20B from Department of Transportation");
     expect(seen.investigate_report).toContain("ASI PAC → ALFONSO FOR CONGRESS: $5,000, CONTRIBUTION (https://www.fec.gov/data/disbursements/?committee_id=C00999999)");
     expect(recordsText(inv.records!)).toContain('LOBBYING FILINGS, client "L3Harris Technologies" (none found)');

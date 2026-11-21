@@ -35,6 +35,8 @@ export async function GET(request: Request) {
     const { addDays, toEt } = await import("@/lib/time");
     const et = toEt(new Date());
     if (et.minutes >= 60) await readRedditRumors({ ...defaultDeps(), data: defaultDeps().data ?? null }, addDays(et.date, -1)).catch((err) => console.error(`reddit rumors failed: ${err instanceof Error ? err.message : String(err)}`));
+    // A fresh story on a card stock about regulators, China or export controls, a short report or related parties: investigate (2 a day).
+    await import("@/lib/scout/auto-investigate").then(({ maybeAutoInvestigate }) => maybeAutoInvestigate(new Date(), new URL(request.url).origin)).then((r) => console.log(r)).catch((err) => console.error(`auto-investigate failed: ${err instanceof Error ? err.message : String(err)}`));
     await import("@/lib/scout/catchup").then(({ catchUp }) => catchUp(150_000));
   });
   if (params.get("force") !== "1") {
