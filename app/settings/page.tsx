@@ -3,6 +3,7 @@ import { SCOUT } from "@/config/scout";
 import { hasDatabase } from "@/lib/db";
 import { envStatus } from "@/lib/env-status";
 import { lastKeyCheck } from "@/lib/scout/key-check";
+import TestKeys from "./TestKeys";
 import { marketDataFromEnv } from "@/lib/alpaca";
 import { allSources } from "@/lib/sources";
 import * as store from "@/lib/scout/store";
@@ -138,7 +139,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
       <section className="card">
         <h2>Connections and keys</h2>
-        <p className="small secondary">Whether each setting is present. Values are never shown.</p>
+        <p className="small secondary">Whether each setting is present. Values are never shown.{keyCheck ? <> Investigation keys last tested <span suppressHydrationWarning>{etLabelAgo(keyCheck.at)}</span>.</> : null}</p>
+        <TestKeys />
         <div className="table-wrap"><table><thead><tr><th>Variable</th><th>Set</th><th>For</th></tr></thead>
           <tbody>{env.map((e) => <tr key={e.key}><td><code>{e.key}</code>{e.required && <span className="tag">required</span>}</td><td className={e.set ? (tested.get(e.key)?.status === "failed" ? "neg" : "pos") : e.required ? "neg" : "muted"}>{e.set ? "yes" : "no"}{e.set && tested.get(e.key) && <div className="small" title={keyCheck ? `tested ${keyCheck.at}` : ""}>{tested.get(e.key)!.status === "works" ? `works: ${tested.get(e.key)!.detail}` : tested.get(e.key)!.status === "failed" ? `failed: ${tested.get(e.key)!.detail}` : ""}</div>}</td><td className="small secondary">{e.group}</td></tr>)}</tbody></table></div>
       </section>
