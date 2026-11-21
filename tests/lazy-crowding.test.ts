@@ -176,3 +176,19 @@ describe("scoreboard: new players and splits", () => {
     expect(rows).toEqual([{ key: "early", calls: 2, closed: 2, wins: 1, hitRate: 0.5, banked: 30, avg: 15 }, { key: "late", calls: 1, closed: 1, wins: 1, hitRate: 1, banked: 10, avg: 10 }]);
   });
 });
+
+describe("site reader: reports linked as PDFs (short-seller sites)", () => {
+  it("finds Scorpion-style report links on another host, titled from the headings above, newest first", async () => {
+    const { reportLinks } = await import("@/lib/sources/site");
+    const html = `<html><body><a href="/cart">Cart</a>
+      <div><p class="sqsrte-small">May 3rd, 2022</p><h3>IonQ (NYSE: IONQ)</h3><h3><strong>The “World’s Most Powerful Quantum Computer” Is A Hoax</strong></h3><p><a href="https://scorpioncapital.s3.us-east-2.amazonaws.com/reports/IONQ.pdf" target="_blank">Download PDF &gt;</a></p></div>
+      <div><p>January 10, 2025</p><h3>Transmedics Group Inc (NASDAQ: TMDX)</h3><h3><strong>Walk Like An Egyptian</strong></h3><p><a href="https://scorpionreports.s3.us-east-2.amazonaws.com/TMDX.pdf">Download PDF &gt;</a></p></div>
+      <a href="https://scorpionreports.s3.us-east-2.amazonaws.com/Citizen+Petition.pdf">x</a>
+      <a href="mailto:contact@scorpioncapital.com">Contact</a></body></html>`;
+    const r = reportLinks(html, "https://scorpioncapital.com/");
+    expect(r.map((x) => x.url)).toEqual(["https://scorpionreports.s3.us-east-2.amazonaws.com/TMDX.pdf", "https://scorpioncapital.s3.us-east-2.amazonaws.com/reports/IONQ.pdf", "https://scorpionreports.s3.us-east-2.amazonaws.com/Citizen+Petition.pdf"]);
+    expect(r[0].title).toBe("Transmedics Group Inc (NASDAQ: TMDX) — Walk Like An Egyptian");
+    expect(r[0].published?.slice(0, 10)).toBe("2025-01-10");
+    expect(r[1].published?.slice(0, 10)).toBe("2022-05-03");
+  });
+});

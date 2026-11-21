@@ -112,6 +112,39 @@ export function articleLinks(html: string, base: string, max = 40): Article[] {
   return out;
 }
 
+const MONTH_DATE = /\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})\b/gi;
+
+/**
+ * Pure: reports a page links to as documents (short-seller and research sites list PDFs, often on another host such
+ * as S3, behind a "Download PDF" link). The title is the heading(s) just above the link, the date the last date
+ * written before it; newest first.
+ */
+export function reportLinks(html: string, base: string, max = 40): Article[] {
+  const out: Article[] = [];
+  const seen = new Set<string>();
+  // Look back for a report's heading and date only as far as the previous report link (never borrow another's).
+  let lastEnd = 0;
+  for (const m of html.matchAll(/<a\b[^>]*href=["']([^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    const url = absolute(decode(m[1]), base);
+    if (!url || seen.has(url)) continue;
+    const text = htmlText(m[2]).replace(/\s+/g, " ").trim();
+    const isDoc = /\.pdf(\?|$)/i.test(new URL(url).pathname + new URL(url).search) || /^(download|read|view)\b.{0,20}\b(pdf|report)\b|^(full|the) report\b/i.test(text);
+    if (!isDoc) continue;
+    const before = html.slice(Math.max(lastEnd, m.index! - 3000), m.index!);
+    lastEnd = m.index! + m[0].length;
+    const heads = [...before.matchAll(/<h[1-4]\b[^>]*>([\s\S]*?)<\/h[1-4]>/gi)].map((h) => htmlText(h[1]).replace(/\s+/g, " ").trim()).filter((h) => h.length >= 3);
+    const file = decodeURIComponent(new URL(url).pathname.split("/").pop() ?? "").replace(/\.pdf$/i, "").replace(/[+_]/g, " ");
+    const title = (heads.length ? heads.slice(-2).join(" — ") : text.length >= 15 && !/^(download|read|view)\b/i.test(text) ? text : `${file} (report, PDF)`).slice(0, 300);
+    const dates = [...htmlText(before.slice(-1500)).matchAll(MONTH_DATE)];
+    const d = dates.at(-1);
+    const published = d ? isoOrNull(`${d[1]} ${d[2]}, ${d[3]}`) : null;
+    seen.add(url);
+    out.push({ url, title, published, summary: heads.length ? `${heads.slice(-2).join(". ")} (report, PDF)` : "" });
+    if (out.length >= max) break;
+  }
+  return out.sort((a, b) => (b.published ?? "").localeCompare(a.published ?? ""));
+}
+
 /** Fetch a site's newest articles: feed first, then the page's links. Throws when nothing readable comes back. */
 export async function readSite(url: string, feedUrl: string | null = null, fetchImpl?: typeof fetch): Promise<SiteRead> {
   const get = (u: string) => getText(u, { headers: UA, cacheMs: 0, retries: 1, timeoutMs: 20_000, fetchImpl });
@@ -132,13 +165,22 @@ export async function readSite(url: string, feedUrl: string | null = null, fetch
       /* no feed there */
     }
   }
-  const links = articleLinks(body, url);
-  if (!links.length) throw new Error("no feed and no article links found on that page");
+  // Reports linked as documents first (newest first), then article links on the site itself.
+  const reports = reportLinks(body, url);
+  const have = new Set(reports.map((r) => r.url));
+  const links = [...reports, ...articleLinks(body, url).filter((a) => !have.has(a.url))].slice(0, 40);
+  if (!links.length) throw new Error("no feed, no article links and no report links (PDFs) found on that page");
   return { feedUrl: null, via: "page", articles: links };
 }
 
 /** An article's text for the reader (best effort; empty on failure). */
 export async function articleText(url: string, max = 3000, fetchImpl?: typeof fetch): Promise<string> {
+  // A report (PDF): its text layer, read the same way the investigator reads documents.
+  if (/\.pdf(\?|$)/i.test(url)) {
+    const { openDocument } = await import("./websearch");
+    const o = await openDocument(url, fetchImpl, max).catch(() => null);
+    return o && (o.kind === "pdf" || o.kind === "text" || o.kind === "html") ? o.text : "";
+  }
   try {
     const html = await getText(url, { headers: UA, cacheMs: 0, retries: 0, timeoutMs: 12_000, fetchImpl });
     const body = html.match(/<article\b[\s\S]*?<\/article>/i)?.[0] ?? html.match(/<main\b[\s\S]*?<\/main>/i)?.[0] ?? html;
