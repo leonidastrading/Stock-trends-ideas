@@ -2,6 +2,7 @@ import SetupNotice from "@/components/SetupNotice";
 import { SCOUT } from "@/config/scout";
 import { hasDatabase } from "@/lib/db";
 import { envStatus } from "@/lib/env-status";
+import { lastKeyCheck } from "@/lib/scout/key-check";
 import { marketDataFromEnv } from "@/lib/alpaca";
 import { allSources } from "@/lib/sources";
 import * as store from "@/lib/scout/store";
@@ -27,6 +28,8 @@ export const runtime = "nodejs";
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ schwab?: string }> }) {
   const env = envStatus();
+  const keyCheck = await lastKeyCheck();
+  const tested = new Map((keyCheck?.checks ?? []).map((c) => [c.key, c]));
   if (!hasDatabase()) return <SetupNotice />;
   const [sp, schwab] = await Promise.all([searchParams, schwabStatus().catch((): import("@/lib/sources/schwab").SchwabStatus => ({ configured: !!(schwabConfig() || sharedConfig()), connected: false, expiresAt: null, hoursLeft: null, mode: sharedConfig() ? "shared" : "own", lastError: "could not read the Schwab login" }))]);
   const [settings, health, spend, runs, versions, feedback, sites, articles] = await Promise.all([store.loadSettings(), store.allHealth(), store.spendByDay(30), store.recentRuns(60), store.listVersions(), store.recentFeedback(30), store.listSites(), store.recentSiteArticles(5)]);
@@ -137,7 +140,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <h2>Connections and keys</h2>
         <p className="small secondary">Whether each setting is present. Values are never shown.</p>
         <div className="table-wrap"><table><thead><tr><th>Variable</th><th>Set</th><th>For</th></tr></thead>
-          <tbody>{env.map((e) => <tr key={e.key}><td><code>{e.key}</code>{e.required && <span className="tag">required</span>}</td><td className={e.set ? "pos" : e.required ? "neg" : "muted"}>{e.set ? "yes" : "no"}</td><td className="small secondary">{e.group}</td></tr>)}</tbody></table></div>
+          <tbody>{env.map((e) => <tr key={e.key}><td><code>{e.key}</code>{e.required && <span className="tag">required</span>}</td><td className={e.set ? (tested.get(e.key)?.status === "failed" ? "neg" : "pos") : e.required ? "neg" : "muted"}>{e.set ? "yes" : "no"}{e.set && tested.get(e.key) && <div className="small" title={keyCheck ? `tested ${keyCheck.at}` : ""}>{tested.get(e.key)!.status === "works" ? `works: ${tested.get(e.key)!.detail}` : tested.get(e.key)!.status === "failed" ? `failed: ${tested.get(e.key)!.detail}` : ""}</div>}</td><td className="small secondary">{e.group}</td></tr>)}</tbody></table></div>
       </section>
 
       <section className="card">

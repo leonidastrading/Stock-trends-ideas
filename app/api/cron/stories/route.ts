@@ -28,6 +28,8 @@ export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   // Anything the daily AI budget turned away is worked through once it resets (a no-op when nothing waits).
   background(async () => {
+    // Right after a deploy: do the investigation keys work? (logged and shown on Settings; never the keys themselves)
+    await import("@/lib/scout/key-check").then(({ checkKeysOnce }) => checkKeysOnce()).then((line) => line && console.log(line)).catch((err) => console.error(`key check failed: ${err instanceof Error ? err.message : String(err)}`));
     // Reddit first (new posts, a little backfill), then once a day yesterday's rumor subreddits, then the catch-up queue.
     const { ingestReddit, readRedditRumors } = await import("@/lib/sources/arctic");
     await ingestReddit(Date.now() + 40_000).then((r) => console.log(`reddit ingest: ${r}`)).catch((err) => console.error(`reddit ingest failed: ${err instanceof Error ? err.message : String(err)}`));

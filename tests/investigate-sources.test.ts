@@ -144,3 +144,26 @@ describe("Japan and Korea filings", () => {
     expect(JSON.stringify(r)).not.toContain("secret-key");
   });
 });
+
+describe("key check", () => {
+  it("one real call per key: works, failed (without the key), not set", async () => {
+    const { checkKeys } = await import("@/lib/scout/key-check");
+    const fetchImpl = (async (url: string) => {
+      if (url.includes("search.brave.com")) return Response.json({ web: { results: [{ title: "t", url: "https://a.com", description: "d" }] } });
+      if (url.includes("courtlistener")) return new Response('{"detail":"Invalid token."}', { status: 401 });
+      if (url.includes("corpCode.xml")) {
+        const { zipSync, strToU8 } = await import("fflate");
+        return new Response(zipSync({ "CORPCODE.xml": strToU8("<result><list><corp_code>00126380</corp_code><corp_name>삼성전자</corp_name><corp_eng_name>SAMSUNG ELECTRONICS CO,.LTD</corp_eng_name><stock_code>005930</stock_code></list></result>") }));
+      }
+      if (url.includes("opendart")) return Response.json({ status: "000", list: [{ rcept_dt: "20261119", report_nm: "r", corp_name: "삼성전자", rcept_no: "1" }] });
+      return new Response("no", { status: 404 });
+    }) as typeof fetch;
+    const env = { BRAVE_SEARCH_API_KEY: "b-key", COURTLISTENER_TOKEN: "c-key", DART_API_KEY: "d-key" } as unknown as NodeJS.ProcessEnv;
+    const r = await checkKeys(env, new Date("2026-11-20T12:00:00Z"), fetchImpl);
+    expect(r.map((c) => [c.key, c.status])).toEqual([["BRAVE_SEARCH_API_KEY", "works"], ["COURTLISTENER_TOKEN", "failed"], ["EDINET_API_KEY", "not set"], ["DART_API_KEY", "works"]]);
+    expect(r[0].detail).toBe("1 search results");
+    expect(r[1].detail).toContain("401");
+    expect(r[3].detail).toBe("1 Samsung Electronics filings in 180 days");
+    expect(JSON.stringify(r)).not.toMatch(/b-key|c-key|d-key/);
+  });
+});
