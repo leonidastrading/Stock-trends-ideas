@@ -1,5 +1,8 @@
 import LinkedText from "@/components/LinkedText";
 import FilingChanges from "@/components/FilingChanges";
+import ExpandRow from "@/components/ExpandRow";
+import InsiderChart from "@/components/InsiderChart";
+import { tvSymbol } from "@/config/links";
 import SetupNotice from "@/components/SetupNotice";
 import { hasDatabase } from "@/lib/db";
 import { OPTIONS_UNIVERSE } from "@/config/options";
@@ -67,14 +70,18 @@ export default async function FilingsPage() {
             <thead><tr><th>Kind</th><th>Stock</th><th>Why</th><th>Researched</th></tr></thead>
             <tbody>{signals.map((s) => {
               const c = researched.find((r) => r.term.toLowerCase().startsWith(s.term.toLowerCase().split(" ").slice(0, 2).join(" ")));
-              return (
-                <tr key={s.term}>
+              const cells = (
+                <>
                   <td><span className="tag">{s.kind}</span></td>
                   <td><b className={s.direction === "long" ? "pos" : "neg"}>{s.direction === "long" ? "▲" : "▼"} {s.symbol}</b></td>
-                  <td className="small">{s.trigger[0]?.note}</td>
+                  <td className="small">{s.trigger[0]?.note}{/insider/.test(s.kind) ? <span className="muted"> · chart ▾</span> : null}</td>
                   <td className="small">{c ? (c.cardId ? <a href={`/ideas?days=30&card=${c.cardId}#card-${c.cardId}`}>card #{c.cardId}</a> : <LinkedText text={`${c.outcome}${c.reason ? `: ${c.reason}` : ""}`} />) : <span className="muted">queued</span>}</td>
-                </tr>
+                </>
               );
+              // Insider signals open a chart of the stock with every buy by these insiders and how many shares.
+              return /insider/.test(s.kind)
+                ? <ExpandRow key={s.term} cols={4} title="Show the insiders' buys on a chart" cells={cells} panel={<InsiderChart symbol={s.symbol} tvSymbol={tvSymbol(s.symbol)} />} />
+                : <tr key={s.term}>{cells}</tr>;
             })}</tbody>
           </table></div>
         )}
@@ -86,15 +93,15 @@ export default async function FilingsPage() {
           <thead><tr><th>Filed</th><th>Stock</th><th>Insider</th><th className="num">Value</th><th className="num">+ holding</th><th>Pattern</th><th>Research</th></tr></thead>
           <tbody>
             {buys.slice(0, 60).map((b) => (
-              <tr key={b.accession}>
+              <ExpandRow key={b.accession} cols={7} title={b.symbol ? `Show ${b.owner ?? "this insider"}'s buys of ${b.symbol} on a chart` : undefined} panel={b.symbol ? <InsiderChart symbol={b.symbol} tvSymbol={tvSymbol(b.symbol)} owner={b.ownerCik} /> : <p className="small muted">No ticker for this company.</p>} cells={<>
                 <td className="small">{b.filed}</td>
                 <td>{b.symbol ? <Ticker symbol={b.symbol} /> : null} <span className="small muted">{b.issuerName}</span></td>
-                <td className="small">{b.owner} <span className="muted">({b.role})</span></td>
+                <td className="small">{b.owner} <span className="muted">({b.role})</span> <span className="muted">· chart ▾</span></td>
                 <td className="num">{usd(b.value)}</td>
                 <td className="num">{b.pctIncrease === null ? "—" : `+${b.pctIncrease}%`}</td>
                 <td className="small">{b.routine === true ? <span className="muted">routine</span> : b.routine === false ? <span className="pos">opportunistic</span> : <span className="muted">no history</span>}</td>
                 <td>{b.symbol ? (researchedSyms.has(b.symbol) ? <span className="small muted">researched</span> : <ResearchButton from={{ label: "Insider buy", url: "/filings" }} ticker={b.symbol} observation={buyNote(b)} />) : null}</td>
-              </tr>
+              </>} />
             ))}
             {buys.length === 0 && <tr><td colSpan={6} className="muted">None read yet. The queue is worked through on each hourly story call and after the close.</td></tr>}
           </tbody>

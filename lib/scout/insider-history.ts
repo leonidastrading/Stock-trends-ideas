@@ -126,3 +126,37 @@ export async function insiderBackground(symbol: string, buys: InsiderBuyRow[], d
   }
   return parts.join("\n");
 }
+
+export interface PersonTrade extends Trade { owner: string; ownerCik: string; role: string | null; url: string }
+
+/**
+ * Every open-market buy and sale (Form 4, codes P and S) at a company by the insiders the scout has seen buying it,
+ * two years back, straight from the SEC, one line per person per day and side. For the insider chart.
+ */
+export async function insiderTradesFor(symbol: string, ua: string, fetchImpl?: typeof fetch, maxOwners = 6, perOwner = 25): Promise<{ owners: Array<{ cik: string; name: string; role: string | null }>; trades: PersonTrade[] }> {
+  const { insiderBuysFor } = await import("./store");
+  const rows = await insiderBuysFor(symbol);
+  const issuerCik = rows.find((b) => b.issuerCik)?.issuerCik ?? (await import("../sources/edgar").then(({ cikFor }) => cikFor(symbol, { "user-agent": ua }, fetchImpl)).catch(() => null))?.replace(/^0+/, "");
+  const owners = new Map<string, { cik: string; name: string; role: string | null }>();
+  for (const b of rows) if (b.ownerCik && !owners.has(b.ownerCik)) owners.set(b.ownerCik, { cik: b.ownerCik, name: b.owner ?? "insider", role: b.role });
+  const trades: PersonTrade[] = [];
+  if (issuerCik) {
+    const issuer = new Set((await form4s(issuerCik, ua, fetchImpl)).map((f) => f.acc));
+    for (const o of [...owners.values()].slice(0, maxOwners)) {
+      const accs = (await form4s(o.cik, ua, fetchImpl)).filter((f) => issuer.has(f.acc)).slice(0, perOwner);
+      const mine: Trade[] = [];
+      for (const f of accs) {
+        const text = await fetchSec(`${SEC_ARCHIVE}/edgar/data/${issuerCik}/${f.acc.replace(/-/g, "")}/${f.acc}.txt`, ua, fetchImpl).catch(() => "");
+        mine.push(...parseForm4Trades(text, f.acc));
+      }
+      for (const t of mergeTrades(mine)) trades.push({ ...t, owner: o.name, ownerCik: o.cik, role: o.role, url: `${SEC_ARCHIVE}/edgar/data/${issuerCik}/${t.accession.replace(/-/g, "")}/` });
+    }
+  }
+  // Buys the scout logged that the SEC history did not return (it caps at the most recent filings).
+  for (const b of rows) {
+    const d = b.txDate ?? b.filed;
+    if (!b.ownerCik || !b.shares || !b.price || trades.some((t) => t.ownerCik === b.ownerCik && t.date === d && t.side === "buy")) continue;
+    trades.push({ date: d, side: "buy", shares: b.shares, price: b.price, value: b.value ?? Math.round(b.shares * b.price), ownedAfter: b.ownedAfter, plan10b5: !!b.plan10b5, accession: b.accession, owner: b.owner ?? "insider", ownerCik: b.ownerCik, role: b.role, url: `${SEC_ARCHIVE}/edgar/data/${(b.issuerCik ?? "").replace(/^0+/, "")}/${b.accession.replace(/-/g, "")}/` });
+  }
+  return { owners: [...owners.values()], trades: trades.sort((a, b) => b.date.localeCompare(a.date)) };
+}

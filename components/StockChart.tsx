@@ -46,7 +46,10 @@ const sma = (bars: Bar[], n: number) => bars.map((b, i) => (i + 1 < n ? null : {
  * Ranges, daily or weekly bars, moving averages, log scale and volume are on the toolbar; drawing tools are in the
  * TradingView tab.
  */
-export default function StockChart({ symbol, tvSymbol, height = 680, entry }: { symbol: string; tvSymbol: string; height?: number; entry?: ChartEntry }) {
+/** An extra marker on the chart: an insider's buy (below the line, green) or sale (above, red), with its text. */
+export interface ChartMark { date: string; side: "buy" | "sell"; text: string }
+
+export default function StockChart({ symbol, tvSymbol, height = 680, entry, line = false, marks: extraMarks }: { symbol: string; tvSymbol: string; height?: number; entry?: ChartEntry; line?: boolean; marks?: ChartMark[] }) {
   const [tab, setTab] = useState<"scout" | "tv">("scout");
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT);
   const box = useRef<HTMLDivElement>(null);
@@ -118,10 +121,12 @@ export default function StockChart({ symbol, tvSymbol, height = 680, entry }: { 
         future.push(prefs.weekly ? weekOf(d) : d);
         if (d > until) pad++;
       }
-      const candles = chart.addCandlestickSeries({ upColor: pos, downColor: neg, wickUpColor: pos, wickDownColor: neg, borderVisible: false });
+      // Candles, or a line of closes (the insider chart: the buys read more easily against a plain line).
+      const candles = line ? chart.addLineSeries({ color: accent, lineWidth: 2, priceLineVisible: false }) : chart.addCandlestickSeries({ upColor: pos, downColor: neg, wickUpColor: pos, wickDownColor: neg, borderVisible: false });
       // The latest pre-market or after-hours trade, as a dotted line (only on the daily chart, where it belongs to today).
       if (res.ext && !prefs.weekly) candles.createPriceLine({ price: res.ext.price, color: res.ext.pct >= 0 ? pos : neg, lineWidth: 1, lineStyle: lib.LineStyle.Dotted, axisLabelVisible: true, title: res.ext.label === "pre-market" ? "PM" : "AH" });
-      candles.setData([...bars.map(([time, open, high, low, close]) => ({ time, open, high, low, close })), ...future.map((time) => ({ time }))]);
+      if (line) (candles as ReturnType<typeof chart.addLineSeries>).setData([...bars.map(([time, , , , close]) => ({ time, value: close })), ...future.map((time) => ({ time }))]);
+      else (candles as ReturnType<typeof chart.addCandlestickSeries>).setData([...bars.map(([time, open, high, low, close]) => ({ time, open, high, low, close })), ...future.map((time) => ({ time }))]);
       if (prefs.volume) {
         const vol = chart.addHistogramSeries({ priceScaleId: "vol", priceFormat: { type: "volume" }, lastValueVisible: false, priceLineVisible: false });
         chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.84, bottom: 0 } });
@@ -170,6 +175,7 @@ export default function StockChart({ symbol, tvSymbol, height = 680, entry }: { 
           }
         }
       }
+      for (const m of extraMarks ?? []) marks.push({ time: keyOf(m.date), position: m.side === "buy" ? "belowBar" : "aboveBar", color: m.side === "buy" ? pos : neg, shape: m.side === "buy" ? "arrowUp" : "arrowDown", text: m.text });
       const known = new Set(bars.map((b) => b[0]));
       candles.setMarkers(marks.filter((m) => known.has(m.time)).sort((a, b) => a.time.localeCompare(b.time)));
 
@@ -231,7 +237,7 @@ export default function StockChart({ symbol, tvSymbol, height = 680, entry }: { 
       cleanup = () => { cancelAnimationFrame(raf); ro.disconnect(); chart.remove(); if (overlay.current) overlay.current.innerHTML = ""; };
     })().catch((err) => !dead && setState({ error: String(err).slice(0, 120) }));
     return () => { dead = true; cleanup(); };
-  }, [tab, res, setups, prefs, entry?.date, entry?.price, entry?.direction, entry?.exitDate]);
+  }, [tab, res, setups, prefs, entry?.date, entry?.price, entry?.direction, entry?.exitDate, line, JSON.stringify(extraMarks ?? [])]);
 
   const latest = setups[setups.length - 1];
   const toggleMa = (n: number) => set({ ma: prefs.ma.includes(n) ? prefs.ma.filter((x) => x !== n) : [...prefs.ma, n].sort((a, b) => a - b) });

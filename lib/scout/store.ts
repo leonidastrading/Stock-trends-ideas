@@ -657,6 +657,15 @@ export async function addInsiderBuy(b: InsiderBuyRow): Promise<void> {
     [b.accession, b.filed, b.issuerCik, b.symbol, b.issuerName, b.owner, b.ownerCik, b.role, b.txDate, b.shares, b.price, b.value, b.ownedAfter, b.pctIncrease, b.plan10b5, b.routine, b.ownerState ?? null, b.issuerState ?? null, b.local ?? null]);
 }
 
+/** Every insider buy the scout has logged on a stock (any date). */
+export async function insiderBuysFor(symbol: string): Promise<InsiderBuyRow[]> {
+  return (await q(`SELECT * FROM insider_buys WHERE symbol = $1 ORDER BY filed DESC`, [symbol])).map((r) => ({
+    accession: r.accession, filed: dstr(r.filed)!, issuerCik: r.issuer_cik, symbol: r.symbol, issuerName: r.issuer_name, owner: r.owner, ownerCik: r.owner_cik, role: r.role, txDate: dstr(r.tx_date),
+    shares: num(r.shares), price: num(r.price), value: num(r.value), ownedAfter: num(r.owned_after), pctIncrease: num(r.pct_increase), plan10b5: r.plan10b5 ?? null, routine: r.routine ?? null,
+    ownerState: r.owner_state ?? null, issuerState: r.issuer_state ?? null, local: r.local ?? null,
+  }));
+}
+
 export async function insiderBuysSince(from: string): Promise<InsiderBuyRow[]> {
   return (await q(`SELECT * FROM insider_buys WHERE filed >= $1 ORDER BY filed DESC, value DESC`, [from])).map((r) => ({
     accession: r.accession, filed: dstr(r.filed)!, issuerCik: r.issuer_cik, symbol: r.symbol, issuerName: r.issuer_name, owner: r.owner, ownerCik: r.owner_cik, role: r.role, txDate: dstr(r.tx_date),
