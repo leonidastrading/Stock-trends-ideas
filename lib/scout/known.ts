@@ -13,9 +13,11 @@ import { addDays, toEt } from "../time";
 /**
  * 1 = investigations, cards, themes, dots, rumors, court, pharma, filing watch, insiders, Congress, favourites;
  * 2 = research is also told which page an idea was sent from (Dots, Court, Pharma, News, Filings);
- * 3 = filing changes (10-K / 10-Q vs a year earlier), crowding (score and stage) and analyst coverage.
+ * 3 = filing changes (10-K / 10-Q vs a year earlier), crowding (score and stage) and analyst coverage;
+ * 4 = research also reads the AI-trade backdrop (lib/scout/backdrop.ts) and the open paper calls (no related ticker
+ *     may contradict one; lib/scout/conflicts.ts).
  */
-export const KNOWN_REVISION = 3;
+export const KNOWN_REVISION = 4;
 
 const cut = (s: string | null | undefined, n: number) => { const t = (s ?? "").replace(/\s+/g, " ").trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 const on = (sym: string, xs: string[] | undefined | null) => (xs ?? []).map((x) => x.toUpperCase()).includes(sym);

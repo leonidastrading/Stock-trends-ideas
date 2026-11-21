@@ -173,13 +173,15 @@ export async function gatherScan(now: Date, fetchImpl?: typeof fetch): Promise<S
   // All the lens searches at once (the shared rate limit spaces them out).
   const byLens: Record<string, Headline[]> = Object.fromEntries(await Promise.all(Object.entries(LENSES).map(async ([lens, terms]) => [lens, (await Promise.all(terms.map((t) => googleNews(t, fetchImpl)))).flat()] as const)));
   const today = toEt(now).date;
-  const [fast, disc, rumors, stories, work, reddit] = await Promise.all([
+  const [fast, disc, rumors, stories, work, reddit, backdrop] = await Promise.all([
     import("../sources/wires").then(({ fastNews }) => fastNews(process.env, fetchImpl, now)).catch(() => []),
     import("../sources/discovery").then(({ discoverySignals }) => discoverySignals(now, fetchImpl)).catch(() => ({ signals: [], failed: ["all"] })),
     import("./rumors").then(({ rumorsSince }) => rumorsSince(7, 60)).catch(() => []),
     store.storyEventsSince(addDays(today, -7)).catch(() => []),
     import("./known").then(({ recentWork }) => recentWork(now)).catch(() => null),
     import("../sources/arctic").then(({ busiestPosts }) => busiestPosts(24, 30)).catch(() => []),
+    // The bigger picture: is the AI trade intact or unwinding? (Second-order ideas in AI-linked names ride or fight it.)
+    import("./backdrop").then(async ({ aiBackdrop }) => aiBackdrop((await import("../alpaca")).marketDataFromEnv(), now)).catch(() => null),
   ]);
   byLens["world and wire news"] = fast.slice(0, 60).map((n) => ({ at: n.ts, source: n.source ?? "wire", headline: n.headline, url: n.url ?? "" }));
   const feed = (f: string) => disc.signals.filter((x) => x.feed === f).map((x) => x.text);
@@ -193,6 +195,7 @@ export async function gatherScan(now: Date, fetchImpl?: typeof fetch): Promise<S
     { heading: "the user's own investigations (follow-the-money reports from public records)", items: (work?.investigations ?? []).slice(0, 10).map((l) => l.slice(0, 260)) },
     { heading: "new lawsuits (securities class actions, ITC patent cases)", items: (work?.court ?? []).slice(0, 20) },
     { heading: "most-discussed posts in the finance subreddits, last 24 hours", items: reddit.map((p) => `r/${p.sub} (${p.comments} comments): ${p.title.slice(0, 200)}`) },
+    { heading: "the AI trade as a whole (measured from prices; the market's biggest theme)", items: backdrop && backdrop.regime !== "unknown" ? [`regime: ${backdrop.regime}; ${backdrop.below50} of ${backdrop.names} AI leaders below their 50-day average; median ${backdrop.medianOffHigh}% from 3-month highs; basket ${backdrop.basket20}% over 20 sessions vs SPY ${backdrop.spy20}%${backdrop.over20Off.length ? `; more than 20% off highs: ${backdrop.over20Off.join(", ")}` : ""}${backdrop.bubbleNews !== null ? `; AI-bubble / sell-off headlines ${backdrop.bubbleNews} this week vs ${backdrop.bubbleNewsBefore} the week before` : ""}`] : [] },
   ]);
 }
 

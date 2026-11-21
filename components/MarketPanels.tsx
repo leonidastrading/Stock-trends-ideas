@@ -42,6 +42,8 @@ export default async function MarketPanels() {
   // Live during the day (the price watch checks the big names every minute); the last close otherwise.
   const live = await import("@/lib/scout/price-watch").then(({ liveBreadth }) => liveBreadth(marketDataFromEnv())).catch(() => null);
   const adv = live?.advancing ?? b?.advancing ?? 0, dec = live?.declining ?? b?.declining ?? 0;
+  // The bigger picture the scout gives research: is the AI trade intact or unwinding?
+  const ai = await import("@/lib/scout/backdrop").then(({ aiBackdrop }) => aiBackdrop(marketDataFromEnv(), new Date())).catch(() => null);
   return (
     <>
       {live || b ? (
@@ -53,6 +55,13 @@ export default async function MarketPanels() {
       ) : null}
       {live ? <p className="small muted" style={{ margin: "-4px 0 12px" }}>Live: the scout&apos;s {live.advancing + live.declining + live.unchanged} large and mid caps that have traded today, against yesterday&apos;s close, as of {fmtEtAgo(live.at)}. Not the whole market.</p>
         : b ? <p className="small muted" style={{ margin: "-4px 0 12px" }}>At the close on {fmtDay(b.asOf)}: the scout&apos;s {b.stocks} large and mid caps, not the whole market (live from the first trades of the day).</p> : null}
+
+      {ai && ai.regime !== "unknown" && (
+        <p className="small" style={{ margin: "0 0 12px" }}>
+          <b>AI trade: <span className={ai.regime === "unwinding" ? "neg" : ai.regime === "under pressure" ? "warn" : "pos"}>{ai.regime}</span></b>
+          <span className="muted"> · {ai.below50} of {ai.names} AI leaders below their 50-day average · median {ai.medianOffHigh}% from 3-month highs · basket {ai.basket20 !== null && ai.basket20 > 0 ? "+" : ""}{ai.basket20}% in 20 sessions vs SPY {ai.spy20 !== null && ai.spy20 > 0 ? "+" : ""}{ai.spy20}%{ai.bubbleNews !== null ? ` · AI-bubble / sell-off headlines ${ai.bubbleNews} this week (${ai.bubbleNewsBefore} the week before)` : ""}. Every new card weighs this.</span>
+        </p>
+      )}
 
       <div className="panels-grid">
         <SocialTable rows={social.data?.rows ?? []} />
