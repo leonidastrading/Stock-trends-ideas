@@ -14,7 +14,7 @@ import { READTHROUGH_PROMPT, READTHROUGH_SCHEMA } from "./readthrough";
 import { SITE_DIGEST_PROMPT, SITE_DIGEST_SCHEMA } from "./site-digest";
 import { INVESTIGATE_LEADS_PROMPT, INVESTIGATE_LEADS_SCHEMA, INVESTIGATE_PLAN_PROMPT, INVESTIGATE_PLAN_SCHEMA, INVESTIGATE_REPORT_PROMPT, INVESTIGATE_REPORT_SCHEMA } from "./investigate";
 import Anthropic from "@anthropic-ai/sdk";
-import { callCost } from "@/config/scout";
+import { callCost, modelFor } from "@/config/scout";
 import { CARD_JSON_SCHEMA } from "./card";
 import { TRIAGE_JSON_SCHEMA, TRIAGE_SYSTEM_PROMPT } from "./discovery";
 import { SYSTEM_PROMPT } from "./prompt";
@@ -61,7 +61,9 @@ const PROMPTS: Record<Purpose, { system: string; schema: Record<string, unknown>
 /** Models that accept the server-side refusal fallback. */
 export const FALLBACK_MODELS = new Set(["claude-fable-5-2", "claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5"]);
 
-export const callResearchModel: CallModel = async ({ model, effort, user, purpose = "research", images }) => {
+export const callResearchModel: CallModel = async ({ model: chosen, effort, user, purpose = "research", images }) => {
+  // Bulk purposes run on the cheaper model; the cost below is priced on the model actually called.
+  const model = modelFor(purpose, chosen);
   const client = new Anthropic(); // ANTHROPIC_API_KEY from the environment
   const { system, schema } = PROMPTS[purpose];
   const base = {

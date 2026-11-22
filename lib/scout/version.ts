@@ -1,6 +1,6 @@
 /** A version = sha256 of everything that shapes a card: model, effort, prompt, reply schema, gates, sources, candidate rules, baseline universe. */
 import { createHash } from "node:crypto";
-import { SCOUT, SECTORS } from "@/config/scout";
+import { LIGHT_MODEL, LIGHT_PURPOSES, SCOUT, SECTORS } from "@/config/scout";
 import { UNIVERSE } from "@/config/universe";
 import { SOURCE_IDS, SOURCE_REVISIONS } from "../sources";
 import { CARD_JSON_SCHEMA } from "./card";
@@ -11,7 +11,7 @@ import { SYSTEM_PROMPT } from "./prompt";
 import { KNOWN_REVISION } from "./known";
 
 export function versionSpec(model: string, effort: string) {
-  return { model, effort, systemPrompt: SYSTEM_PROMPT, replySchema: CARD_JSON_SCHEMA, triagePrompt: TRIAGE_SYSTEM_PROMPT, triageSchema: TRIAGE_JSON_SCHEMA, storyPrompt: STORY_SYSTEM_PROMPT, storySchema: STORY_JSON_SCHEMA, inboxPrompt: INBOX_SYSTEM_PROMPT, inboxSchema: INBOX_JSON_SCHEMA, rules: SCOUT, sources: SOURCE_IDS, sourceRevisions: SOURCE_REVISIONS, sectors: SECTORS, universe: UNIVERSE, known: KNOWN_REVISION };
+  return { model, effort, systemPrompt: SYSTEM_PROMPT, replySchema: CARD_JSON_SCHEMA, triagePrompt: TRIAGE_SYSTEM_PROMPT, triageSchema: TRIAGE_JSON_SCHEMA, storyPrompt: STORY_SYSTEM_PROMPT, storySchema: STORY_JSON_SCHEMA, inboxPrompt: INBOX_SYSTEM_PROMPT, inboxSchema: INBOX_JSON_SCHEMA, rules: SCOUT, sources: SOURCE_IDS, sourceRevisions: SOURCE_REVISIONS, sectors: SECTORS, universe: UNIVERSE, known: KNOWN_REVISION, routing: { light: LIGHT_MODEL, purposes: LIGHT_PURPOSES } };
 }
 
 export function versionHash(spec: unknown): string {

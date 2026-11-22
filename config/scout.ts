@@ -16,7 +16,7 @@ export const KIND_LABEL: Record<Kind, string> = {
 
 export const SCOUT = {
   defaultModel: "claude-opus-5-5",
-  defaultEffort: "high" as const,
+  defaultEffort: "medium" as const,
   /** Daily LLM spend cap, USD. Settings can lower it; the scout stops for the day when it is hit. */
   defaultDailyCapUsd: 5,
   /** Watch-list candidates researched per daily scan, at most. */
@@ -68,6 +68,13 @@ export const SCOUT = {
     "benzinga.com", "yahoo.com", "fool.com", "seekingalpha.com", "investors.com", "economist.com", "theguardian.com", "bbc.com", "bbc.co.uk", "aljazeera.com",
   ],
 };
+
+/** The cheaper model for bulk reading and sorting. Research that writes cards, investigation reports, Dots, earnings cards and invalidation checks stay on the model in Settings. */
+export const LIGHT_MODEL = "claude-haiku-5-5";
+export const LIGHT_PURPOSES: readonly string[] = ["triage", "stories", "review", "inbox", "inbox_digest", "truth", "rumors", "rumor_check", "image_read", "filing_diff", "site_digest", "readthrough", "investigate_plan", "investigate_leads", "dots_scan", "themes"];
+
+/** The model a call for this purpose actually uses. */
+export const modelFor = (purpose: string | undefined, model: string) => (purpose && LIGHT_PURPOSES.includes(purpose) ? LIGHT_MODEL : model);
 
 /** Approximate list prices, $ per million tokens. Update if prices change. */
 export const MODEL_PRICES: Record<string, { input: number; output: number; cacheRead: number }> = {

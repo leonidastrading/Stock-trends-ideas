@@ -1,5 +1,5 @@
 /** Postgres queries for the scout. Thin and typed; no business rules here. */
-import { SCOUT, SEED_WATCHLIST, type Kind } from "@/config/scout";
+import { modelFor, SCOUT, SEED_WATCHLIST, type Kind } from "@/config/scout";
 import { query as q, type Row } from "../db";
 import type { Signal } from "../sources";
 import type { Card, CardStatus } from "./card";
@@ -437,6 +437,7 @@ export async function tickerDailyAverages(from: string, to: string): Promise<Rec
 // --------------------------------------------------------------- llm spend
 
 export async function logLlmCall(c: { etDate: string; model: string; purpose: string; usage: unknown; costUsd: number | null; ok: boolean }): Promise<void> {
+  c = { ...c, model: modelFor(c.purpose, c.model) }; // log the model the call actually used
   await q(`INSERT INTO llm_calls (et_date, model, purpose, usage, cost_usd, ok) VALUES ($1, $2, $3, $4, $5, $6)`, [c.etDate, c.model, c.purpose, JSON.stringify(c.usage ?? null), c.costUsd, c.ok]);
 }
 
