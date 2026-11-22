@@ -234,7 +234,26 @@ export default function StockChart({ symbol, tvSymbol, height = 680, entry, line
         return v?.year && v.month && v.day ? `${v.year}-${String(v.month).padStart(2, "0")}-${String(v.day).padStart(2, "0")}` : null;
       };
       chart.subscribeCrosshairMove((p) => setState((s) => ({ ...s, legend: legendFor(dayOf(p.time)) + (p.time ? "" : extLine) })));
-      cleanup = () => { cancelAnimationFrame(raf); ro.disconnect(); chart.remove(); if (overlay.current) overlay.current.innerHTML = ""; };
+      // Scrolling the page with the mouse resting on the chart moves the chart under the cursor without a mouse move,
+      // so the crosshair would stay behind. On each scroll, send the cursor's position to the chart again.
+      const hostEl = host.current;
+      let mouse: { x: number; y: number } | null = null;
+      const onMove = (e: MouseEvent) => { if (e.isTrusted) mouse = { x: e.clientX, y: e.clientY }; };
+      const onLeave = () => { mouse = null; };
+      const onScroll = () => {
+        if (!mouse) return;
+        const el = document.elementFromPoint(mouse.x, mouse.y);
+        if (el && hostEl.contains(el)) el.dispatchEvent(new MouseEvent("mousemove", { clientX: mouse.x, clientY: mouse.y, bubbles: true }));
+        else { mouse = null; chart.clearCrosshairPosition(); }
+      };
+      hostEl.addEventListener("mousemove", onMove);
+      hostEl.addEventListener("mouseleave", onLeave);
+      window.addEventListener("scroll", onScroll, { passive: true, capture: true });
+      cleanup = () => {
+        cancelAnimationFrame(raf); ro.disconnect();
+        hostEl.removeEventListener("mousemove", onMove); hostEl.removeEventListener("mouseleave", onLeave); window.removeEventListener("scroll", onScroll, { capture: true });
+        chart.remove(); if (overlay.current) overlay.current.innerHTML = "";
+      };
     })().catch((err) => !dead && setState({ error: String(err).slice(0, 120) }));
     return () => { dead = true; cleanup(); };
   }, [tab, res, setups, prefs, entry?.date, entry?.price, entry?.direction, entry?.exitDate, line, JSON.stringify(extraMarks ?? [])]);
