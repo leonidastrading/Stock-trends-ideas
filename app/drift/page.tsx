@@ -7,6 +7,7 @@ import { DRIFT, scanDrift, shortLine, type DriftSetup } from "@/lib/scout/drift"
 import * as store from "@/lib/scout/store";
 import { etLabelAgo, dayAgo } from "@/lib/time";
 import DriftResearch from "./DriftResearch";
+import DriftBook from "./DriftBook";
 import StockChart from "@/components/StockChart";
 import { tvSymbol } from "@/config/links";
 
@@ -23,8 +24,9 @@ export default async function DriftPage() {
   const data = marketDataFromEnv();
   const [p, cands, cards] = await Promise.all([
     data ? panel("drift", 24 * 60, () => scanDrift(data), 100_000) : Promise.resolve({ data: null, updatedAt: null, error: "Alpaca keys not set" }),
-    store.candidatesSince(60), store.cardsSince(60),
+    store.candidatesSince(365), store.cardsSince(365),
   ]);
+  const tracks = await store.allTracks().catch(() => [] as store.Track[]);
   const cardById = new Map(cards.map((c) => [c.id, c]));
   // The desk's cards, by stock (newest first).
   const bySym = new Map<string, Array<{ id: number; status: string }>>();
@@ -85,6 +87,7 @@ export default async function DriftPage() {
           </section>
         );
       })}
+      <DriftBook cards={cards.filter((c) => cands.some((x) => x.cardId === c.id && x.term.startsWith("drift: ")))} tracks={tracks} data={data} />
     </>
   );
 }
