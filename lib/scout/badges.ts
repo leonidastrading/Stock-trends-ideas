@@ -19,7 +19,7 @@ export async function badgeCounts(since: Partial<Record<BadgeTab, string>>, now 
   // Research you asked for that finished since you last looked (a card or a rejection).
   add("research", (s) => n(`SELECT count(*) AS n FROM research_requests WHERE finished_at > $1`, s));
   // Newly listed hype setups, only the loud ones (mania or building).
-  add("bubbles", (s) => n(`SELECT count(*) AS n FROM bubble_events WHERE first_seen > $1 AND level IN ('mania', 'building')`, s));
+  add("bubbles", async (s) => (await n(`SELECT count(*) AS n FROM bubble_events WHERE first_seen > $1 AND level IN ('mania', 'building')`, s)) + (await n(`SELECT count(*) AS n FROM bubble_movers WHERE first_seen > $1`, s)));
   add("themes", (s) => n(`SELECT count(*) AS n FROM theme_runs WHERE created_at > $1`, s));
   add("investigate", (s) => n(`SELECT count(*) AS n FROM investigations WHERE status = 'done' AND created_at > $1`, s));
   add("inbox", (s) => n(`SELECT count(*) AS n FROM inbox_files WHERE read_at > $1`, s));

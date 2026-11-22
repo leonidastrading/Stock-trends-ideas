@@ -601,6 +601,35 @@ CREATE TABLE IF NOT EXISTS bubble_events (
   spy_after10 numeric,
   UNIQUE (symbol, event_type, event_date)
 );
+-- Bubbles: hype runs (a stock going parabolic, with or without a dated event), one row per run while it lasts.
+CREATE TABLE IF NOT EXISTS bubble_movers (
+  id serial PRIMARY KEY,
+  symbol text NOT NULL,
+  theme text,
+  why text,
+  url text,
+  source text,
+  first_seen timestamptz NOT NULL DEFAULT now(),
+  last_seen timestamptz NOT NULL DEFAULT now(),
+  level_first text,
+  level text,
+  price_first numeric,
+  price_last numeric,
+  peak_price numeric,
+  run5 numeric,
+  run30 numeric,
+  ext50 numeric,
+  vol_ratio numeric,
+  sigmas30 numeric,
+  accel numeric,
+  per_hour numeric,
+  z numeric,
+  spy_first numeric,
+  price_after10 numeric,
+  price_after20 numeric,
+  spy_after20 numeric
+);
+CREATE INDEX IF NOT EXISTS bubble_movers_symbol_idx ON bubble_movers (symbol, last_seen);
 -- Market cap and short interest per card, frozen once, for splitting results by size and by short interest.
 CREATE TABLE IF NOT EXISTS card_profiles (
   card_id integer PRIMARY KEY,

@@ -5,6 +5,7 @@ import Ticker from "@/components/Ticker";
 import { hasDatabase } from "@/lib/db";
 import { afterMove, bubbleRows, EVENT_LABEL, type BubbleRow } from "@/lib/scout/bubbles";
 import * as store from "@/lib/scout/store";
+import Movers from "./Movers";
 import { daysBetween, fmtEtAgo, toEt } from "@/lib/time";
 
 const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
@@ -55,13 +56,15 @@ export default async function BubblesPage() {
   return (
     <>
       <h1>Bubbles</h1>
-      <p className="small secondary">&quot;Buy the rumor, sell the news&quot;: an event on a fixed date everyone can see coming (a stock split, an S&amp;P 500 addition, a launch, an FDA decision, a hyped company&apos;s earnings, an IPO or ETF launch), the price running up into it on retail attention, and nothing left to look forward to once the day arrives. It is the &quot;mania&quot; stage of the crowding score, where attention peaks and the buyers are already in. Checked every two hours from news searches (read by the light model), the FDA calendar and the earnings dates of Stocktwits-trending stocks and your open cards{last ? <>; last checked {fmtEtAgo(last)}</> : null}.</p>
+      <p className="small secondary">Hype bubbles: anything going up parabolically on excitement, a single stock, a whole theme (quantum, AI, nuclear) or a commodity (oil, gold, bitcoin), and &quot;buy the rumor, sell the news&quot; setups, where an event on a fixed date everyone can see coming (a stock split, an S&amp;P 500 addition, a launch, an FDA decision, a hyped company&apos;s earnings, an IPO or ETF launch), the price running up into it on retail attention, and nothing left to look forward to once the day arrives. It is the &quot;mania&quot; stage of the crowding score, where attention peaks and the buyers are already in. Checked every two hours from news searches (read by the light model), the FDA calendar and the earnings dates of Stocktwits-trending stocks and your open cards{last ? <>; last checked {fmtEtAgo(last)}</> : null}.</p>
       <section className="card small">
         <b>Why it is hard to trade.</b> The famous ones are famous because they worked. Plenty of events kept running afterwards (Nvidia after its May 2023 guidance), the scout&apos;s FDA test found no reliable run-up into known decision dates, and the timing is unforgiving: Tesla rose 70% into its S&amp;P 500 date, so shorting early hurt. That is why this tab also records what each one did after the date, so you can see how often it really works today. Paper research only; &quot;Research it&quot; writes a scored card like any other.
       </section>
 
+      <Movers briefs={briefs} />
+
       <section className="card">
-        <h2>Coming up</h2>
+        <h2>Coming up: dated events</h2>
         <p className="small muted"><span className="tag error">mania</span> up 25+ points more than SPY in 30 days with attention far above its normal (or crowding stage 3+). <span className="tag late">building</span> up 15+ points more than SPY, or stage 3+. Earnings and FDA dates are listed only when building or mania; events found in the news are listed either way.</p>
         {upcoming.length === 0 ? <p className="small muted">Nothing found yet. The first check runs within two hours.</p> : (
           <div className="table-wrap"><table>
@@ -86,7 +89,7 @@ export default async function BubblesPage() {
       </section>
 
       <section className="card">
-        <h2>After the date</h2>
+        <h2>After the event date</h2>
         <p className="small muted">What each listed stock did from the event-day close to 10 sessions later, against SPY. {done.length ? <>So far {fell} of {done.length} loud ones (mania or building when first listed) lagged SPY over those 10 sessions.</> : "The record fills in as dates pass."}</p>
         {past.length === 0 ? <p className="small muted">No dates have passed yet.</p> : (
           <div className="table-wrap"><table>
