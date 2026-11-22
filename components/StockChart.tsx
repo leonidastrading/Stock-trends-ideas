@@ -9,7 +9,7 @@ interface BarsReply { symbol: string; bars: Bar[]; raw?: Array<[string, number, 
  * The scout's call on this chart: the paper entry when the trade is open, otherwise the day the card (or theme) was
  * written, priced at that day's close when no price is given.
  */
-export interface ChartEntry { date: string | null; price: number | null; direction: "long" | "short"; exitBy?: string | null; exitDate?: string | null; exitPrice?: number | null; label?: string; cardId?: number }
+export interface ChartEntry { date: string | null; price: number | null; direction: "long" | "short"; exitBy?: string | null; exitDate?: string | null; exitPrice?: number | null; exitReason?: string | null; label?: string; cardId?: number }
 
 const RANGES = [["1M", 31], ["3M", 92], ["6M", 183], ["YTD", 0], ["1Y", 365], ["2Y", 730], ["All", -1]] as const;
 type Range = (typeof RANGES)[number][0];
@@ -148,11 +148,11 @@ export default function StockChart({ symbol, tvSymbol, height = 680, entry, line
         const label = entry.label ?? "scout entry";
         // Just the card number and price: longs under the bar, shorts above it; the axis shows the price alone.
         void label;
-        marks.push({ time: keyOf(entry.date), position: long ? "belowBar" : "aboveBar", color: accent, shape: long ? "arrowUp" : "arrowDown", text: `${entry.cardId ? `#${entry.cardId} ` : ""}$${entryPrice.toFixed(2)}` });
+        marks.push({ time: keyOf(entry.date), position: long ? "belowBar" : "aboveBar", color: accent, shape: long ? "arrowUp" : "arrowDown", text: `${entry.cardId ? `#${entry.cardId} ` : ""}${long ? "long" : "short"} $${entryPrice.toFixed(2)}` });
         candles.createPriceLine({ price: entryPrice, color: accent, lineWidth: 2, lineStyle: lib.LineStyle.Dashed, axisLabelVisible: true, title: "" });
         if (entry.exitDate) {
-          marks.push({ time: keyOf(entry.exitDate), position: long ? "aboveBar" : "belowBar", color: accent, shape: "square", text: entry.exitPrice ? `$${entry.exitPrice.toFixed(2)}` : "" });
-          if (entry.exitPrice) candles.createPriceLine({ price: entry.exitPrice, color: muted, lineWidth: 1, lineStyle: lib.LineStyle.Dotted, axisLabelVisible: true, title: "" });
+          marks.push({ time: keyOf(entry.exitDate), position: long ? "aboveBar" : "belowBar", color: accent, shape: "square", text: `exit${entry.exitPrice ? ` $${entry.exitPrice.toFixed(2)}` : ""}${entry.exitReason ? ` (${entry.exitReason.replace(/_/g, " ")})` : ""}` });
+          if (entry.exitPrice) candles.createPriceLine({ price: entry.exitPrice, color: muted, lineWidth: 1, lineStyle: lib.LineStyle.Dotted, axisLabelVisible: true, title: "exit" });
         }
       }
       // The crash-and-bounce short setup (daily bars only): peak, first low, the 50% level, and the trade once it starts.
