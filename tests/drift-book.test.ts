@@ -6,8 +6,9 @@ describe("down-drift scoreboard", () => {
     const s = bookStats([{ ret: 0.05, spy: 0.01 }, { ret: -0.02, spy: 0.01 }, { ret: 0.1, spy: -0.02 }, { ret: 0.03, spy: null }]);
     expect(s.n).toBe(3);
     expect(s.wins).toBe(2);
-    expect(s.mean).toBeCloseTo((0.04 - 0.03 + 0.12) / 3);
-    expect(s.median).toBeCloseTo(0.04);
+    // Shorts: excess = SPY's move minus the stock's = the short's return plus SPY's move.
+    expect(s.mean).toBeCloseTo((0.06 - 0.01 + 0.08) / 3);
+    expect(s.median).toBeCloseTo(0.06);
     expect(bookStats([])).toEqual({ n: 0, wins: 0, mean: null, median: null });
   });
 });

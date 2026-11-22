@@ -5,7 +5,7 @@
 import { SCOUT } from "@/config/scout";
 import { UNIVERSE } from "@/config/universe";
 import type { StoredCard, Track } from "./store";
-import { type BarsBySymbol, barOn, firstBarAfter, firstBarFrom, signedReturn } from "./tracking";
+import { type BarsBySymbol, barOn, firstBarAfter, firstBarFrom, signedReturn, excessReturn } from "./tracking";
 
 /** Deterministic PRNG (mulberry32). */
 export function mulberry32(seed: number): () => number {
@@ -69,12 +69,12 @@ export function ideaResult(card: StoredCard, t: Track, bars: BarsBySymbol): Idea
     const e = firstBarFrom(sb, t.entryDate);
     const x = closed ? barOn(sb, exitDate) ?? firstBarAfter(sb, exitDate) : barOn(sb, exitDate);
     if (!e || !x || e.date !== t.entryDate || spyRet === null) continue;
-    baseline.push(r4(signedReturn(t.direction, e.o, closed ? x.o : x.c) - spyRet));
+    baseline.push(r4(excessReturn(t.direction, signedReturn(t.direction, e.o, closed ? x.o : x.c), spyRet)));
   }
   return {
     cardId: card.id, origin: card.origin, tapped: !!t.tappedAt, kind: card.kind, status: card.status === "promoted" ? "promoted" : "late" /* a card tracked from its listing (not promoted when written) counts with the late ones */, rankScore: card.rankScore, symbol: t.symbol, direction: t.direction,
     entryDate: t.entryDate, exitDate: closed ? t.exitDate : null, closed, ret: r4(ret), spyRet: spyRet === null ? null : r4(spyRet), sectorRet: sectorRet === null ? null : r4(sectorRet),
-    excess: spyRet === null ? null : r4(ret - spyRet), excessSector: sectorRet === null ? null : r4(ret - sectorRet), maxDrawdownPct: t.maxDrawdownPct, baseline,
+    excess: spyRet === null ? null : r4(excessReturn(t.direction, ret, spyRet)), excessSector: sectorRet === null ? null : r4(excessReturn(t.direction, ret, sectorRet)), maxDrawdownPct: t.maxDrawdownPct, baseline,
   };
 }
 

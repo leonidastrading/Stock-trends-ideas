@@ -1,6 +1,9 @@
 import type { Track } from "./store";
 import { daysBetween, toEt } from "../time";
 
+/** Pure: the trade's return beyond SPY (see excessReturn: for a short, SPY's move minus the stock's). */
+export const vsSpy = (direction: "long" | "short", r: { ret: number; spy: number | null }): number | null => (r.spy === null ? null : direction === "short" ? r.ret + r.spy : r.ret - r.spy);
+
 /** Pure: the paper trade's return (direction-adjusted) and SPY's over the same span, or null before entry. */
 export function paperResult(t: Track, priceNow: number | null, spyNow: number | null, now = new Date()): { ret: number; spy: number | null; closed: boolean; days: number } | null {
   if (!t.entryPrice || !t.entryDate) return null;

@@ -44,6 +44,14 @@ export const entryBar = (bars: DailyBarRow[] | undefined, cardDate: string, card
 
 export const signedReturn = (direction: "long" | "short", entry: number, exit: number) => (direction === "long" ? 1 : -1) * (exit / entry - 1);
 
+/**
+ * Pure: the trade's return beyond the benchmark (SPY or the sector fund) over the same days. A long beats it by rising
+ * more; a short beats it by falling more, so its excess is the benchmark's move minus the stock's move, which is the
+ * short's return plus the benchmark's move. (Until Nov 2026 shorts used return minus benchmark, which counted a
+ * falling market as the short's own edge, and a rising one twice against it.)
+ */
+export const excessReturn = (direction: "long" | "short", signedRet: number, benchRet: number) => (direction === "short" ? signedRet + benchRet : signedRet - benchRet);
+
 /** Worst close-to-entry drawdown while held, as a negative percentage (0 if never under water). */
 export function maxDrawdownPct(direction: "long" | "short", entry: number, bars: DailyBarRow[], from: string, to: string | null): number {
   let worst = 0;

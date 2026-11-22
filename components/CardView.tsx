@@ -20,7 +20,7 @@ import { namesMatch, notCommon } from "@/lib/scout/identity";
 import * as store from "@/lib/scout/store";
 import type { Feedback as FeedbackRow, StoredCard, StoredReview, Track } from "@/lib/scout/store";
 import { addDays, daysBetween, fmtEtAgo, toEt, dayAgo } from "@/lib/time";
-import { paperResult } from "@/lib/scout/paper-result";
+import { paperResult, vsSpy } from "@/lib/scout/paper-result";
 import { thesisFor } from "@/lib/scout/thesis";
 
 // One read per page render, shared by every card on it.
@@ -181,7 +181,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
         {k.unknowns.length > 0 && <><dt>Unknowns</dt><dd>{k.unknowns.join("; ")}</dd></>}
         {c.gateNotes.length > 0 && <><dt>Gate notes</dt><dd className="small secondary">{c.gateNotes.join(" · ")}</dd></>}
         {track && <><dt>Paper track</dt><dd className="small">
-          {result && <div className={`paper-result ${result.ret >= 0 ? "pos" : "neg"}`}><b>{result.closed ? "Result" : "So far"}: {pct(result.ret * 100)}</b>{result.spy !== null && <span className="muted"> · SPY {pct(result.spy * 100)} · </span>}{result.spy !== null && <b className={result.ret - result.spy >= 0 ? "pos" : "neg"}>{pct((result.ret - result.spy) * 100)} vs SPY</b>}<span className="muted"> · {c.direction === "short" ? "short" : "long"}, {result.days} day{result.days === 1 ? "" : "s"}{result.closed ? "" : " (live price)"}</span></div>}
+          {result && <div className={`paper-result ${result.ret >= 0 ? "pos" : "neg"}`}><b>{result.closed ? "Result" : "So far"}: {pct(result.ret * 100)}</b>{result.spy !== null && <span className="muted"> · SPY {pct(result.spy * 100)} · </span>}{result.spy !== null && <b className={vsSpy(c.direction, result)! >= 0 ? "pos" : "neg"}>{pct(vsSpy(c.direction, result)! * 100)} vs SPY</b>}<span className="muted"> · {c.direction === "short" ? "short" : "long"}, {result.days} day{result.days === 1 ? "" : "s"}{result.closed ? "" : " (live price)"}</span></div>}
           {trackLine(track)}</dd></>}
         {review && <><dt>After the catalyst</dt><dd className="small"><b className={VERDICT[review.verdict]?.[1] ?? ""}>{VERDICT[review.verdict]?.[0] ?? review.verdict}</b> <span className="muted">({fmtEtAgo(review.createdAt)}{review.moveSinceEntryPct !== null ? `; trade ${review.moveSinceEntryPct >= 0 ? "+" : ""}${review.moveSinceEntryPct}% since entry` : ""})</span> — {review.summary}{review.evidence.length ? <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>{review.evidence.map((e, i) => <li key={i} className="muted">{e.date} [{e.source}] {e.headline}</li>)}</ul> : null}</dd></>}
       </dl>

@@ -1,6 +1,6 @@
 import Ticker from "@/components/Ticker";
 import type { MarketData } from "@/lib/alpaca";
-import { paperResult } from "@/lib/scout/paper-result";
+import { paperResult, vsSpy } from "@/lib/scout/paper-result";
 import type { StoredCard, Track } from "@/lib/scout/store";
 import { addDays, toEt } from "@/lib/time";
 
@@ -19,7 +19,8 @@ const pct = (x: number | null) => (x === null ? "?" : `${x > 0 ? "+" : x < 0 ? "
 
 /** Pure: the closed trades' summary: how many, win rate against SPY, mean and median excess return. */
 export function bookStats(rows: Array<{ ret: number; spy: number | null }>): { n: number; wins: number; mean: number | null; median: number | null } {
-  const ex = rows.filter((r) => r.spy !== null).map((r) => r.ret - r.spy!).sort((a, b) => a - b);
+  // These are all shorts: beating SPY means falling more than it did (SPY's move minus the stock's).
+  const ex = rows.filter((r) => r.spy !== null).map((r) => r.ret + r.spy!).sort((a, b) => a - b);
   if (!ex.length) return { n: rows.length, wins: 0, mean: null, median: null };
   const mid = Math.floor(ex.length / 2);
   return { n: ex.length, wins: ex.filter((x) => x > 0).length, mean: ex.reduce((a, b) => a + b, 0) / ex.length, median: ex.length % 2 ? ex[mid] : (ex[mid - 1] + ex[mid]) / 2 };
@@ -59,7 +60,7 @@ export default async function DriftBook({ cards, tracks, data }: { cards: Stored
                   <td className="small">{t.entryDate ? `${t.entryDate} @ $${t.entryPrice?.toFixed(2)}` : <span className="muted">enters {dayLabel(entryDay(t.cardDate, today, beforeOpen))} open</span>}</td>
                   <td className="num">{r ? `${r.days}d` : "—"}</td>
                   <td className={`num ${r ? (r.ret >= 0 ? "pos" : "neg") : "muted"}`}>{r ? pct(r.ret) : t.entryDate ? "no price" : "not entered yet"}</td>
-                  <td className={`num ${r && r.spy !== null ? (r.ret - r.spy >= 0 ? "pos" : "neg") : "muted"}`}>{r && r.spy !== null ? pct(r.ret - r.spy) : "—"}</td>
+                  <td className={`num ${r && r.spy !== null ? (vsSpy(t.direction, r)! >= 0 ? "pos" : "neg") : "muted"}`}>{r && r.spy !== null ? pct(vsSpy(t.direction, r)) : "—"}</td>
                   <td className="small">{t.invalidatedAt ? <span className="warn">exits at the next open (invalidated)</span> : t.deadlineDate}{t.maxDrawdownPct !== null ? <span className="muted"> · worst {t.maxDrawdownPct}%</span> : null}</td>
                 </tr>
               );
