@@ -246,12 +246,16 @@ export default function StockChart({ symbol, tvSymbol, height = 680, entry, line
         if (el && hostEl.contains(el)) el.dispatchEvent(new MouseEvent("mousemove", { clientX: mouse.x, clientY: mouse.y, bubbles: true }));
         else { mouse = null; chart.clearCrosshairPosition(); }
       };
+      // An up/down trackpad swipe or mouse wheel over the chart scrolls the page (it used to zoom the chart and hold
+      // the page still); a pinch (sent as a wheel with Ctrl) zooms, and a sideways swipe pans the dates.
+      const onWheel = (e: WheelEvent) => { if (!e.ctrlKey && Math.abs(e.deltaY) > Math.abs(e.deltaX)) e.stopPropagation(); };
+      hostEl.addEventListener("wheel", onWheel, { capture: true, passive: true });
       hostEl.addEventListener("mousemove", onMove);
       hostEl.addEventListener("mouseleave", onLeave);
       window.addEventListener("scroll", onScroll, { passive: true, capture: true });
       cleanup = () => {
         cancelAnimationFrame(raf); ro.disconnect();
-        hostEl.removeEventListener("mousemove", onMove); hostEl.removeEventListener("mouseleave", onLeave); window.removeEventListener("scroll", onScroll, { capture: true });
+        hostEl.removeEventListener("wheel", onWheel, { capture: true }); hostEl.removeEventListener("mousemove", onMove); hostEl.removeEventListener("mouseleave", onLeave); window.removeEventListener("scroll", onScroll, { capture: true });
         chart.remove(); if (overlay.current) overlay.current.innerHTML = "";
       };
     })().catch((err) => !dead && setState({ error: String(err).slice(0, 120) }));
