@@ -199,7 +199,8 @@ export default function StockChart({ symbol, tvSymbol, height = 680, entry, line
         o.innerHTML = "";
         for (const l of lines) {
           const x = chart.timeScale().timeToCoordinate(keyOf(l.d));
-          if (x === null) continue;
+          // Off the visible dates (for example the next report, months ahead): no line and no clipped label at the edge.
+          if (x === null || x < 0 || x > o.clientWidth - 40) continue;
           const el = document.createElement("div");
           el.className = `earn-line${l.next ? " next" : ""}`;
           el.style.left = `${Math.round(x)}px`;

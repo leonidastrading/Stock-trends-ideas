@@ -567,6 +567,11 @@ export async function addEarningsDates(symbol: string, dates: string[]): Promise
   if (dates.length) await q(`INSERT INTO earnings_dates (symbol, date) SELECT $1, unnest($2::date[]) ON CONFLICT DO NOTHING`, [symbol, dates]);
 }
 
+/** The earnings-release dates already on file for one stock (kept from every SEC lookup). */
+export async function earningsDatesFor(symbol: string): Promise<string[]> {
+  return (await q(`SELECT date FROM earnings_dates WHERE symbol = $1 ORDER BY date`, [symbol])).map((r) => dstr(r.date)!);
+}
+
 export async function earningsDatesBySymbol(): Promise<Map<string, string[]>> {
   const m = new Map<string, string[]>();
   for (const r of await q(`SELECT symbol, date FROM earnings_dates ORDER BY symbol, date`)) m.set(r.symbol, [...(m.get(r.symbol) ?? []), dstr(r.date)!]);

@@ -33,10 +33,14 @@ export async function GET(request: Request, ctx: { params: Promise<{ symbol: str
       const have = new Set(mine(sip).map((b) => b.date));
       return { bars: [...mine(sip), ...mine(iex).filter((b) => !have.has(b.date))], raw: mine(raw).map((b) => [b.date, b.c, b.v] as [string, number, number]), feed: "sip" };
     }, 25_000),
-    ua ? panel<string[]>(`earndates:${sym}`, 12 * 60, async () => (await fetchEarningsDates(sym, addDays(today, -800), ua)) ?? [], 15_000) : Promise.resolve({ data: [] as string[], error: null }),
+    // A failed SEC lookup is not cached (it used to be kept as "no earnings" for 12 hours, leaving the chart without lines).
+    ua ? panel<string[]>(`earndates:${sym}`, 12 * 60, async () => { const d = await fetchEarningsDates(sym, addDays(today, -800), ua); if (d === null) throw new Error("SEC lookup failed"); return d; }, 15_000) : Promise.resolve({ data: [] as string[], error: null }),
     store.symbolInfo([sym]).then((m) => m.get(sym) ?? null).catch(() => null),
   ]);
   if (!bars.data?.bars.length) return NextResponse.json({ error: bars.error ?? "no bars" }, { status: 502 });
+  // Plus the dates already on file, so a slow or failed SEC lookup still draws the past releases.
+  const onFile = await store.earningsDatesFor(sym).catch(() => [] as string[]);
+  const earnings = [...new Set([...(earn.data ?? []), ...onFile])].sort();
   const next = info?.nextEarnings && info.nextEarnings >= today ? info.nextEarnings : null;
   // The company's name (for the chart's background) and the latest pre-market or after-hours trade.
   const [name, q] = await Promise.all([
@@ -48,7 +52,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ symbol: str
     symbol: sym,
     bars: bars.data.bars.map((b) => [b.date, b.o, b.h, b.l, b.c, b.v]),
     raw: bars.data.raw, feed: bars.data.feed,
-    earnings: earn.data ?? [],
+    earnings,
     next, nextBasis: next ? info?.nextBasis ?? null : null,
     name, ext,
   }, { headers: { "cache-control": "private, max-age=120" } });
