@@ -56,7 +56,8 @@ export async function POST(request: Request) {
       const r = await getRumor(parsed.data.id);
       if (!r) return NextResponse.json({ ok: false, errors: ["no such rumor"] }, { status: 404 });
       try {
-        const res = await researchRumor(defaultDeps(), r);
+        const { tracked } = await import("@/lib/scout/research-requests");
+        const res = await tracked({ term: `Rumor #${r.id}: ${r.claim}`, tickers: r.tickers, from: { label: "Rumors", url: `/rumors#rumor-${r.id}` } }, () => researchRumor(defaultDeps(), r));
         return res.cardId ? NextResponse.json({ ok: true, cardId: res.cardId, status: res.status }) : NextResponse.json({ ok: false, errors: [`${res.outcome}${res.reason ? `: ${res.reason}` : ""}`] }, { status: 422 });
       } catch (err) {
         return NextResponse.json({ ok: false, errors: [err instanceof Error ? err.message : String(err)] }, { status: 500 });

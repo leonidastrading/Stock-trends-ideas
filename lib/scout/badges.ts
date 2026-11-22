@@ -2,7 +2,7 @@
 import { query as q } from "../db";
 import * as store from "./store";
 
-export const BADGE_TABS = ["ideas", "news", "drift", "rumors", "themes", "investigate", "inbox", "filings", "congress", "watchlist"] as const;
+export const BADGE_TABS = ["research", "ideas", "news", "drift", "rumors", "themes", "investigate", "inbox", "filings", "congress", "watchlist"] as const;
 export type BadgeTab = (typeof BADGE_TABS)[number];
 
 const n = async (sql: string, since: string) => Number((await q(sql, [since]).catch(() => [{ n: 0 }]))[0]?.n ?? 0);
@@ -16,6 +16,8 @@ export async function badgeCounts(since: Partial<Record<BadgeTab, string>>, now 
   // Shorts under $5 are not suggested, so they do not count as new ideas.
   add("ideas", (s) => n(`SELECT count(*) AS n FROM cards WHERE created_at > $1 AND NOT (direction = 'short' AND array_to_string(gate_notes, ' ') ~ 'under [$]5')`, s));
   add("rumors", async (s) => (await n(`SELECT count(*) AS n FROM rumors WHERE created_at > $1`, s)) + (await n(`SELECT count(DISTINCT rumor_id) AS n FROM rumor_checks WHERE status = 'confirmed' AND checked_at > $1`, s)));
+  // Research you asked for that finished since you last looked (a card or a rejection).
+  add("research", (s) => n(`SELECT count(*) AS n FROM research_requests WHERE finished_at > $1`, s));
   add("themes", (s) => n(`SELECT count(*) AS n FROM theme_runs WHERE created_at > $1`, s));
   add("investigate", (s) => n(`SELECT count(*) AS n FROM investigations WHERE status = 'done' AND created_at > $1`, s));
   add("inbox", (s) => n(`SELECT count(*) AS n FROM inbox_files WHERE read_at > $1`, s));

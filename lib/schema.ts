@@ -559,6 +559,21 @@ CREATE TABLE IF NOT EXISTS card_rechecks (
 );
 CREATE INDEX IF NOT EXISTS card_rechecks_card_idx ON card_rechecks (card_id, checked_at);
 CREATE OR REPLACE TRIGGER card_rechecks_ro BEFORE UPDATE OR DELETE ON card_rechecks FOR EACH ROW EXECUTE FUNCTION forbid_change();
+-- Research you asked for (every "Research it" button and the Research tab): one row per request, finished in place.
+CREATE TABLE IF NOT EXISTS research_requests (
+  id serial PRIMARY KEY,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  finished_at timestamptz,
+  term text NOT NULL,
+  tickers text[] NOT NULL DEFAULT '{}',
+  from_label text,
+  from_url text,
+  status text NOT NULL DEFAULT 'running',
+  card_id integer,
+  card_status text,
+  reason text
+);
+CREATE INDEX IF NOT EXISTS research_requests_finished_idx ON research_requests (finished_at);
 -- Market cap and short interest per card, frozen once, for splitting results by size and by short interest.
 CREATE TABLE IF NOT EXISTS card_profiles (
   card_id integer PRIMARY KEY,

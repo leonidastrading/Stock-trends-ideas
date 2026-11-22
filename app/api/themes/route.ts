@@ -53,8 +53,12 @@ Who disagrees: ${t.disagreement || "nobody in the sources"}
 Crowding: ${t.crowding}
 What would break it: ${t.breaks_it}
 Consensus is not edge: check what is already priced (moves, coverage) and say plainly if the crowd is late. Time limit about 10 trading days unless a dated catalyst decides it sooner.`;
-    const res = await researchCandidate({ origin: "scout", term: `theme: ${t.title.slice(0, 80)} → ${t.tickers[0]}`, kindHint: "event", tickersHint: t.tickers, observation: null, context, proposedDirection: t.direction }, deps);
-    return res.outcome === "card" ? NextResponse.json({ ok: true, cardId: res.card.id, status: res.card.status }) : NextResponse.json({ ok: false, errors: [`${res.outcome}: ${res.reason}`] }, { status: 422 });
+    const { tracked } = await import("@/lib/scout/research-requests");
+    const res = await tracked({ term: `Theme: ${t.title}`, tickers: t.tickers, from: { label: "Themes", url: "/themes" } }, async () => {
+      const x = await researchCandidate({ origin: "scout", term: `theme: ${t.title.slice(0, 80)} → ${t.tickers[0]}`, kindHint: "event", tickersHint: t.tickers, observation: null, context, proposedDirection: t.direction }, deps);
+      return x.outcome === "card" ? { outcome: "card", cardId: x.card.id, status: x.card.status } : { outcome: x.outcome, reason: x.reason };
+    });
+    return res.cardId ? NextResponse.json({ ok: true, cardId: res.cardId, status: res.status }) : NextResponse.json({ ok: false, errors: [`${res.outcome}: ${res.reason}`] }, { status: 422 });
   } catch (err) {
     return NextResponse.json({ ok: false, errors: [err instanceof Error ? err.message : String(err)] }, { status: 500 });
   }

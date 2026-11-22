@@ -21,6 +21,8 @@ const schema = z.object({
   /** Sent by a page's "Research it" button: researched as it is (never read as a pasted article), with its source. */
   direct: z.boolean().optional(),
   from: z.object({ label: z.string().trim().min(1).max(40), url: z.string().trim().max(400).nullable().optional() }).optional(),
+  /** Sent by the Research tab: start the research and answer at once; the result shows on the tab when it is done. */
+  background: z.boolean().optional(),
 });
 
 /**
@@ -33,7 +35,7 @@ export async function POST(request: Request) {
   if (!hasDatabase()) return NextResponse.json({ ok: false, errors: ["database not connected"] }, { status: 503 });
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ ok: false, errors: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) }, { status: 422 });
-  const { observation, term, kind, tickers, direct, from } = parsed.data;
+  const { observation, term, kind, tickers, direct, from, background } = parsed.data;
   try {
     if (observation.length > PASTE_CHARS && !direct) {
       const deps = defaultDeps();
@@ -47,11 +49,19 @@ export async function POST(request: Request) {
       });
       return NextResponse.json({ ok: true, extracted: mine.map((m) => ({ term: m.term, tickers: m.tickers, direction: m.direction ?? null })) }, { status: 202 });
     }
-    const r = await researchCandidate(
-      { origin: "human", term: term || observation.split(/[.!?\n]/)[0].slice(0, 80), kindHint: kind ?? null, tickersHint: tickers ?? [], observation, source: from ?? { label: "Your note", url: "/notice" } },
-      defaultDeps(),
-    );
-    if (r.outcome === "card") return NextResponse.json({ ok: true, cardId: r.card.id, status: r.card.status });
+    const { tracked } = await import("@/lib/scout/research-requests");
+    const label = term || observation.split(/[.!?\n]/)[0].slice(0, 80);
+    const source = from ?? (background ? { label: "Research tab", url: "/research" } : { label: "Your note", url: "/notice" });
+    const run = () => tracked({ term: label, tickers, from: source }, async () => {
+      const r = await researchCandidate({ origin: "human", term: label, kindHint: kind ?? null, tickersHint: tickers ?? [], observation, source }, defaultDeps());
+      return r.outcome === "card" ? { outcome: "card", cardId: r.card.id, status: r.card.status } : { outcome: r.outcome, reason: r.reason };
+    });
+    if (background) {
+      after(async () => { await run().catch((err) => console.error(`research failed: ${err instanceof Error ? err.message : String(err)}`)); });
+      return NextResponse.json({ ok: true, started: true }, { status: 202 });
+    }
+    const r = await run();
+    if (r.cardId) return NextResponse.json({ ok: true, cardId: r.cardId, status: r.status });
     return NextResponse.json({ ok: false, outcome: r.outcome, errors: [r.reason] }, { status: 422 });
   } catch (err) {
     return NextResponse.json({ ok: false, errors: [err instanceof Error ? err.message : String(err)] }, { status: 500 });
