@@ -99,6 +99,23 @@ export async function finnhubRevenue(from: string, to: string, env: NodeJS.Proce
   return parseFinnhub((await res.json()) as { earningsCalendar?: Array<Record<string, unknown>> });
 }
 
+/** Pure: the past report dates in Finnhub's calendar for one stock (up to today). */
+export function finnhubDates(j: { earningsCalendar?: Array<Record<string, unknown>> }, symbol: string, today: string): string[] {
+  return [...new Set((j.earningsCalendar ?? []).filter((r) => String(r.symbol).toUpperCase() === symbol && /^\d{4}-\d{2}-\d{2}$/.test(String(r.date)) && String(r.date) <= today).map((r) => String(r.date)))].sort();
+}
+
+/**
+ * One stock's report dates from Finnhub's earnings calendar. The chart's second source: foreign companies (AS, PDD,
+ * HTHT) report on form 6-K, not the 8-K item 2.02 the SEC source reads, so they had no earnings lines. Null without a key.
+ */
+export async function finnhubEarningsDates(symbol: string, from: string, today: string, env: NodeJS.ProcessEnv = process.env, fetchImpl: typeof fetch = fetch): Promise<string[] | null> {
+  const key = env.FINNHUB_API_KEY?.trim();
+  if (!key) return null;
+  const res = await fetchImpl(`https://finnhub.io/api/v1/calendar/earnings?${new URLSearchParams({ from, to: today, symbol })}`, { headers: { "X-Finnhub-Token": key, accept: "application/json" } });
+  if (!res.ok) throw new Error(`Finnhub ${res.status}`);
+  return finnhubDates((await res.json()) as { earningsCalendar?: Array<Record<string, unknown>> }, symbol, today);
+}
+
 // ---------------------------------------------------------------- the press release (SEC 8-K item 2.02)
 
 /** The earnings press release text, from the 8-K (item 2.02) filed around the report; null when not found. Best effort. */

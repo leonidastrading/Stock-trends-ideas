@@ -40,7 +40,11 @@ export async function GET(request: Request, ctx: { params: Promise<{ symbol: str
   if (!bars.data?.bars.length) return NextResponse.json({ error: bars.error ?? "no bars" }, { status: 502 });
   // Plus the dates already on file, so a slow or failed SEC lookup still draws the past releases.
   const onFile = await store.earningsDatesFor(sym).catch(() => [] as string[]);
-  const earnings = [...new Set([...(earn.data ?? []), ...onFile])].sort();
+  // Finnhub's calendar too (foreign companies report on 6-K, which the SEC source does not read). Not cached when it fails.
+  const finn = process.env.FINNHUB_API_KEY?.trim()
+    ? await panel<string[]>(`earndates-fh:${sym}`, 12 * 60, async () => { const d = await import("@/lib/sources/earnings-data").then(({ finnhubEarningsDates }) => finnhubEarningsDates(sym, addDays(today, -760), today)); if (d === null) throw new Error("no key"); return d; }, 8_000)
+    : { data: [] as string[] };
+  const earnings = [...new Set([...(earn.data ?? []), ...onFile, ...(finn.data ?? [])])].sort();
   const next = info?.nextEarnings && info.nextEarnings >= today ? info.nextEarnings : null;
   // The company's name (for the chart's background) and the latest pre-market or after-hours trade.
   const [name, q] = await Promise.all([
