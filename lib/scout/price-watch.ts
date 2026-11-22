@@ -160,12 +160,30 @@ export function earningsReason(symbol: string, rows: Array<{ symbol: string; dat
 }
 
 /** The likely reason for a move: the newest headline on the stock, else an earnings release today. */
-export async function reasonFor(m: Pick<BigMove, "symbol" | "phase">, news: Array<Pick<NewsItem, "ts" | "headline" | "symbols" | "source" | "url">>, now: Date, windowMs?: number): Promise<{ headline: string; source: string; url: string } | null> {
+export async function reasonFor(m: Pick<BigMove, "symbol" | "phase">, news: Array<Pick<NewsItem, "ts" | "headline" | "symbols" | "source" | "url">>, now: Date, windowMs?: number, opts: { web?: boolean; company?: string | null; fetchImpl?: typeof fetch } = {}): Promise<{ headline: string; source: string; url: string } | null> {
   const hit = likelyReason(m.symbol, news, now, windowMs);
   if (hit) return hit;
   const { earningsOn } = await import("../market/sources");
   const today = toEt(now).date;
   const days = m.phase === "pre" ? [today, addDays(today, -1), addDays(today, -3)] : [today];
   const rows = (await Promise.all(days.map((d) => earningsOn(d).catch(() => [])))).flat();
-  return earningsReason(m.symbol, rows, today, m.phase);
+  const earn = earningsReason(m.symbol, rows, today, m.phase);
+  if (earn || !opts.web) return earn;
+  // Nothing in the scout's own feeds: the company's news on the web over the last day (Reuters, MT Newswires and
+  // others Alpaca does not carry), with the outlet and its own time. (Nvidia fell 10% on Nov 20 with "no headline"
+  // in the feeds while Reuters had had the probe story since 4:49 AM.)
+  return webReason(m.symbol, opts.company ?? null, now, opts.fetchImpl);
+}
+
+/** The newest headline about the company on Google News in the last 24 hours, or null. */
+export async function webReason(symbol: string, company: string | null, now: Date, fetchImpl?: typeof fetch): Promise<{ headline: string; source: string; url: string } | null> {
+  const name = (company ?? "").replace(/,?\s+(inc|corp|corporation|co|ltd|plc|holdings|group|class a|common stock|ordinary shares|american depositary).*$/i, "").trim();
+  const { googleNews } = await import("./rumor-check");
+  const items = await googleNews(name ? `"${name}" stock` : `${symbol} stock`, fetchImpl).catch(() => []);
+  const first = name ? name.split(/\s+/)[0].toLowerCase() : symbol.toLowerCase();
+  const fresh = items.filter((x) => now.getTime() - Date.parse(x.at) < 24 * 3600_000 && x.headline.toLowerCase().includes(first)).sort((a, b) => b.at.localeCompare(a.at));
+  const top = fresh[0];
+  if (!top) return null;
+  const when = new Date(top.at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+  return { headline: top.headline.replace(/\s+-\s+[^-]+$/, ""), source: `${top.source || "the web"} · ${when} ET (found on the web, not in the scout's feeds)`, url: top.url };
 }

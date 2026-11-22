@@ -71,3 +71,17 @@ describe("finding the earlier version across outlets", () => {
     expect(hit).toMatchObject({ ts: "2026-11-20T11:31:00.000Z", source: "MarketScreener" });
   });
 });
+
+import { webReason } from "@/lib/scout/price-watch";
+describe("why a stock moved, from the web when the feeds have nothing", () => {
+  it("takes the newest headline about the company in the last day, with its outlet and time", async () => {
+    const rss = `<rss><channel>
+      <item><title>Democrats open probe into Nvidia influence on US Megaspeed investigation - Reuters</title><link>https://r/1</link><pubDate>Fri, 20 Nov 2026 09:49:00 GMT</pubDate><source>Reuters</source></item>
+      <item><title>Nvidia old story - CNBC</title><link>https://c/1</link><pubDate>Mon, 16 Nov 2026 09:49:00 GMT</pubDate><source>CNBC</source></item>
+    </channel></rss>`;
+    const fetchImpl = (async () => new Response(rss, { status: 200 })) as unknown as typeof fetch;
+    const r = await webReason("NVDA", "NVIDIA Corporation Common Stock", new Date("2026-11-20T19:30:00Z"), fetchImpl);
+    expect(r?.headline).toBe("Democrats open probe into Nvidia influence on US Megaspeed investigation");
+    expect(r?.source).toMatch(/^Reuters · Nov 20, 4:49 AM ET/);
+  });
+});
