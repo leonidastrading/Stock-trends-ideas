@@ -69,7 +69,11 @@ export async function runListingWatch(data: MarketData | null, now: Date): Promi
     }
     const deadline = addDays(c.createdAt.slice(0, 10), c.timeLimitDays);
     if (deadline <= today) { out.push(`#${c.id} ${sym}: listed after its time limit`); continue; }
-    await store.insertTrack({ cardId: c.id, symbol: sym, sectorEtf: SECTORS[c.sector as Sector] ?? "SPY", direction: c.direction, cardDate: today, deadlineDate: deadline });
+    const sectorEtf = SECTORS[c.sector as Sector] ?? "SPY";
+    await store.insertTrack({ cardId: c.id, symbol: sym, sectorEtf, direction: c.direction, cardDate: today, deadlineDate: deadline });
+    // Market open now: enter at the live price, like a new card; otherwise at the next open.
+    const live = await import("./live-entry").then(({ liveEntry }) => liveEntry(data, [sym, "SPY", sectorEtf], now)).catch(() => null);
+    if (live) await store.setEntry(c.id, { entryDate: today, entryPrice: live[sym], spyEntry: live.SPY ?? null, sectorEntry: live[sectorEtf] ?? null });
     await store.addTrackEvent(c.id, "tracked_from_listing", `${sym} first traded ${bars[0].date}; seen listed ${today}. Paper track enters at the next open after that, not at a past price; deadline stays ${deadline}.`);
     out.push(`#${c.id} ${sym}: now tracked (listed ${bars[0].date})`);
   }

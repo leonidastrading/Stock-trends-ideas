@@ -217,12 +217,15 @@ export async function researchCandidate(input: ResearchInput, deps: ResearchDeps
   // The name each symbol trades as and its next earnings, for the card's header.
   await import("./symbols").then(({ refreshSymbolInfo }) => refreshSymbolInfo(deps.data, deps.env, gated.card.tickers.map((t) => t.symbol), deps.now, 20, deps.fetchImpl)).catch(() => undefined);
 
-  // Paper track for promoted and late cards: entry at the next open, exit at the card's time limit (or earlier when its
-  // invalidation is marked). The catalyst date no longer ends the trade (it did before EXIT_RULE "time_limit"): a card
-  // whose catalyst fell on its entry day was closed after one night, against the time it said it needed.
+  // Paper track for promoted and late cards: entry when the card is written, at the live price, if the market is open
+  // (ENTRY_RULE "live_when_open"), else at the next open; exit at the card's time limit (or earlier when its
+  // invalidation is marked). The catalyst date no longer ends the trade (it did before EXIT_RULE "time_limit").
   if (gated.status !== "not_promoted") {
     const deadline = addDays(et.date, gated.card.time_limit_days);
-    await store.insertTrack({ cardId: stored.id, symbol: stored.primaryTicker, sectorEtf: SECTORS[stored.sector as Sector], direction: stored.direction, cardDate: et.date, deadlineDate: deadline });
+    const sectorEtf = SECTORS[stored.sector as Sector];
+    await store.insertTrack({ cardId: stored.id, symbol: stored.primaryTicker, sectorEtf, direction: stored.direction, cardDate: et.date, deadlineDate: deadline });
+    const live = await import("./live-entry").then(({ liveEntry }) => liveEntry(deps.data, [stored.primaryTicker, "SPY", sectorEtf], deps.now)).catch(() => null);
+    if (live) await store.setEntry(stored.id, { entryDate: et.date, entryPrice: live[stored.primaryTicker], spyEntry: live.SPY ?? null, sectorEntry: live[sectorEtf] ?? null });
   }
 
   // What Vadim noticed stays on the watch-list as a proposal he can approve.
