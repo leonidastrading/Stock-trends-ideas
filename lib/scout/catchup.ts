@@ -12,7 +12,7 @@ import * as store from "./store";
 import { toEt } from "../time";
 
 /** A message saying the daily AI budget was reached (any of the wordings used across the scout). */
-export const CAP_REASON = /daily (LLM|AI)( spending)? cap reached/i;
+export const CAP_REASON = /daily (LLM|AI)( spending)? cap reached|credit balance is too low/i;
 
 export type QueueKind = "research" | "rumor_doc" | "job";
 export type QueueJob = "discovery" | "dots" | "themes" | "inbox_digest";

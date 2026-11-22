@@ -1,4 +1,5 @@
 import SetupNotice from "@/components/SetupNotice";
+import RetryInvestigation from "./RetryInvestigation";
 import Ticker from "@/components/Ticker";
 import { hasDatabase } from "@/lib/db";
 import { listInvestigations, reportText, type Investigation, MORE_LABEL } from "@/lib/scout/investigate";
@@ -74,7 +75,7 @@ function InvestigationView({ inv, open, researched, t }: { inv: Investigation; o
         {inv.status === "running" ? <span className="tag late">digging…</span> : inv.status === "error" ? <span className="tag down">failed</span> : null}
         <span className="small muted"> · {etLabelAgo(inv.createdAt)}{inv.costUsd ? ` · $${inv.costUsd.toFixed(2)}` : ""}</span>
       </summary>
-      {inv.status === "error" && <p className="small neg">{inv.error}</p>}
+      {inv.status === "error" && <p className="small"><span className="neg">{inv.error}</span> <RetryInvestigation id={inv.id} /></p>}
       {inv.status === "running" && <p className="small muted">{inv.records?.web ? `Following leads (${inv.records.web.rounds.length} round${inv.records.web.rounds.length === 1 ? "" : "s"} done${inv.records.web.rounds.at(-1)?.why ? `: ${inv.records.web.rounds.at(-1)!.why}` : ""})…` : inv.records ? "Records pulled; following leads…" : inv.plan ? "Plan made; pulling public records…" : "Planning what to look up…"}</p>}
       {r && (
         <>

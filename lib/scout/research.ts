@@ -15,6 +15,16 @@ import { buildUserPrompt } from "./prompt";
 import * as store from "./store";
 import { versionHash, versionSpec } from "./version";
 
+/** The Anthropic API account has no credit left (every AI call fails until it is topped up). */
+export const CREDIT_OUT = /credit balance is too low|insufficient[_ ]credit|billing/i;
+
+/** One phone alert a day while the API credit is empty. */
+export async function alertCreditOut(env: NodeJS.ProcessEnv, etDate: string): Promise<void> {
+  const { pushConfigured, sendPush } = await import("../notify");
+  if (!pushConfigured(env) || !(await store.claimNotification(`credit-out:${etDate}`, "Anthropic API credit empty"))) return;
+  await sendPush({ title: "Trend scout: Anthropic API credit is empty", message: "Every AI call is failing (research, investigations, Dots…). Ideas wait in the catch-up queue. Add credit at console.anthropic.com → Plans & Billing (this is separate from your Claude Max plan).", tags: ["warning"], priority: 4, click: "https://console.anthropic.com/settings/billing" }, env);
+}
+
 export interface ResearchDeps {
   data: MarketData | null;
   sources: Source[];
@@ -137,8 +147,16 @@ export async function researchCandidate(input: ResearchInput, deps: ResearchDeps
     try {
       reply = await deps.callModel({ model: settings.model, effort: settings.effort, user, purpose: "research" });
     } catch (err) {
-      const reason = `model call failed: ${err instanceof Error ? err.message : String(err)}`;
+      const msg = err instanceof Error ? err.message : String(err);
       await store.logLlmCall({ etDate: et.date, model: settings.model, purpose: "research", usage: null, costUsd: null, ok: false });
+      // The Anthropic API account is out of credit: nothing is lost, the idea waits in the catch-up queue like an over-budget one.
+      if (CREDIT_OUT.test(msg)) {
+        const reason = "waiting: daily AI cap reached in effect (the Anthropic API credit balance is empty; add credit at console.anthropic.com → Plans & Billing); queued, researched once there is credit";
+        if (!input.queued) await import("./catchup").then(({ enqueue, queuedResearch }) => enqueue("research", `${input.origin}:${input.term.toLowerCase()}:${input.tickersHint.join(",")}`, queuedResearch(input))).catch(() => undefined);
+        await alertCreditOut(deps.env, et.date).catch(() => undefined);
+        return { outcome: "capped", reason, candidate: await store.addCandidate({ ...base, outcome: "rejected", reason }) };
+      }
+      const reason = `model call failed: ${msg}`;
       return { outcome: "error", reason, candidate: await store.addCandidate({ ...base, outcome: "error", reason }) };
     }
     await store.logLlmCall({ etDate: et.date, model: settings.model, purpose: "research", usage: reply.usage, costUsd: reply.costUsd, ok: true });

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { checkBasicAuth } from "@/lib/auth";
 import { hasDatabase } from "@/lib/db";
 import { defaultDeps } from "@/lib/scout/engine";
-import { getInvestigation, researchExposure, runInvestigation, startInvestigation } from "@/lib/scout/investigate";
+import { getInvestigation, researchExposure, resetInvestigation, runInvestigation, startInvestigation } from "@/lib/scout/investigate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +11,7 @@ export const maxDuration = 300;
 
 const body = z.union([
   z.object({ action: z.literal("research"), id: z.number().int().positive(), ticker: z.string().regex(/^[A-Z]{1,5}(\.[A-Z])?$/) }),
+  z.object({ action: z.literal("retry"), id: z.number().int().positive() }),
   z.object({ text: z.string().max(300_000).default(""), url: z.string().max(1000).optional() }),
 ]);
 
@@ -21,6 +22,11 @@ export async function POST(request: Request) {
   const parsed = body.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ ok: false, errors: ["send { text, url } or { action: 'research', id, ticker }"] }, { status: 422 });
   const b = parsed.data;
+  if ("action" in b && b.action === "retry") {
+    if (!(await resetInvestigation(b.id))) return NextResponse.json({ ok: false, errors: ["only a failed investigation can be run again"] }, { status: 409 });
+    after(() => runInvestigation(b.id, defaultDeps()).catch((err) => console.error(`investigation ${b.id} failed: ${err instanceof Error ? err.message : String(err)}`)));
+    return NextResponse.json({ ok: true, id: b.id }, { status: 202 });
+  }
   if ("action" in b) {
     const inv = await getInvestigation(b.id);
     if (!inv?.report) return NextResponse.json({ ok: false, errors: ["that investigation has no report"] }, { status: 404 });

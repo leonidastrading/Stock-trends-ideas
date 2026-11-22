@@ -295,6 +295,12 @@ export async function getInvestigation(id: number): Promise<Investigation | null
   return r ? toInv(r) : null;
 }
 
+/** Run a failed investigation again from the start (same input). */
+export async function resetInvestigation(id: number): Promise<boolean> {
+  const r = await q(`UPDATE investigations SET status = 'running', error = NULL, plan = NULL, records = NULL, report = NULL, created_at = now() WHERE id = $1 AND status = 'error' RETURNING id`, [id]);
+  return r.length > 0;
+}
+
 export async function startInvestigation(input: string): Promise<number> {
   return Number((await q(`INSERT INTO investigations (status, title, input) VALUES ('running', $1, $2) RETURNING id`, [input.replace(/\s+/g, " ").slice(0, 80), input.slice(0, 120_000)]))[0].id);
 }
@@ -329,7 +335,10 @@ export async function runInvestigation(id: number, deps: ResearchDeps): Promise<
     const report = parseReport(await call("investigate_report", user, "medium"));
     await q(`UPDATE investigations SET status = 'done', report = $2, cost_usd = $3 WHERE id = $1`, [id, JSON.stringify(report), cost]);
   } catch (err) {
-    await q(`UPDATE investigations SET status = 'error', error = $2, cost_usd = $3 WHERE id = $1`, [id, errText(err), cost]);
+    const { CREDIT_OUT, alertCreditOut } = await import("./research");
+    const credit = CREDIT_OUT.test(errText(err));
+    if (credit) await alertCreditOut(deps.env, today).catch(() => undefined);
+    await q(`UPDATE investigations SET status = 'error', error = $2, cost_usd = $3 WHERE id = $1`, [id, credit ? "The Anthropic API credit balance is empty (separate from your Claude Max plan): add credit at console.anthropic.com → Plans & Billing, then press Run again." : errText(err), cost]);
   }
 }
 
