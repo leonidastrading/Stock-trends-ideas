@@ -81,7 +81,8 @@ export function matching(r: Pick<Rumor, "claim" | "tickers">, items: Evidence[],
     .filter((x) => x.n >= min).sort((a, b) => b.n - a.n || b.e.at.localeCompare(a.e.at)).map((x) => x.e);
 }
 
-async function googleNews(query: string, fetchImpl?: typeof fetch): Promise<Evidence[]> {
+/** Google News search (last 30 days), newest items first as the feed gives them. */
+export async function googleNews(query: string, fetchImpl?: typeof fetch): Promise<Evidence[]> {
   if (!query.trim()) return [];
   const xml = await getText(`https://news.google.com/rss/search?${new URLSearchParams({ q: `${query} when:30d`, hl: "en-US", gl: "US", ceid: "US:en" })}`, { headers: UA, fetchImpl, cacheMs: 0, minIntervalMs: 1200, timeoutMs: 12_000, retries: 1 });
   return parseGoogleNews(xml).slice(0, 25);

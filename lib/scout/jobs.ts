@@ -8,6 +8,7 @@ export const JOBS = {
   filingdiff: { everyMin: 30, about: "filing changes (10-K / 10-Q vs a year earlier)" },
   crowding: { everyMin: 15, about: "crowding for open cards (weekdays)" },
   readthrough: { everyMin: 20, about: "supply-chain read-through after capex raises" },
+  bubbles: { everyMin: 120, about: "Bubbles: fixed-date events with a run-up into them, and what happened after" },
   listings: { everyMin: 180, about: "cards written before their stock listed (IPOs): start the paper track once it trades" },
   petitions: { everyMin: 360, about: "FDA citizen petitions on regulations.gov (short sellers' weekly)" },
 } as const;

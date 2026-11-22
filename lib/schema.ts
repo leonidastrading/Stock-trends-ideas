@@ -574,6 +574,33 @@ CREATE TABLE IF NOT EXISTS research_requests (
   reason text
 );
 CREATE INDEX IF NOT EXISTS research_requests_finished_idx ON research_requests (finished_at);
+-- Bubbles: fixed-date events with a run-up into them ("buy the rumor, sell the news"), and what the stock did after.
+CREATE TABLE IF NOT EXISTS bubble_events (
+  id serial PRIMARY KEY,
+  symbol text NOT NULL,
+  event_type text NOT NULL,
+  event_date date NOT NULL,
+  what text,
+  url text,
+  source text,
+  first_seen timestamptz NOT NULL DEFAULT now(),
+  last_measured timestamptz,
+  price_seen numeric,
+  run30 numeric,
+  spy30 numeric,
+  stage integer,
+  score integer,
+  per_hour numeric,
+  z numeric,
+  level text,
+  level_seen text,
+  price_event numeric,
+  price_after5 numeric,
+  price_after10 numeric,
+  spy_event numeric,
+  spy_after10 numeric,
+  UNIQUE (symbol, event_type, event_date)
+);
 -- Market cap and short interest per card, frozen once, for splitting results by size and by short interest.
 CREATE TABLE IF NOT EXISTS card_profiles (
   card_id integer PRIMARY KEY,
