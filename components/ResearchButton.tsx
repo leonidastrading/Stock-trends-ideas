@@ -14,5 +14,5 @@ export default function ResearchButton({ symbol, term, observation, kind = "even
   }
   if (state === "idle") return <button type="button" className="chip" onClick={go}>Research it</button>;
   if (state === "busy") return <span className="small muted">Researching… a minute or two.</span>;
-  return state.cardId ? <a className="small" href={`/ideas?days=365&card=${state.cardId}#card-${state.cardId}`}>card #{state.cardId}: {String(state.status).replace("_", " ")}</a> : <span className="small neg">{state.error}</span>;
+  return state.cardId ? <a className="small" href={`/cards/${state.cardId}`}>card #{state.cardId}: {String(state.status).replace("_", " ")}</a> : <span className="small neg">{state.error}</span>;
 }

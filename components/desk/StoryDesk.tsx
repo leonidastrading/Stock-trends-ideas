@@ -9,7 +9,7 @@ interface GapRow { key: string; ticker: string; storyDate: string; ageDays: numb
 interface FollowupDetail { checked: GapRow[]; researched: Array<{ term: string; outcome: string; reason?: string; cardId?: number }>; skipped: Array<{ key: string; reason: string }>; error: string | null }
 type Run = { action: string; startedAt: string; detail: unknown };
 
-const cardLink = (id: number) => `/ideas?days=30&card=${id}#card-${id}`;
+const cardLink = (id: number) => `/cards/${id}`;
 
 /** The story desk's reports: reaction gaps (follow-ups) and the last story scan. Both folded by default. */
 export default function StoryDesk({ runs, fb, params, spage }: { runs: Run[]; fb: Map<string, FeedbackRow>; params: Record<string, string | undefined>; spage: number }) {

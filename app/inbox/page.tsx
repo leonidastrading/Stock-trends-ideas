@@ -83,7 +83,7 @@ export default async function InboxPage() {
                   <div className="small">{x.summary}</div>
                   <div className="small muted">
                     {itemMeta(x, received)}
-                    {c ? <> · researched: <a href={`/ideas?days=365&card=${c.id}#card-${c.id}`}>card #{c.id} ({c.status.replace("_", " ")})</a></> : null}
+                    {c ? <> · researched: <a href={`/cards/${c.id}`}>card #{c.id} ({c.status.replace("_", " ")})</a></> : null}
                   </div>
                   {cardsOn(x.tickers).filter((b) => b.id !== c?.id).length > 0 && <div className="small">Scout cards on {x.tickers.slice(0, 4).join(", ")}: <CardChips cards={cardsOn(x.tickers).filter((b) => b.id !== c?.id)} max={6} /></div>}
                 </div>
@@ -135,7 +135,7 @@ export default async function InboxPage() {
                           const c = o.cardId ? cardById.get(o.cardId) : undefined;
                           return (
                             <li key={i}>
-                              {o.term.replace(/^inbox: |^stream (host|agent): /, "")}: {o.cardId ? <a href={`/ideas?days=365&card=${o.cardId}#card-${o.cardId}`}>{c ? `${c.direction === "long" ? "▲" : "▼"} ${c.primaryTicker}, ` : ""}{o.outcome.replace(/^card: /, "")}</a> : <span className="muted"><LinkedText text={`${o.outcome}${o.reason ? ` (${o.reason})` : ""}`} /></span>}
+                              {o.term.replace(/^inbox: |^stream (host|agent): /, "")}: {o.cardId ? <a href={`/cards/${o.cardId}`}>{c ? `${c.direction === "long" ? "▲" : "▼"} ${c.primaryTicker}, ` : ""}{o.outcome.replace(/^card: /, "")}</a> : <span className="muted"><LinkedText text={`${o.outcome}${o.reason ? ` (${o.reason})` : ""}`} /></span>}
                             </li>
                           );
                         })}

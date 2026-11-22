@@ -98,7 +98,7 @@ export async function checkInvalidations(deps: { data: MarketData | null; callMo
     const env = deps.env ?? process.env;
     if (pushConfigured(env)) {
       const base = (process.env.DASHBOARD_URL ?? "").replace(/\/$/, "");
-      for (const a of alerts.slice(0, 4)) await sendPush({ title: `INVALIDATED: card #${a.cardId} ${a.symbol}`, message: `${a.reason}\nThe paper trade exits at the next open.`, click: `${base}/ideas?days=365&card=${a.cardId}#card-${a.cardId}`, tags: ["x"], priority: 4 }, env).catch(() => undefined);
+      for (const a of alerts.slice(0, 4)) await sendPush({ title: `INVALIDATED: card #${a.cardId} ${a.symbol}`, message: `${a.reason}\nThe paper trade exits at the next open.`, click: `${base}/cards/${a.cardId}`, tags: ["x"], priority: 4 }, env).catch(() => undefined);
     }
   }
   return `${checked} of ${due.length} due checked, ${met} invalidated`;

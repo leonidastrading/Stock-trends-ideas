@@ -6,7 +6,7 @@ export default function LinkedText({ text }: { text: string | null | undefined }
     <>
       {parts.map((p, i) => {
         const id = /^card #(\d+)$/.exec(p)?.[1];
-        return id ? <a key={i} href={`/ideas?days=365&card=${id}#card-${id}`}>{p}</a> : <span key={i}>{p}</span>;
+        return id ? <a key={i} href={`/cards/${id}`}>{p}</a> : <span key={i}>{p}</span>;
       })}
     </>
   );

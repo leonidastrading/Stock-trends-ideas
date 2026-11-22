@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { chartUrl } from "@/config/links";
 import type { Lookup } from "@/lib/scout/lookup";
 
-const cardLink = (id: number) => `/ideas?days=365&card=${id}#card-${id}`;
+const cardLink = (id: number) => `/cards/${id}`;
 
 /** Home-page search: the scout's cards on a ticker and what else it knows; with no card, a button to research it now. */
 export default function TickerSearch() {

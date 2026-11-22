@@ -15,5 +15,5 @@ export default function ResearchButton({ observation, ticker, from }: { observat
   if (state === "idle") return <button className="chip" onClick={go}>Research it</button>;
   if (state === "busy") return <span className="small muted">researching… a minute or two</span>;
   const card = state.match(/^card #(\d+)/)?.[1];
-  return <span className="small">{card ? <a href={`/ideas?days=1&card=${card}#card-${card}`}>{state}</a> : <span className="neg"><LinkedText text={state} /></span>}</span>;
+  return <span className="small">{card ? <a href={`/cards/${card}`}>{state}</a> : <span className="neg"><LinkedText text={state} /></span>}</span>;
 }

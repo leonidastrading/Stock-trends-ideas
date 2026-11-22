@@ -85,7 +85,7 @@ export default function IdeaMap({ nodes: all }: { nodes: MapNode[] }) {
         ))}
         {pts.map((p) => {
           const ring = p.n.direction === "long" ? "var(--pos)" : p.n.direction === "short" ? "var(--neg)" : "var(--border)";
-          const href = p.n.cardId ? `/ideas?days=30&card=${p.n.cardId}#card-${p.n.cardId}` : chartUrl(p.n.symbol);
+          const href = p.n.cardId ? `/cards/${p.n.cardId}` : chartUrl(p.n.symbol);
           return (
             <a key={p.n.symbol} href={href} target={p.n.cardId ? undefined : "_blank"} rel="noreferrer" onMouseEnter={() => setHover(p.n.symbol)}>
               <g opacity={lit(p) ? 1 : 0.18}>

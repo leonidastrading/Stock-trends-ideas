@@ -61,7 +61,7 @@ describe("post-catalyst review", () => {
 
     expect(await pushReviews(r, env, ntfy)).toBe(1);
     expect(await pushReviews(r, env, ntfy)).toBe(0);
-    expect(pushes.at(-1)).toMatchObject({ topic: "trendscout-test", title: "▲ HUBB after the catalyst: played out", tags: ["white_check_mark"], click: `https://scout.example/ideas?days=30&card=${card.id}#card-${card.id}` });
+    expect(pushes.at(-1)).toMatchObject({ topic: "trendscout-test", title: "▲ HUBB after the catalyst: played out", tags: ["white_check_mark"], click: `https://scout.example/cards/${card.id}` });
     expect(String(pushes.at(-1)!.message)).toMatch(/Trade since entry: \+10%/);
   });
 

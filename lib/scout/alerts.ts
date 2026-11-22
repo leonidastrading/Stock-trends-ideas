@@ -12,7 +12,7 @@ const VERDICT: Record<string, { label: string; tag: string }> = {
 };
 
 export function cardLink(env: NodeJS.ProcessEnv, id: number): string | undefined {
-  return env.DASHBOARD_URL ? `${env.DASHBOARD_URL.replace(/\/$/, "")}/ideas?days=30&card=${id}#card-${id}` : undefined;
+  return env.DASHBOARD_URL ? `${env.DASHBOARD_URL.replace(/\/$/, "")}/cards/${id}` : undefined;
 }
 
 /** Pure: the pushes for a set of new cards; more than three are bundled into one. */

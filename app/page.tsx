@@ -17,7 +17,7 @@ import { Suspense } from "react";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const cardLink = (id: number) => `/ideas?days=90&card=${id}#card-${id}`;
+const cardLink = (id: number) => `/cards/${id}`;
 
 /** Home: the market at a glance, what is coming up on open paper tracks, and what the desks did. The cards live on Ideas. */
 export default async function Home({ searchParams }: { searchParams: Promise<{ days?: string; lo?: string; lpage?: string; spage?: string }> }) {

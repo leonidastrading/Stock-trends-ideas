@@ -237,7 +237,7 @@ export async function runCrowdingBatch(data: MarketData | null, now: Date, env: 
         alerts.push(`#${t.cardId} ${sym}`);
         const { pushConfigured, sendPush } = await import("../notify");
         const base = env.DASHBOARD_URL?.replace(/\/$/, "");
-        if (pushConfigured(env)) await sendPush({ title: `${t.direction === "long" ? "Trim" : "Cover"} signal: ${sym} (card #${t.cardId})`, message: `${sig} Paper only: the card's track is not changed.`, tags: ["busts_in_silhouette"], priority: 3, ...(base ? { click: `${base}/ideas?days=365&card=${t.cardId}#card-${t.cardId}` } : {}) }, env, fetchImpl).catch(() => undefined);
+        if (pushConfigured(env)) await sendPush({ title: `${t.direction === "long" ? "Trim" : "Cover"} signal: ${sym} (card #${t.cardId})`, message: `${sig} Paper only: the card's track is not changed.`, tags: ["busts_in_silhouette"], priority: 3, ...(base ? { click: `${base}/cards/${t.cardId}` } : {}) }, env, fetchImpl).catch(() => undefined);
       }
     }
   }

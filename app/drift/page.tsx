@@ -73,7 +73,7 @@ export default async function DriftPage() {
               {shortLine(s) ? <span className={s.short?.squeeze === "high" ? "warn" : ""}>{shortLine(s)} · </span> : null}{s.volRatio ? `event-day volume ${s.volRatio}× normal · ` : ""}{s.badAfter} bad headline{s.badAfter === 1 ? "" : "s"} since{s.lawsuitAds ? ` (+${s.lawsuitAds} law-firm lawsuit ads)` : ""} · strength {s.score}
             </div>
             <div className="small" style={{ marginTop: 4 }}>
-              {mine.length ? mine.map((c) => <a key={c.id} href={`/ideas?days=90&card=${c.id}#card-${c.id}`} style={{ marginRight: 8 }}>card #{c.id} ({c.status.replace("_", " ")})</a>) : <DriftResearch symbol={s.symbol} />}
+              {mine.length ? mine.map((c) => <a key={c.id} href={`/cards/${c.id}`} style={{ marginRight: 8 }}>card #{c.id} ({c.status.replace("_", " ")})</a>) : <DriftResearch symbol={s.symbol} />}
             </div>
             {s.headlines.length > 0 && (
               <details className="small"><summary>Bad headlines ({s.headlines.length})</summary>

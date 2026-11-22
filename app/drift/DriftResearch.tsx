@@ -14,5 +14,5 @@ export default function DriftResearch({ symbol }: { symbol: string }) {
   }
   if (state === "idle") return <button onClick={go}>Research {symbol} now</button>;
   if (state === "busy") return <span className="muted">Researching… a minute or two.</span>;
-  return state.cardId ? <a href={`/ideas?days=7&card=${state.cardId}#card-${state.cardId}`}>card #{state.cardId}: {String(state.status).replace("_", " ")}</a> : <span className="neg"><LinkedText text={state.error} /></span>;
+  return state.cardId ? <a href={`/cards/${state.cardId}`}>card #{state.cardId}: {String(state.status).replace("_", " ")}</a> : <span className="neg"><LinkedText text={state.error} /></span>;
 }

@@ -21,7 +21,7 @@ export default async function Readthrough() {
             <tbody>{e.suppliers.slice().sort((a, b) => b.confidence - a.confidence).map((s) => {
               const r = e.researched.find((x) => x.ticker === s.supplier);
               const card = r?.outcome.match(/card #(\d+)/)?.[1];
-              return <tr key={s.supplier}><td><Ticker symbol={s.supplier} /> <span className="muted">{s.name}</span></td><td>{s.supplies}</td><td>{s.url ? <a href={s.url} target="_blank" rel="noreferrer">{s.evidence}</a> : s.evidence}</td><td className={`num ${s.excess === null ? "muted" : s.excess >= READTHROUGH.notMovedPct ? "" : "pos"}`}>{s.excess === null ? "—" : `${s.excess > 0 ? "+" : ""}${s.excess}`}</td><td className="num">{s.confidence}</td><td>{card ? <a href={`/ideas?days=120&card=${card}#card-${card}`}>card #{card}</a> : r ? <span className="muted">{r.outcome}</span> : ""}</td></tr>;
+              return <tr key={s.supplier}><td><Ticker symbol={s.supplier} /> <span className="muted">{s.name}</span></td><td>{s.supplies}</td><td>{s.url ? <a href={s.url} target="_blank" rel="noreferrer">{s.evidence}</a> : s.evidence}</td><td className={`num ${s.excess === null ? "muted" : s.excess >= READTHROUGH.notMovedPct ? "" : "pos"}`}>{s.excess === null ? "—" : `${s.excess > 0 ? "+" : ""}${s.excess}`}</td><td className="num">{s.confidence}</td><td>{card ? <a href={`/cards/${card}`}>card #{card}</a> : r ? <span className="muted">{r.outcome}</span> : ""}</td></tr>;
             })}</tbody>
           </table></div>
         </div>

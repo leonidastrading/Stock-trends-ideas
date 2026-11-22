@@ -70,7 +70,7 @@ export function inline(text: string, tickers: ReadonlySet<string>, ctx: Ctx = { 
     else if (m[2]) out.push(<code key={k}>{m[2].slice(1, -1)}</code>);
     else if (m[3] || m[4]) {
       const s = m[3] ?? m[4];
-      out.push(...s.split(/(#\d+)/).map((part, j) => (/^#\d+$/.test(part) ? <a key={`${k}-${j}`} href={`/ideas?days=365&card=${part.slice(1)}#card-${part.slice(1)}`}>{part}</a> : part)));
+      out.push(...s.split(/(#\d+)/).map((part, j) => (/^#\d+$/.test(part) ? <a key={`${k}-${j}`} href={`/cards/${part.slice(1)}`}>{part}</a> : part)));
     } else {
       const sym = m[5].replace(/^\$/, "");
       const known = tickers.has(sym) && sym.length > 1 && !AMBIGUOUS.has(sym);
@@ -79,7 +79,7 @@ export function inline(text: string, tickers: ReadonlySet<string>, ctx: Ctx = { 
         const card = ctx.cards?.get(sym);
         if (card && !ctx.shown.has(sym)) {
           ctx.shown.add(sym);
-          out.push(<a key={`${k}-card`} className="card-chip" href={`/ideas?days=365&card=${card}#card-${card}`} title={`The scout's latest card on ${sym}`}>card #{card}</a>);
+          out.push(<a key={`${k}-card`} className="card-chip" href={`/cards/${card}`} title={`The scout's latest card on ${sym}`}>card #{card}</a>);
         }
       } else out.push(m[5]);
     }

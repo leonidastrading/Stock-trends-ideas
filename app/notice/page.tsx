@@ -38,7 +38,7 @@ export default async function NoticePage() {
                 <li key={c.id}>
                   <span className="small muted">{fmtEtAgo(c.createdAt)}</span>
                   <Direction direction={c.direction} ticker={c.primaryTicker} size="small" />
-                  <a href={`/ideas?days=365&card=${c.id}#card-${c.id}`}>{c.title}</a>
+                  <a href={`/cards/${c.id}`}>{c.title}</a>
                   <span className={`tag ${c.status}`}>{c.status.replace("_", " ")}</span>
                   {r && r.closed && <span className={`small ${r.ret >= 0 ? "pos" : "neg"}`}>{r.ret >= 0 ? "+" : "−"}{Math.abs(r.ret * 100).toFixed(1)}%</span>}
                   {tr?.invalidatedAt && <span className="tag neg">invalidated</span>}

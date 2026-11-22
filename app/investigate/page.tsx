@@ -91,7 +91,7 @@ function InvestigationView({ inv, open, researched, t }: { inv: Investigation; o
                     <Ticker symbol={x.ticker} className={x.direction === "long" ? "pos" : x.direction === "short" ? "neg" : "accent"} />{" "}
                     <span className={x.direction === "long" ? "pos" : x.direction === "short" ? "neg" : "muted"}>{x.direction === "long" ? "▲ long" : x.direction === "short" ? "▼ short" : "watch"}</span> · confidence {x.confidence} · {t(x.why)}
                     {x.catalyst && <span className="muted"> · catalyst: {t(x.catalyst)}{x.catalyst_date ? ` (${x.catalyst_date})` : ""}</span>}{" "}
-                    {done ? (done.cardId ? <a href={`/ideas?days=120&card=${done.cardId}#card-${done.cardId}`}>card #{done.cardId} ({done.outcome.replace("_", " ")})</a> : <span className="muted">researched: {done.outcome}</span>) : <ExposureResearch id={inv.id} ticker={x.ticker} />}
+                    {done ? (done.cardId ? <a href={`/cards/${done.cardId}`}>card #{done.cardId} ({done.outcome.replace("_", " ")})</a> : <span className="muted">researched: {done.outcome}</span>) : <ExposureResearch id={inv.id} ticker={x.ticker} />}
                   </li>
                 );
               })}

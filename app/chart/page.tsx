@@ -23,7 +23,7 @@ export default async function ChartPage({ searchParams }: { searchParams: Promis
         {symbol && info?.name ? <span className="small muted">{info.name}</span> : null}
       </form>
       {mine.length > 0 && (
-        <p className="small">Scout cards on {symbol} (last year): {mine.slice(0, 12).map((c, i) => <span key={c.id}>{i ? " · " : ""}<a href={`/ideas?days=365&card=${c.id}#card-${c.id}`}><span className={c.direction === "long" ? "pos" : "neg"}>{c.direction === "long" ? "▲" : "▼"}</span> #{c.id}</a> <span className="muted">{c.createdAt.slice(0, 10)}</span></span>)}</p>
+        <p className="small">Scout cards on {symbol} (last year): {mine.slice(0, 12).map((c, i) => <span key={c.id}>{i ? " · " : ""}<a href={`/cards/${c.id}`}><span className={c.direction === "long" ? "pos" : "neg"}>{c.direction === "long" ? "▲" : "▼"}</span> #{c.id}</a> <span className="muted">{c.createdAt.slice(0, 10)}</span></span>)}</p>
       )}
       {symbol ? <StockChart key={symbol} symbol={symbol} tvSymbol={tvSymbol(symbol, info?.exchange)} /> : <p className="small muted">Type a ticker to see its daily chart with earnings dates and the crash-and-bounce short setup.</p>}
     </>

@@ -7,7 +7,7 @@ export default function CardChips({ cards, max = 4 }: { cards: CardBrief[]; max?
   return (
     <>
       {xs.slice(0, max).map((c) => (
-        <a key={c.id} className="tag card-number" style={{ marginRight: 4 }} href={`/ideas?days=365&card=${c.id}#card-${c.id}`} title={`${c.direction} ${c.primaryTicker}, ${c.status.replace("_", " ")}, ${fmtEtAgo(c.createdAt)}`}>
+        <a key={c.id} className="tag card-number" style={{ marginRight: 4 }} href={`/cards/${c.id}`} title={`${c.direction} ${c.primaryTicker}, ${c.status.replace("_", " ")}, ${fmtEtAgo(c.createdAt)}`}>
           <span className={c.direction === "long" ? "pos" : "neg"}>{c.direction === "long" ? "▲" : "▼"}</span> #{c.id} <span className="muted">{c.status.replace("_", " ")}</span>
         </a>
       ))}

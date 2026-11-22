@@ -92,7 +92,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
       <div>
         <div className="inline">
           {hasDatabase() && <FavoriteStar cardId={c.id} initial={starred} />}
-          <a className="tag card-number" href={`/ideas?days=365&card=${c.id}#card-${c.id}`} title="Link to this card">#{c.id}</a>
+          <a className="tag card-number" href={`/cards/${c.id}`} title="Link to this card">#{c.id}</a>
           <span className={`tag ${c.status}`}>{c.status.replace("_", " ")}</span>
           <span className="tag">{KIND_LABEL[c.kind as Kind] ?? c.kind}</span>
           <a className="tag source-tag" href={fromUrl} target={/^https?:/.test(fromUrl) ? "_blank" : undefined} rel="noreferrer" title={`${from.note} · ${c.origin === "human" ? "human-originated" : "found by the scout"} · click to open`}>{from.tag} ↗</a>
@@ -134,7 +134,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
               ⚠ dangerous to short: {q.price < SCOUT.minShortPrice ? `under $${SCOUT.minShortPrice}` : `up ${q.changePct}% ${sessionLabel(q)}`}; defined-risk puts or no trade
             </span>
           ) : null}
-          {opposing?.length ?<span className="tag warn" style={{ marginLeft: 8 }}>⚠ opposite call on {c.primaryTicker}: {opposing.map((id) => <a key={id} href={`/ideas?days=90&card=${id}#card-${id}`}>#{id} </a>)}</span> : null}</div>
+          {opposing?.length ?<span className="tag warn" style={{ marginLeft: 8 }}>⚠ opposite call on {c.primaryTicker}: {opposing.map((id) => <a key={id} href={`/cards/${id}`}>#{id} </a>)}</span> : null}</div>
         <div className="small secondary">
           {nextE ? <>Next earnings <b>~{fmtDay(nextE)}</b> <span className="muted">({info!.nextBasis})</span></>
             : info?.lastEarnings ? <>Next earnings: not enough history to estimate <span className="muted">(last release {fmtDay(info.lastEarnings)})</span></>
@@ -166,7 +166,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
         <dt>Why not priced</dt><dd>{k.why_not_priced}</dd>
         <dt>Tickers</dt>
         <dd>{k.tickers.map((t, i) => <div key={t.symbol}><b><Ticker symbol={t.symbol} className={c.direction === "long" ? "pos" : "neg"}>{c.direction === "long" ? "▲" : "▼"} {t.symbol}</Ticker></b> {i === 0 ? <span className="tag">tracked on paper</span> : null}
-          {otherCards(t.symbol.toUpperCase()).slice(0, 6).map((b) => <a key={b.id} className="tag card-number" style={{ marginLeft: 4 }} href={`/ideas?days=90&card=${b.id}#card-${b.id}`} title={`Card #${b.id}, ${b.direction} ${b.primaryTicker}, ${b.status.replace("_", " ")}, ${fmtEtAgo(b.createdAt)}`}><span className={b.direction === "long" ? "pos" : "neg"}>{b.direction === "long" ? "▲" : "▼"}</span> #{b.id} <span className="muted">{fmtDay(toEt(new Date(b.createdAt)).date).replace(/, \d{4}$/, "")}</span></a>)} <span className="small muted">({t.sector.replace("_", " ")}{t.revenue_share_pct === null ? ", share unknown" : `, ${t.revenue_share_pct}% of revenue${t.share_is_estimate ? " (estimate)" : ""}`})</span> — {t.why}</div>)}</dd>
+          {otherCards(t.symbol.toUpperCase()).slice(0, 6).map((b) => <a key={b.id} className="tag card-number" style={{ marginLeft: 4 }} href={`/cards/${b.id}`} title={`Card #${b.id}, ${b.direction} ${b.primaryTicker}, ${b.status.replace("_", " ")}, ${fmtEtAgo(b.createdAt)}`}><span className={b.direction === "long" ? "pos" : "neg"}>{b.direction === "long" ? "▲" : "▼"}</span> #{b.id} <span className="muted">{fmtDay(toEt(new Date(b.createdAt)).date).replace(/, \d{4}$/, "")}</span></a>)} <span className="small muted">({t.sector.replace("_", " ")}{t.revenue_share_pct === null ? ", share unknown" : `, ${t.revenue_share_pct}% of revenue${t.share_is_estimate ? " (estimate)" : ""}`})</span> — {t.why}</div>)}</dd>
         <dt>Lateness</dt>
         <dd className={k.lateness.already_obvious ? "warn" : ""}>{pct(k.lateness.stock_move_30d_pct)} over 30 days, {pct(k.lateness.stock_move_90d_pct)} over 90 days, {k.lateness.news_stories_30d} mainstream stories in 30 days{k.lateness.already_obvious ? " — already obvious" : ""}</dd>
         <CardSignals cardId={c.id} symbol={c.primaryTicker} />

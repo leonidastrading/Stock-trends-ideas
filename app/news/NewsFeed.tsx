@@ -108,7 +108,7 @@ export default function NewsFeed({ initial }: { initial: FeedItem[] }) {
             {i.event && <span className="tag">{i.event}</span>}
             {i.buzz >= 3 && <span className="tag warn" title="headlines on this stock in the last 6 hours">{i.buzz} in 6h</span>}
             {(i.cardRefs ?? i.cardIds.map((id) => ({ id, ticker: "", direction: "long" as const, via: null }))).slice(0, 3).map((r) => (
-              <a key={r.id} className="tag promoted" href={`/ideas?days=30&card=${r.id}#card-${r.id}`} title={r.ticker ? `Card #${r.id}: ${r.direction} ${r.ticker}${r.via ? `. The card also names ${r.via}, which this story is about` : ""}` : undefined}>
+              <a key={r.id} className="tag promoted" href={`/cards/${r.id}`} title={r.ticker ? `Card #${r.id}: ${r.direction} ${r.ticker}${r.via ? `. The card also names ${r.via}, which this story is about` : ""}` : undefined}>
                 card #{r.id}{r.ticker ? <> · <span className={r.direction === "long" ? "pos" : "neg"}>{r.direction === "long" ? "▲" : "▼"}</span> {r.ticker}</> : null}{r.via ? <span className="muted"> (names {r.via})</span> : null}
               </a>
             ))}

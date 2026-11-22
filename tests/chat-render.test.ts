@@ -10,7 +10,7 @@ describe("chat reply formatting", () => {
   it("headings, bullets, bold, card links and coloured tickers", () => {
     const out = html(`**Macro read: rates moved**\n- Cards #75 (LDI) and #107 (RKT/LDI) list "10-year above 4.95%".\n- **Short MSTR** into the MSCI review; FOMC on Dec 9.\n\nIf you want just one: **AAON short** is the most independent; $XYZ too.`);
     expect(out).toContain("<h4>Macro read: rates moved</h4>");
-    expect(out).toContain(`<ul><li>Cards <a href="/ideas?days=365&amp;card=75#card-75">#75</a> (${tk("LDI")}) and <a href="/ideas?days=365&amp;card=107#card-107">#107</a> (${tk("RKT")}/${tk("LDI")})`);
+    expect(out).toContain(`<ul><li>Cards <a href="/cards/75">#75</a> (${tk("LDI")}) and <a href="/cards/107">#107</a> (${tk("RKT")}/${tk("LDI")})`);
     expect(out).toContain(`<li><b>Short ${tk("MSTR")}</b> into the MSCI review; FOMC on Dec 9.</li></ul>`);
     expect(out).toContain(`<p>If you want just one: <b>${tk("AAON")} short</b> is the most independent; ${tk("XYZ", "$XYZ")} too.</p>`);
   });
@@ -35,7 +35,7 @@ describe("tickers in replies link to TradingView and to the scout's card", () =>
     expect(html).toContain('href="/api/chart/FSK"');
     expect(html).toContain('href="/api/chart/ARCC"');
     expect(html.match(/card #152/g)).toHaveLength(1); // once per reply
-    expect(html).toContain('href="/ideas?days=365&amp;card=152#card-152"');
+    expect(html).toContain('href="/cards/152"');
     expect(html).not.toContain("/api/chart/ETN"); // "ETN" here means an exchange-traded note
   });
 });

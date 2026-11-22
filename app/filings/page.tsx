@@ -75,7 +75,7 @@ export default async function FilingsPage() {
                   <td><span className="tag">{s.kind}</span></td>
                   <td><b className={s.direction === "long" ? "pos" : "neg"}>{s.direction === "long" ? "▲" : "▼"} {s.symbol}</b></td>
                   <td className="small">{s.trigger[0]?.note}{/insider/.test(s.kind) ? <span className="muted"> · chart ▾</span> : null}</td>
-                  <td className="small">{c ? (c.cardId ? <a href={`/ideas?days=30&card=${c.cardId}#card-${c.cardId}`}>card #{c.cardId}</a> : <LinkedText text={`${c.outcome}${c.reason ? `: ${c.reason}` : ""}`} />) : <span className="muted">queued</span>}</td>
+                  <td className="small">{c ? (c.cardId ? <a href={`/cards/${c.cardId}`}>card #{c.cardId}</a> : <LinkedText text={`${c.outcome}${c.reason ? `: ${c.reason}` : ""}`} />) : <span className="muted">queued</span>}</td>
                 </>
               );
               // Insider signals open a chart of the stock with every buy by these insiders and how many shares.

@@ -153,7 +153,7 @@ export default async function RumorsPage({ searchParams }: { searchParams: Promi
             {v && v.status === "open" && <Verdict c={v} />}
             {r.quote && <details className="small"><summary>Quote</summary>&ldquo;{r.quote}&rdquo;</details>}
             <div className="small rumor-actions" style={{ marginTop: 4 }}>
-              {done ? (done.cardId ? <a href={`/ideas?days=90&card=${done.cardId}#card-${done.cardId}`}>checked: card #{done.cardId} ({done.outcome.replace("_", " ")})</a> : <span className="muted">checked: <LinkedText text={done.outcome} /></span>) : <RumorResearch id={r.id} />}
+              {done ? (done.cardId ? <a href={`/cards/${done.cardId}`}>checked: card #{done.cardId} ({done.outcome.replace("_", " ")})</a> : <span className="muted">checked: <LinkedText text={done.outcome} /></span>) : <RumorResearch id={r.id} />}
               <RumorInvestigate text={rumorDetails(r, v)} />
               <CardAsk symbol={r.tickers[0] ?? ""} tickers={r.tickers} noun="rumor" subject={`rumor #${r.id} (${r.tickers.join(", ") || r.category}): ${r.claim.slice(0, 140)}`} context={rumorDetails(r, v)} />
             </div>

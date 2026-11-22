@@ -15,7 +15,7 @@ export function ThemeResearch({ run, index }: { run: number; index: number }) {
   }
   if (state === "idle") return <button className="small" onClick={go}>Research it (card)</button>;
   if (state === "busy") return <span className="small muted">Researching… a minute or two.</span>;
-  return state.cardId ? <a className="small" href={`/ideas?days=7&card=${state.cardId}#card-${state.cardId}`}>card #{state.cardId}: {String(state.status).replace("_", " ")}</a> : <span className="small neg"><LinkedText text={state.error} /></span>;
+  return state.cardId ? <a className="small" href={`/cards/${state.cardId}`}>card #{state.cardId}: {String(state.status).replace("_", " ")}</a> : <span className="small neg"><LinkedText text={state.error} /></span>;
 }
 
 /** Read the sources again now (one AI call, within the Themes budget). */
