@@ -31,6 +31,18 @@ const SHORT_BANDS = [
   { key: "lt5", label: "Short under 5% of float", lo: 0, hi: 5 }, { key: "5", label: "5–10%", lo: 5, hi: 10 }, { key: "10", label: "10–20%", lo: 10, hi: 20 },
   { key: "20", label: "20%+", lo: 20, hi: Infinity }, { key: "unknown", label: "short interest unknown", lo: NaN, hi: NaN },
 ] as const;
+/** The card's own scores as filters (in % as shown on the card): three bands each, so the counts add up. */
+const SCORE_FILTERS = [
+  { param: "nov", label: "novelty", get: (c: store.StoredCard) => c.card.scores.novelty * 10 },
+  { param: "mat", label: "materiality", get: (c: store.StoredCard) => c.card.scores.materiality * 10 },
+  { param: "evi", label: "evidence", get: (c: store.StoredCard) => c.card.scores.breadth_of_evidence * 10 },
+  { param: "early", label: "early", get: (c: store.StoredCard) => c.card.scores.lateness * 10 },
+  { param: "rank", label: "rank", get: (c: store.StoredCard) => c.rankScore },
+] as const;
+type ScoreParam = (typeof SCORE_FILTERS)[number]["param"];
+const SCORE_BANDS = (param: ScoreParam) => (param === "rank"
+  ? [{ key: "lt30", label: "under 30%", lo: 0, hi: 30 }, { key: "30", label: "30–49%", lo: 30, hi: 50 }, { key: "50", label: "50%+", lo: 50, hi: Infinity }]
+  : [{ key: "lt50", label: "under 50%", lo: 0, hi: 50 }, { key: "50", label: "50–69%", lo: 50, hi: 70 }, { key: "70", label: "70%+", lo: 70, hi: Infinity }]);
 const PAGE = 10;
 
 /** Where a card came from, in words: the desk or person, and the story / document / signal behind it. */
@@ -40,7 +52,7 @@ function fromLine(player: Player, term: string, src: { tag: string; url: string 
   return <>{src ? <a href={src.url}>{src.tag}</a> : PLAYER_LABEL[player]}{what ? ` · ${what}` : ""} <span className="muted">(scored as {PLAYER_LABEL[player]})</span></>;
 }
 
-type SP = { days?: string; source?: string; status?: string; sort?: string; conf?: string; cap?: string; short?: string; dir?: string; penny?: string; page?: string; card?: string };
+type SP = { days?: string; source?: string; status?: string; sort?: string; conf?: string; cap?: string; short?: string; dir?: string; penny?: string; page?: string; card?: string } & Partial<Record<ScoreParam, string>>;
 
 export default async function IdeasPage({ searchParams }: { searchParams: Promise<SP> }) {
   if (!hasDatabase()) return <SetupNotice />;
@@ -53,7 +65,8 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   const cap = SIZE_KEYS.some((s) => s.key === sp.cap) || sp.cap === "unknown" ? sp.cap! : "";
   const dir = sp.dir === "long" || sp.dir === "short" ? sp.dir : "";
   const shortBand = SHORT_BANDS.some((b) => b.key === sp.short) ? sp.short! : "";
-  const params: Record<string, string | undefined> = { days: days === 7 ? undefined : String(days), source: source || undefined, status: status || undefined, sort: sort === "best" ? undefined : sort, conf: conf || undefined, cap: cap || undefined, short: shortBand || undefined, dir: dir || undefined, page: sp.page };
+  const scoreSel = Object.fromEntries(SCORE_FILTERS.map((f) => [f.param, SCORE_BANDS(f.param).some((b) => b.key === sp[f.param]) ? sp[f.param]! : ""])) as Record<ScoreParam, string>;
+  const params: Record<string, string | undefined> = { days: days === 7 ? undefined : String(days), source: source || undefined, status: status || undefined, sort: sort === "best" ? undefined : sort, conf: conf || undefined, cap: cap || undefined, short: shortBand || undefined, dir: dir || undefined, ...Object.fromEntries(SCORE_FILTERS.map((f) => [f.param, scoreSel[f.param] || undefined])), page: sp.page };
 
   const [cards, candidates, tracks, fb, recent] = await Promise.all([store.cardsSince(days), store.candidatesSince(days), store.allTracks(), store.latestFeedback(), store.cardsSince(120)]);
   const [reviews, profiles] = await Promise.all([store.allReviews(), profilesForCards(cards)]);
@@ -77,6 +90,14 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
     return c.card.confidence >= b.lo && c.card.confidence < b.hi;
   };
   const dirOk = (c: store.StoredCard, d = dir) => !d || c.direction === d;
+  /** Every score filter, with one of them replaced (for that filter's own counts). */
+  const scoresOk = (c: store.StoredCard, over?: { param: ScoreParam; key: string }) => SCORE_FILTERS.every((f) => {
+    const k = over && over.param === f.param ? over.key : scoreSel[f.param];
+    if (!k) return true;
+    const b = SCORE_BANDS(f.param).find((x) => x.key === k)!;
+    const v = f.get(c);
+    return v >= b.lo && v < b.hi;
+  });
   const opp = opposingCalls(recent, tracks);
   const t = new Map(tracks.map((x) => [x.cardId, x]));
   const termOf = new Map(candidates.filter((c) => c.cardId !== null).map((c) => [c.cardId!, c.term]));
@@ -101,7 +122,7 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   // One list of every card in the window: filtered by source and status, sorted, 10 a page.
   const wantedId = Number(sp.card);
   const bySource = cards.filter((c) => (!repeats.has(c.id) || c.id === wantedId) && (!source || playerFor(c) === source) && (showPenny || !penny.has(c.id) || c.id === wantedId));
-  const byConf = bySource.filter((c) => confOk(c) && capOk(c) && shortOk(c) && dirOk(c));
+  const byConf = bySource.filter((c) => confOk(c) && capOk(c) && shortOk(c) && dirOk(c) && scoresOk(c));
   const rows = byConf.filter((c) => !status || c.status === status).sort((a, b) =>
     sort === "newest" ? b.createdAt.localeCompare(a.createdAt)
       : sort === "confidence" ? b.card.confidence - a.card.confidence || b.rankScore - a.rankScore
@@ -115,15 +136,16 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   const shownCards = cards.filter((c) => !repeats.has(c.id));
   for (const c of shownCards) sourceCounts.set(playerFor(c), (sourceCounts.get(playerFor(c)) ?? 0) + 1);
   const statusCount = (v: string) => byConf.filter((c) => !v || c.status === v).length;
-  const confCount = (n: string) => bySource.filter((c) => (!status || c.status === status) && confOk(c, n) && capOk(c) && shortOk(c) && dirOk(c)).length;
-  const capCount = (k: string) => bySource.filter((c) => (!status || c.status === status) && confOk(c) && capOk(c, k) && shortOk(c) && dirOk(c)).length;
-  const shortCount = (m: string) => bySource.filter((c) => (!status || c.status === status) && confOk(c) && capOk(c) && shortOk(c, m) && dirOk(c)).length;
-  const dirCount = (d: string) => bySource.filter((c) => (!status || c.status === status) && confOk(c) && capOk(c) && shortOk(c) && dirOk(c, d)).length;
+  const confCount = (n: string) => bySource.filter((c) => (!status || c.status === status) && confOk(c, n) && capOk(c) && shortOk(c) && dirOk(c) && scoresOk(c)).length;
+  const capCount = (k: string) => bySource.filter((c) => (!status || c.status === status) && confOk(c) && capOk(c, k) && shortOk(c) && dirOk(c) && scoresOk(c)).length;
+  const shortCount = (m: string) => bySource.filter((c) => (!status || c.status === status) && confOk(c) && capOk(c) && shortOk(c, m) && dirOk(c) && scoresOk(c)).length;
+  const dirCount = (d: string) => bySource.filter((c) => (!status || c.status === status) && confOk(c) && capOk(c) && shortOk(c) && dirOk(c, d) && scoresOk(c)).length;
+  const scoreCount = (param: ScoreParam, key: string) => bySource.filter((c) => (!status || c.status === status) && confOk(c) && capOk(c) && shortOk(c) && dirOk(c) && scoresOk(c, { param, key })).length;
 
   return (
     <>
       <h1>Ideas</h1>
-      <RememberFilters keys={["days", "sort", "status", "source", "conf", "cap", "short", "dir"]} />
+      <RememberFilters keys={["days", "sort", "status", "source", "conf", "cap", "short", "dir", ...SCORE_FILTERS.map((f) => f.param)]} />
       <TickerSearch />
       <details className="card notice small section">
         <summary><b>How this page works</b></summary>
@@ -144,6 +166,14 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
       <div className="toolbar">
         <FilterLinks params={params} name="conf" value={conf} reset={["page", "card"]} options={[{ value: "", label: "Any confidence", count: confCount("") }, ...CONF_BANDS.map((b) => ({ value: b.key, label: b.label, count: confCount(b.key) }))]} />
       </div>
+      <details className="score-filters" open={SCORE_FILTERS.some((f) => scoreSel[f.param])}>
+        <summary className="small">Scores: novelty, materiality, evidence, early, rank{SCORE_FILTERS.some((f) => scoreSel[f.param]) ? ` (${SCORE_FILTERS.filter((f) => scoreSel[f.param]).length} on)` : ""}</summary>
+        {SCORE_FILTERS.map((f) => (
+          <div className="toolbar" key={f.param}>
+            <FilterLinks params={params} name={f.param} value={scoreSel[f.param]} reset={["page", "card"]} options={[{ value: "", label: `Any ${f.label}`, count: scoreCount(f.param, "") }, ...SCORE_BANDS(f.param).map((b) => ({ value: b.key, label: `${f.label[0].toUpperCase()}${f.label.slice(1)} ${b.label}`, count: scoreCount(f.param, b.key) }))]} />
+          </div>
+        ))}
+      </details>
       <div className="toolbar">
         <FilterLinks params={params} name="cap" value={cap} reset={["page", "card"]} options={[{ value: "", label: "Any size", count: capCount("") }, ...SIZE_KEYS.map((s) => ({ value: s.key, label: s.label, count: capCount(s.key) })), { value: "unknown", label: "size unknown", count: capCount("unknown") }]} />
       </div>

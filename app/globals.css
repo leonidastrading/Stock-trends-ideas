@@ -476,3 +476,6 @@ a.source-tag:hover { background: color-mix(in srgb, var(--accent) 14%, transpare
 .scores-details > summary.scores { cursor: pointer; list-style: none; }
 .scores-details > summary.scores::-webkit-details-marker { display: none; }
 .scores-details > summary.scores::after { content: "ⓘ"; color: var(--text-muted); }
+
+.score-filters { margin: 4px 0 8px; }
+.score-filters > summary { cursor: pointer; color: var(--text-secondary); padding: 4px 0; }
