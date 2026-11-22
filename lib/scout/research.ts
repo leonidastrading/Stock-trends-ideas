@@ -217,11 +217,11 @@ export async function researchCandidate(input: ResearchInput, deps: ResearchDeps
   // The name each symbol trades as and its next earnings, for the card's header.
   await import("./symbols").then(({ refreshSymbolInfo }) => refreshSymbolInfo(deps.data, deps.env, gated.card.tickers.map((t) => t.symbol), deps.now, 20, deps.fetchImpl)).catch(() => undefined);
 
-  // Paper track for promoted and late cards: entry at the next open, exit at the earlier of catalyst + 1 day and the time limit.
+  // Paper track for promoted and late cards: entry at the next open, exit at the card's time limit (or earlier when its
+  // invalidation is marked). The catalyst date no longer ends the trade (it did before EXIT_RULE "time_limit"): a card
+  // whose catalyst fell on its entry day was closed after one night, against the time it said it needed.
   if (gated.status !== "not_promoted") {
-    const byLimit = addDays(et.date, gated.card.time_limit_days);
-    const byCatalyst = cDate && cDate >= et.date ? addDays(cDate, 1) : null;
-    const deadline = byCatalyst && byCatalyst < byLimit ? byCatalyst : byLimit;
+    const deadline = addDays(et.date, gated.card.time_limit_days);
     await store.insertTrack({ cardId: stored.id, symbol: stored.primaryTicker, sectorEtf: SECTORS[stored.sector as Sector], direction: stored.direction, cardDate: et.date, deadlineDate: deadline });
   }
 

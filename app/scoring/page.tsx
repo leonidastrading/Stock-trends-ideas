@@ -51,7 +51,7 @@ export default async function ScoringPage({ searchParams }: { searchParams: Prom
     <>
       <h1>Scoring</h1>
       <section className="card notice small">
-        Per version. Each idea runs on paper from the next open after its card to the earlier of the day after the catalyst, the time limit, or the invalidation being marked. Return against SPY and the sector fund over the same days; worst drawdown while held. Open ideas are shown at the latest close and not counted in the statistics. Forward results only: no past dates are replayed through the model.
+        Per version. Each idea runs on paper from the next open after its card to its time limit, or until its invalidation is marked (cards from versions before this rule also ended the day after their catalyst). Return against SPY and the sector fund over the same days; worst drawdown while held. Open ideas are shown at the latest close and not counted in the statistics. Forward results only: no past dates are replayed through the model.
         <div className="inline" style={{ marginTop: 6 }}>Version: {versions.map((v) => <a key={v.id} href={`?v=${v.id}`} className={v.id === vid ? "tag ok" : "tag"}>v{v.id} · {v.model} · {v.effort}</a>)}{version && <span className="muted">hash {version.hash.slice(0, 12)} · since {toEt(new Date(version.createdAt)).date}</span>}</div>
       </section>
 

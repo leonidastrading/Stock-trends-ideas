@@ -118,7 +118,7 @@ CREATE TABLE IF NOT EXISTS tracks (
   entry_price double precision,
   spy_entry double precision,
   sector_entry double precision,
-  deadline_date date NOT NULL,       -- earlier of catalyst + 1 day and the time limit
+  deadline_date date NOT NULL,       -- the time limit (cards before exit rule "time_limit": earlier of catalyst + 1 day and the time limit)
   exit_date date,
   exit_price double precision,
   spy_exit double precision,

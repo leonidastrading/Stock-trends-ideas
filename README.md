@@ -336,8 +336,9 @@ anything else happens. Cards, versions and track events are append-only, enforce
 ### Scoring
 
 Every promoted and late card is tracked on paper whether or not Vadim taps it. Entry is the open of the first session
-after the card. Exit is the open of the first session at or after the earlier of: the day after the catalyst, the time
-limit, or the day after the invalidation was marked. For each idea: return, SPY and the sector fund over the same days,
+after the card. Exit is the open of the first session at or after the earlier of: the time limit, or the day after the
+invalidation was marked. (Versions before the "time_limit" exit rule also exited the day after the catalyst; a card whose
+catalyst fell on its entry day was then closed after one night.) For each idea: return, SPY and the sector fund over the same days,
 excess return, and the worst intraday drawdown while held. Open ideas are shown at the latest close and not counted.
 
 Per version: **scout-originated**, **human-originated** and **human ideas Vadim tapped** (count, win rate against SPY,

@@ -60,7 +60,7 @@ describe("research → card → track", () => {
     expect(r.card.card.lateness.stock_move_30d_pct).toBeCloseTo(2, 0); // one day of 2% drift in the fake bars
     expect(prompts[0]).toMatch(/11 filings vs 3\/month/);
     const t = await store.getTrack(r.card.id);
-    expect(t).toMatchObject({ symbol: "HUBB", sectorEtf: "XLI", cardDate: "2026-11-10", deadlineDate: "2027-01-29", entryDate: null }); // day after the 2027-01-28 catalyst
+    expect(t).toMatchObject({ symbol: "HUBB", sectorEtf: "XLI", cardDate: "2026-11-10", deadlineDate: "2027-02-08", entryDate: null }); // the 90-day time limit (the 2027-01-28 catalyst no longer ends the trade)
     expect((await store.spendOn("2026-11-10")).cost).toBeCloseTo(0.014);
     expect((await store.candidatesSince(1))[0]).toMatchObject({ outcome: "card", reason: "promoted", cardId: r.card.id });
   });
