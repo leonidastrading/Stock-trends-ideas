@@ -2,7 +2,9 @@
  * Your websites: sites Vadim added in Settings. Once a day each is read (feed first,
  * page links otherwise); articles that are new since the last read are read by the
  * model for trade ideas, and those ideas go to research as the "your websites" player.
- * Articles already on the site when it was added are recorded, never researched.
+ * Articles already on the site when it was added are recorded; "Read the latest 10" (on adding, or any time) reads
+ * the newest ten articles or PDF reports now. Everything read is also kept as a digest (stocks, summary, claims)
+ * that research, Dots, the chat and cards use (lib/scout/site-digest.ts).
  */
 import { articleText, cleanSiteUrl, readSite, type Article } from "../sources/site";
 import type { ImportItem } from "./importer";
@@ -77,6 +79,8 @@ export async function checkSite(site: store.Site, deps: ResearchDeps, deliver: (
   const now = newOnes.slice(0, SITES.maxArticlesPerRead);
   await store.setArticleOutcome(newOnes.slice(SITES.maxArticlesPerRead).map((a) => a.url), `skipped: more than ${SITES.maxArticlesPerRead} new in one day`);
   const withText = await Promise.all(now.map(async (a) => ({ ...a, text: read.via === "feed" && a.summary.length > 600 ? a.summary : await articleText(a.url, 3000, fetchImpl) })));
+  // Kept as digests for research, Dots, the chat and cards (best effort; a spent budget leaves them out).
+  await import("./site-digest").then(({ digestArticles }) => digestArticles(site, withText, deps)).catch(() => 0);
   // A site marked for rumors: its new articles go to the Rumors tab (claims catalogued, nothing researched).
   if (site.kind === "rumors") {
     try {
@@ -108,6 +112,51 @@ export async function checkSite(site: store.Site, deps: ResearchDeps, deliver: (
     await store.siteChecked(site.id, "ok", `${newOnes.length} new; reading failed: ${error}`, feed);
     return { site: site.label, status: "ok", newArticles: newOnes.length, error };
   }
+}
+
+export const LATEST = { articles: 10, ideas: 4, chars: 5000 };
+
+/**
+ * Read a site's newest articles or PDF reports now (by default 10, whether or not they were already there when the
+ * site was added): digests kept for research, Dots, chat and cards; a rumors site's claims go to the Rumors tab,
+ * an ideas site's trade ideas to research (up to 4).
+ */
+export async function readLatest(site: store.Site, deps: ResearchDeps, deliver: (items: ImportItem[], label: string) => Promise<string>, n = LATEST.articles, fetchImpl?: typeof fetch): Promise<string> {
+  let read;
+  try {
+    read = await readSite(site.url, site.feedUrl, fetchImpl);
+  } catch (err) {
+    const error = friendlyError(err).slice(0, 300);
+    await store.siteChecked(site.id, "down", error);
+    return `${site.label}: ${error}`;
+  }
+  await store.addSiteArticles(site.id, read.articles, false);
+  const latest = read.articles.slice(0, n);
+  if (!latest.length) return `${site.label}: nothing to read`;
+  const withText = await Promise.all(latest.map(async (a) => ({ ...a, text: read.via === "feed" && a.summary.length > 600 ? a.summary : await articleText(a.url, LATEST.chars, fetchImpl) })));
+  const parts: string[] = [];
+  const digested = await import("./site-digest").then(({ digestArticles }) => digestArticles(site, withText, deps)).catch((e) => { parts.push(e instanceof Error && e.message === "capped" ? "digests waiting for the AI budget" : `digests failed: ${e instanceof Error ? e.message.slice(0, 80) : String(e)}`); return 0; });
+  parts.unshift(`${latest.length} read (${withText.filter((a) => a.text).length} with text), ${digested} kept for research`);
+  const doc = withText.map((a) => `--- ${a.title}\nURL: ${a.url}${a.published ? `\nPublished: ${a.published.slice(0, 10)}` : ""}\n${a.text || a.summary}`).join("\n\n");
+  try {
+    if (site.kind === "rumors") {
+      const { readRumorDoc } = await import("./rumors");
+      const r = await readRumorDoc(doc, `${site.label} (latest ${latest.length})`, { ...deps, data: deps.data ?? null });
+      parts.push(`${r.rumors} rumor(s) to the Rumors tab${r.error ? ` (${r.error})` : ""}`);
+      await store.setArticleOutcome(latest.map((a) => a.url), `read (latest ${n}): ${r.rumors} rumor(s)`);
+    } else {
+      const { ideasFrom } = await import("./inbox");
+      const { items } = await ideasFrom(articlesDocument(site.label, withText), `the latest articles on ${site.label}`, deps);
+      const ideas = items.slice(0, LATEST.ideas).map((it) => ({ ...it, source: "site" as const, sources: [...new Set([...(it.sources ?? []), ...latest.map((a) => a.url)])].slice(0, 10) }));
+      parts.push(ideas.length ? await deliver(ideas, site.label.slice(0, 40)) : "no tradeable idea");
+      await store.setArticleOutcome(latest.map((a) => a.url), ideas.length ? `read (latest ${n}): ${ideas.map((i) => i.term).join("; ")}` : `read (latest ${n}): no tradeable idea`);
+    }
+  } catch (err) {
+    parts.push(`ideas not read: ${err instanceof Error ? err.message.slice(0, 120) : String(err)}`);
+  }
+  const line = `${site.label}: ${parts.join("; ")}`;
+  await store.siteChecked(site.id, "ok", line.slice(0, 300), { feedUrl: read.feedUrl, via: read.via });
+  return line;
 }
 
 /** The daily pass, from housekeeping: each active site not read in the last `everyHours`, until the deadline. */

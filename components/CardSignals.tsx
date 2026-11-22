@@ -2,6 +2,7 @@ import { hasDatabase } from "@/lib/db";
 import { crowdingFor, STAGE_LABEL, timing, type CrowdingRow } from "@/lib/scout/crowding";
 import { diffsFor } from "@/lib/scout/filing-diff";
 import { coverageOf } from "@/lib/sources/coverage";
+import { digestsFor } from "@/lib/scout/site-digest";
 
 const FLAG: Record<string, [string, string]> = { red_flag: ["red flag", "error"], positive: ["positive", "ok"], mixed: ["mixed", "late"], routine: ["routine", ""], no_prior: ["no prior year", ""], error: ["not read", ""] };
 
@@ -27,11 +28,11 @@ function Reading({ r, label }: { r: CrowdingRow; label: string }) {
 /** On a card: how crowded the stock was when the card was written and is now, analyst coverage, and the latest filing change. */
 export default async function CardSignals({ cardId, symbol }: { cardId: number; symbol: string }) {
   if (!hasDatabase()) return null;
-  const [crowd, cov, diffs] = await Promise.all([crowdingFor([cardId]).catch(() => new Map()), coverageOf([symbol]).catch(() => new Map()), diffsFor([symbol], 1).catch(() => [])]);
+  const [crowd, cov, diffs, sites] = await Promise.all([crowdingFor([cardId]).catch(() => new Map()), coverageOf([symbol]).catch(() => new Map()), diffsFor([symbol], 1).catch(() => []), digestsFor([symbol], 60, 3).catch(() => [])]);
   const c = crowd.get(cardId);
   const cv = cov.get(symbol);
   const d = diffs[0];
-  if (!c?.entry && !c?.latest && !cv && !d) return null;
+  if (!c?.entry && !c?.latest && !cv && !d && !sites.length) return null;
   return (
     <>
       {(c?.entry || c?.latest) && <><dt>Crowding</dt><dd className="small">
@@ -39,6 +40,7 @@ export default async function CardSignals({ cardId, symbol }: { cardId: number; 
         {c.latest && <Reading r={c.latest} label={`latest (${c.latest.measuredOn})`} />}
         <div className="muted">Rules of thumb from the research, not a tested model: early (stage 0–1) is the best entry; late (3–4) means the crowd is there. The scoreboard checks whether it helps.</div>
       </dd></>}
+      {sites.length > 0 && <><dt>Your websites</dt><dd className="small">{sites.map((x) => <div key={x.url}><a href={x.url} target="_blank" rel="noreferrer">{x.title}</a> <span className="muted">({x.site}{x.published ? `, ${x.published.slice(0, 10)}` : ""})</span> — {x.summary}</div>)}</dd></>}
       {cv && <><dt>Analyst coverage</dt><dd className="small">{cv.analysts === null ? "not known" : <><b className={cv.band === "low" ? "pos" : ""}>{cv.band} coverage</b> <span className="muted">({cv.analysts} analyst{cv.analysts === 1 ? "" : "s"}, Finnhub)</span></>}</dd></>}
       {d && <><dt>Filing changes</dt><dd className="small">
         <span className={`tag ${FLAG[d.flag]?.[1] ?? ""}`}>{FLAG[d.flag]?.[0] ?? d.flag}</span> <a href={d.url} target="_blank" rel="noreferrer">{d.form} filed {d.filed}</a> vs <a href={d.priorUrl ?? "#"} target="_blank" rel="noreferrer">a year earlier</a>

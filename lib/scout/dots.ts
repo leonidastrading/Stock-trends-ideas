@@ -194,6 +194,7 @@ export async function gatherScan(now: Date, fetchImpl?: typeof fetch): Promise<S
     { heading: "stories the story desk followed this week", items: [...new Map(stories.map((e) => [e.key, e])).values()].slice(-25).map((e) => `${e.symbols.join("/")}: ${e.summary.slice(0, 200)}`) },
     { heading: "the user's own investigations (follow-the-money reports from public records)", items: (work?.investigations ?? []).slice(0, 10).map((l) => l.slice(0, 260)) },
     { heading: "new lawsuits (securities class actions, ITC patent cases)", items: (work?.court ?? []).slice(0, 20) },
+    { heading: "articles and research reports from the user's websites (last 7 days)", items: (work?.sites ?? []).slice(0, 15) },
     { heading: "most-discussed posts in the finance subreddits, last 24 hours", items: reddit.map((p) => `r/${p.sub} (${p.comments} comments): ${p.title.slice(0, 200)}`) },
     { heading: "the AI trade as a whole (measured from prices; the market's biggest theme)", items: backdrop && backdrop.regime !== "unknown" ? [`regime: ${backdrop.regime}; ${backdrop.below50} of ${backdrop.names} AI leaders below their 50-day average; median ${backdrop.medianOffHigh}% from 3-month highs; basket ${backdrop.basket20}% over 20 sessions vs SPY ${backdrop.spy20}%${backdrop.over20Off.length ? `; more than 20% off highs: ${backdrop.over20Off.join(", ")}` : ""}${backdrop.bubbleNews !== null ? `; AI-bubble / sell-off headlines ${backdrop.bubbleNews} this week vs ${backdrop.bubbleNewsBefore} the week before` : ""}`] : [] },
   ]);

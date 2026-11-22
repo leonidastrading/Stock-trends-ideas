@@ -16,9 +16,10 @@ import { addDays, toEt } from "../time";
  * 3 = filing changes (10-K / 10-Q vs a year earlier), crowding (score and stage) and analyst coverage;
  * 4 = research also reads the AI-trade backdrop (lib/scout/backdrop.ts) and the open paper calls (no related ticker
  *     may contradict one; lib/scout/conflicts.ts);
- * 5 = FDA citizen petitions on the stock (regulations.gov), with the FDA's response status.
+ * 5 = FDA citizen petitions on the stock (regulations.gov), with the FDA's response status;
+ * 6 = what your websites' articles and reports say about the stock (site digests).
  */
-export const KNOWN_REVISION = 5;
+export const KNOWN_REVISION = 6;
 
 const cut = (s: string | null | undefined, n: number) => { const t = (s ?? "").replace(/\s+/g, " ").trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 const on = (sym: string, xs: string[] | undefined | null) => (xs ?? []).map((x) => x.toUpperCase()).includes(sym);
@@ -50,6 +51,8 @@ export async function whatTheScoutKnows(symbols: string[], now = new Date(), max
     safe(() => import("../sources/coverage").then(({ coverageOf }) => coverageOf(syms)), new Map()),
   ]);
   const petitions = await safe(() => store.cacheGet<import("./petitions").PetitionWatch>("regs:petitions"), null);
+  const siteDigests = await safe(() => import("./site-digest").then(({ digestsFor }) => digestsFor(syms, 90, 12)), []);
+  const { digestLine } = await import("./site-digest");
   const { petitionLine } = await import("./petitions");
   const { diffLine } = await import("./filing-diff");
   const { crowdingLine } = await import("./crowding");
@@ -107,6 +110,7 @@ export async function whatTheScoutKnows(symbols: string[], now = new Date(), max
       ...itcs.slice(0, 3).map((n) => `ITC patent case ${n.investigation ?? ""} ${n.date}, ${n.stage}: ${cut(n.product, 100)}; ${on(sym, n.complainantTickers) ? `${sym} is the complainant` : `${sym} is a respondent (an import ban is possible)`}`),
     ] });
 
+    sections.push({ title: `${sym}: what the user's websites said about it (articles and research reports the user follows; views, not facts)`, lines: siteDigests.filter((d) => d.tickers.includes(sym)).slice(0, 3).map((d) => cut(digestLine(d), 700)) });
     sections.push({ title: `${sym}: FDA citizen petitions naming it (regulations.gov)`, lines: [...new Map([...(petitions?.data.shortSellers ?? []), ...(petitions?.data.recent ?? [])].filter((p) => p.symbols.includes(sym)).map((p) => [p.docketId, p])).values()].slice(0, 4).map(petitionLine) });
     sections.push({ title: `${sym}: FDA dates and trial readouts (Pharma tab)`, lines: [
       ...(fda?.data ?? []).filter((e) => e.symbol === sym || on(sym, e.otherSymbols)).slice(0, 3).map((e) => `FDA ${e.date ?? e.when}: ${cut(e.drug, 60)}, ${cut(e.event, 100)}${e.outcome && !/^pending$/i.test(e.outcome) ? ` → ${cut(e.outcome, 80)}` : ""}`),
@@ -133,15 +137,17 @@ export async function whatTheScoutKnows(symbols: string[], now = new Date(), max
 }
 
 /** Short lists for the chat briefing: the latest investigations, themes and Dots ideas, and lawsuits on card stocks. */
-export async function recentWork(now = new Date()): Promise<{ investigations: string[]; themes: string[]; dots: string[]; court: string[] }> {
+export async function recentWork(now = new Date()): Promise<{ investigations: string[]; themes: string[]; dots: string[]; court: string[]; sites: string[] }> {
   const safe = async <T,>(f: () => Promise<T>, fallback: T): Promise<T> => { try { return await f(); } catch { return fallback; } };
-  const [invs, themes, dots, classes, itc] = await Promise.all([
+  const [invs, themes, dots, classes, itc, digests] = await Promise.all([
     safe(() => import("./investigate").then(({ listInvestigations }) => listInvestigations(12)), []),
     safe(() => import("./themes").then(({ themeRuns }) => themeRuns(3)), []),
     safe(() => import("./dots").then(({ dotsRuns }) => dotsRuns(3)), []),
     safe(() => store.cacheGet<import("../sources/court").ClassActionCase[]>("court:class-actions"), null),
     safe(() => store.cacheGet<import("../sources/court").ItcNotice[]>("court:itc"), null),
+    safe(() => import("./site-digest").then(({ recentDigests }) => recentDigests(7, 15)), []),
   ]);
+  const { digestLine } = await import("./site-digest");
   const since = now.getTime() - 30 * 86400_000;
   return {
     investigations: invs.filter((i) => i.status === "done" && i.report && Date.parse(i.createdAt) >= since).map((i) => `#${i.id} ${i.createdAt.slice(0, 10)} ${cut(i.report!.headline || i.title, 140)}${i.report!.listed.length ? ` → ${i.report!.listed.map((x) => `${x.direction} ${x.ticker}`).join(", ")}` : ""}: ${cut(i.report!.what_happened, 200)}`),
@@ -151,5 +157,6 @@ export async function recentWork(now = new Date()): Promise<{ investigations: st
       ...(classes?.data ?? []).slice(0, 15).map((c) => `class action: ${c.symbol} (${cut(c.company, 40)}), ${c.releases} releases${c.deadline ? `, lead plaintiff deadline ${c.deadline}` : ""}`),
       ...(itc?.data ?? []).filter((n) => n.complainantTickers.length || n.respondentTickers.length).slice(0, 10).map((n) => `ITC ${n.investigation ?? ""} ${n.date} ${n.stage}: ${cut(n.product, 80)} (by ${n.complainantTickers.join("/") || cut(n.complainants[0], 30) || "?"} against ${n.respondentTickers.join("/") || cut(n.respondents[0], 30) || "?"})`),
     ],
+    sites: digests.map((d) => cut(digestLine(d), 360)),
   };
 }

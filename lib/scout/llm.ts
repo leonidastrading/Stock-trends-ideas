@@ -11,6 +11,7 @@ import { DOTS_PROMPT, DOTS_SCAN_PROMPT, DOTS_SCAN_SCHEMA, DOTS_SCHEMA } from "./
 import { IMAGE_PROMPT, IMAGE_SCHEMA } from "./image-read";
 import { FILING_DIFF_PROMPT, FILING_DIFF_SCHEMA } from "./filing-diff";
 import { READTHROUGH_PROMPT, READTHROUGH_SCHEMA } from "./readthrough";
+import { SITE_DIGEST_PROMPT, SITE_DIGEST_SCHEMA } from "./site-digest";
 import { INVESTIGATE_LEADS_PROMPT, INVESTIGATE_LEADS_SCHEMA, INVESTIGATE_PLAN_PROMPT, INVESTIGATE_PLAN_SCHEMA, INVESTIGATE_REPORT_PROMPT, INVESTIGATE_REPORT_SCHEMA } from "./investigate";
 import Anthropic from "@anthropic-ai/sdk";
 import { callCost } from "@/config/scout";
@@ -30,7 +31,7 @@ export interface ModelReply {
   costUsd: number | null;
 }
 
-export type Purpose = "research" | "triage" | "stories" | "review" | "inbox" | "inbox_digest" | "truth" | "rumors" | "investigate_plan" | "investigate_leads" | "investigate_report" | "filing_diff" | "readthrough" | "earnings_card" | "rumor_check" | "invalidation" | "themes" | "image_read" | "dots" | "dots_scan";
+export type Purpose = "research" | "triage" | "stories" | "review" | "inbox" | "inbox_digest" | "truth" | "rumors" | "investigate_plan" | "investigate_leads" | "investigate_report" | "filing_diff" | "readthrough" | "site_digest" | "earnings_card" | "rumor_check" | "invalidation" | "themes" | "image_read" | "dots" | "dots_scan";
 export type CallModel = (args: { model: string; effort: Effort; user: string; purpose?: Purpose; images?: Array<{ mediaType: string; data: string }> }) => Promise<ModelReply>;
 
 const PROMPTS: Record<Purpose, { system: string; schema: Record<string, unknown> }> = {
@@ -51,6 +52,7 @@ const PROMPTS: Record<Purpose, { system: string; schema: Record<string, unknown>
   rumor_check: { system: RUMOR_CHECK_PROMPT, schema: RUMOR_CHECK_SCHEMA as unknown as Record<string, unknown> },
   earnings_card: { system: EARN_PROMPT, schema: EARN_SCHEMA as unknown as Record<string, unknown> },
   filing_diff: { system: FILING_DIFF_PROMPT, schema: FILING_DIFF_SCHEMA as unknown as Record<string, unknown> },
+  site_digest: { system: SITE_DIGEST_PROMPT, schema: SITE_DIGEST_SCHEMA as unknown as Record<string, unknown> },
   readthrough: { system: READTHROUGH_PROMPT, schema: READTHROUGH_SCHEMA as unknown as Record<string, unknown> },
   investigate_leads: { system: INVESTIGATE_LEADS_PROMPT, schema: INVESTIGATE_LEADS_SCHEMA as unknown as Record<string, unknown> },
   investigate_report: { system: INVESTIGATE_REPORT_PROMPT, schema: INVESTIGATE_REPORT_SCHEMA as unknown as Record<string, unknown> },

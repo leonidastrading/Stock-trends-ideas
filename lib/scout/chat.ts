@@ -158,6 +158,7 @@ export async function buildBriefing(now = new Date()): Promise<string> {
   await safe("The user's investigations, last 30 days (Investigate tab: follow-the-money reports from public records)", async () => (work?.investigations.length ? work.investigations.map((l) => `- ${l}`).join("\n") : null));
   await safe("Themes: what the user's sources agree on (latest readings)", async () => (work?.themes.length ? work.themes.map((l) => `- ${l}`).join("\n") : null));
   await safe("Dots: second-order ideas from what is changing (latest runs)", async () => (work?.dots.length ? work.dots.map((l) => `- ${l}`).join("\n") : null));
+  await safe("Your websites: the latest articles and research reports read (last 7 days)", async () => (work?.sites.length ? work.sites.map((l) => `- ${l}`).join("\n") : null));
   await safe("Lawsuits (Court tab): securities class actions and ITC patent cases", async () => (work?.court.length ? work.court.map((l) => `- ${l}`).join("\n") : null));
 
   await safe("Documents received in the inbox (newest first)", async () => {

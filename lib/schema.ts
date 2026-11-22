@@ -821,6 +821,19 @@ CREATE TABLE IF NOT EXISTS readthrough_events (
   UNIQUE (customer, et_date)
 );
 
+-- What the scout kept from your websites' articles and reports (stocks, summary, claims), for research, Dots, chat and cards.
+CREATE TABLE IF NOT EXISTS site_digests (
+  url text PRIMARY KEY,
+  site_id integer,
+  title text,
+  published timestamptz,
+  tickers text[] NOT NULL DEFAULT '{}',
+  summary text NOT NULL,
+  claims jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS site_digests_tickers_idx ON site_digests USING gin (tickers);
+
 CREATE TABLE IF NOT EXISTS emails_sent (
   key text PRIMARY KEY,
   subject text NOT NULL,
