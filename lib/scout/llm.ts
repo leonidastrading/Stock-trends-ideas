@@ -15,6 +15,7 @@ import { SITE_DIGEST_PROMPT, SITE_DIGEST_SCHEMA } from "./site-digest";
 import { INVESTIGATE_LEADS_PROMPT, INVESTIGATE_LEADS_SCHEMA, INVESTIGATE_PLAN_PROMPT, INVESTIGATE_PLAN_SCHEMA, INVESTIGATE_REPORT_PROMPT, INVESTIGATE_REPORT_SCHEMA } from "./investigate";
 import Anthropic from "@anthropic-ai/sdk";
 import { callCost, modelFor } from "@/config/scout";
+import { RECHECK_PROMPT, RECHECK_SCHEMA } from "./recheck";
 import { CARD_JSON_SCHEMA } from "./card";
 import { TRIAGE_JSON_SCHEMA, TRIAGE_SYSTEM_PROMPT } from "./discovery";
 import { SYSTEM_PROMPT } from "./prompt";
@@ -31,7 +32,7 @@ export interface ModelReply {
   costUsd: number | null;
 }
 
-export type Purpose = "research" | "triage" | "stories" | "review" | "inbox" | "inbox_digest" | "truth" | "rumors" | "investigate_plan" | "investigate_leads" | "investigate_report" | "filing_diff" | "readthrough" | "site_digest" | "earnings_card" | "rumor_check" | "invalidation" | "themes" | "image_read" | "dots" | "dots_scan";
+export type Purpose = "research" | "triage" | "stories" | "review" | "inbox" | "inbox_digest" | "truth" | "rumors" | "investigate_plan" | "investigate_leads" | "investigate_report" | "filing_diff" | "readthrough" | "site_digest" | "earnings_card" | "rumor_check" | "invalidation" | "themes" | "image_read" | "dots" | "dots_scan" | "recheck";
 export type CallModel = (args: { model: string; effort: Effort; user: string; purpose?: Purpose; images?: Array<{ mediaType: string; data: string }> }) => Promise<ModelReply>;
 
 const PROMPTS: Record<Purpose, { system: string; schema: Record<string, unknown> }> = {
@@ -48,6 +49,7 @@ const PROMPTS: Record<Purpose, { system: string; schema: Record<string, unknown>
   dots_scan: { system: DOTS_SCAN_PROMPT, schema: DOTS_SCAN_SCHEMA as unknown as Record<string, unknown> },
   dots: { system: DOTS_PROMPT, schema: DOTS_SCHEMA as unknown as Record<string, unknown> },
   themes: { system: THEMES_PROMPT, schema: THEMES_SCHEMA as unknown as Record<string, unknown> },
+  recheck: { system: RECHECK_PROMPT, schema: RECHECK_SCHEMA as unknown as Record<string, unknown> },
   invalidation: { system: INVALIDATION_PROMPT, schema: INVALIDATION_SCHEMA as unknown as Record<string, unknown> },
   rumor_check: { system: RUMOR_CHECK_PROMPT, schema: RUMOR_CHECK_SCHEMA as unknown as Record<string, unknown> },
   earnings_card: { system: EARN_PROMPT, schema: EARN_SCHEMA as unknown as Record<string, unknown> },

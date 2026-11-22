@@ -542,6 +542,23 @@ CREATE TABLE IF NOT EXISTS invalidation_checks (
   reason text
 );
 CREATE INDEX IF NOT EXISTS invalidation_checks_card_idx ON invalidation_checks (card_id, checked_at);
+-- "Still valid?" re-checks asked from a card: one row per answer (never edited); the card itself is never changed.
+CREATE TABLE IF NOT EXISTS card_rechecks (
+  id serial PRIMARY KEY,
+  card_id integer NOT NULL,
+  checked_at timestamptz NOT NULL DEFAULT now(),
+  verdict text NOT NULL,
+  summary text,
+  changed jsonb,
+  catalyst_status text,
+  watch_next text,
+  paper_view text,
+  price_then numeric,
+  price_now numeric,
+  cost_usd numeric
+);
+CREATE INDEX IF NOT EXISTS card_rechecks_card_idx ON card_rechecks (card_id, checked_at);
+CREATE OR REPLACE TRIGGER card_rechecks_ro BEFORE UPDATE OR DELETE ON card_rechecks FOR EACH ROW EXECUTE FUNCTION forbid_change();
 -- Market cap and short interest per card, frozen once, for splitting results by size and by short interest.
 CREATE TABLE IF NOT EXISTS card_profiles (
   card_id integer PRIMARY KEY,

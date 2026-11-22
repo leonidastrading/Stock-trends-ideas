@@ -3,6 +3,8 @@ import { crowdingFor, STAGE_LABEL, timing, type CrowdingRow } from "@/lib/scout/
 import { diffsFor } from "@/lib/scout/filing-diff";
 import { coverageOf } from "@/lib/sources/coverage";
 import { digestsFor } from "@/lib/scout/site-digest";
+import { latestRechecks, VERDICT_LABEL, type Recheck } from "@/lib/scout/recheck";
+import { fmtEtAgo } from "@/lib/time";
 
 const FLAG: Record<string, [string, string]> = { red_flag: ["red flag", "error"], positive: ["positive", "ok"], mixed: ["mixed", "late"], routine: ["routine", ""], no_prior: ["no prior year", ""], error: ["not read", ""] };
 
@@ -25,16 +27,31 @@ function Reading({ r, label }: { r: CrowdingRow; label: string }) {
   );
 }
 
+function priceLine(rc: Recheck): string {
+  if (!rc.priceThen || !rc.priceNow) return "";
+  const move = Math.round((rc.priceNow / rc.priceThen - 1) * 1000) / 10;
+  return ` · ${"$"}${rc.priceThen.toFixed(2)} when written, ${"$"}${rc.priceNow.toFixed(2)} now (${move > 0 ? "+" : ""}${move}%)`;
+}
+
 /** On a card: how crowded the stock was when the card was written and is now, analyst coverage, and the latest filing change. */
 export default async function CardSignals({ cardId, symbol }: { cardId: number; symbol: string }) {
   if (!hasDatabase()) return null;
-  const [crowd, cov, diffs, sites] = await Promise.all([crowdingFor([cardId]).catch(() => new Map()), coverageOf([symbol]).catch(() => new Map()), diffsFor([symbol], 1).catch(() => []), digestsFor([symbol], 60, 3).catch(() => [])]);
+  const [crowd, cov, diffs, sites, rechecks] = await Promise.all([crowdingFor([cardId]).catch(() => new Map()), coverageOf([symbol]).catch(() => new Map()), diffsFor([symbol], 1).catch(() => []), digestsFor([symbol], 60, 3).catch(() => []), latestRechecks([cardId]).catch(() => new Map<number, Recheck>())]);
+  const rc = rechecks.get(cardId);
   const c = crowd.get(cardId);
   const cv = cov.get(symbol);
   const d = diffs[0];
-  if (!c?.entry && !c?.latest && !cv && !d && !sites.length) return null;
+  if (!c?.entry && !c?.latest && !cv && !d && !sites.length && !rc) return null;
   return (
     <>
+      {rc && <><dt>Still valid?</dt><dd className="small">
+        <span className={`tag ${VERDICT_LABEL[rc.verdict][1]}`}>{VERDICT_LABEL[rc.verdict][0]}</span> <span className="muted">checked {fmtEtAgo(rc.checkedAt)}{priceLine(rc)}</span>
+        <div>{rc.summary}</div>
+        {rc.changed.length > 0 && <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>{rc.changed.map((x, i) => <li key={i}>{x}</li>)}</ul>}
+        {rc.catalystStatus && <div><span className="muted">Catalyst:</span> {rc.catalystStatus}</div>}
+        {rc.watchNext && <div><span className="muted">Watch next:</span> {rc.watchNext}</div>}
+        {rc.paperView && <div><span className="muted">Paper view:</span> {rc.paperView}</div>}
+      </dd></>}
       {(c?.entry || c?.latest) && <><dt>Crowding</dt><dd className="small">
         {c.entry ? <Reading r={c.entry} label="when written" /> : <div className="muted">When written: not recorded (card from before crowding was measured).</div>}
         {c.latest && <Reading r={c.latest} label={`latest (${c.latest.measuredOn})`} />}

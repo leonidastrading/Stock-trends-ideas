@@ -10,6 +10,20 @@ export default function CardActions({ cardId, canSend, sent, open, swingConfigur
   // What was done here, shown at once; the page's data is refreshed in place (no reload, the scroll position stays).
   const [done, setDone] = useState<"sent" | "invalidated" | "excluded" | null>(null);
   const router = useRouter();
+  const [checking, setChecking] = useState(false);
+  const [check, setCheck] = useState<{ verdict: string; summary: string; fresh: boolean } | null>(null);
+
+  // "Still valid?": the scout re-reads the card against what happened since (about a minute); the answer is saved and shown on the card.
+  async function recheck() {
+    setChecking(true);
+    setMsg(null);
+    const res = await fetch(`/api/cards/${cardId}/recheck`, { method: "POST" }).catch(() => null);
+    const j = res ? await res.json().catch(() => ({ errors: [`HTTP ${res.status}`] })) : { errors: ["network error"] };
+    setChecking(false);
+    if (!res?.ok || !j.ok) return setMsg((j.errors ?? ["failed"]).join("; "));
+    setCheck({ verdict: j.recheck.verdict, summary: j.recheck.summary, fresh: j.fresh });
+    router.refresh();
+  }
 
   async function post(path: string, body?: unknown, confirmText?: string, what?: "sent" | "invalidated" | "excluded") {
     if (confirmText && !confirm(confirmText)) return;
@@ -48,6 +62,10 @@ export default function CardActions({ cardId, canSend, sent, open, swingConfigur
           Wrong security
         </button>
       )}
+      <button disabled={checking} className="small" title="The scout re-reads this card against the price, the news, filings and newer cards since it was written, and says whether the idea still holds. The card itself is not changed." onClick={recheck}>
+        {checking ? "Checking… (about a minute)" : "Still valid?"}
+      </button>
+      {check && <span className="small"><b>{check.verdict.replace("_", " ")}</b>{check.fresh ? "" : " (checked in the last 15 minutes)"}: {check.summary}</span>}
       {msg && <span className="small neg">{msg}</span>}
     </>
   );
