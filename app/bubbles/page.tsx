@@ -51,15 +51,10 @@ export default async function BubblesPage() {
   // The forward record: of the loud ones whose 10 sessions are done, how many lagged SPY after the date.
   const done = past.filter((r) => r.levelSeen !== "quiet" && afterMove(r) !== null);
   const fell = done.filter((r) => afterMove(r)! < 0).length;
-  const last = rows.reduce<string | null>((m, r) => (r.lastMeasured && (!m || r.lastMeasured > m) ? r.lastMeasured : m), null);
 
   return (
     <>
       <h1>Bubbles</h1>
-      <p className="small secondary">Hype bubbles: anything going up parabolically on excitement, a single stock, a whole theme (quantum, AI, nuclear) or a commodity (oil, gold, bitcoin), and &quot;buy the rumor, sell the news&quot; setups, where an event on a fixed date everyone can see coming (a stock split, an S&amp;P 500 addition, a launch, an FDA decision, a hyped company&apos;s earnings, an IPO or ETF launch), the price running up into it on retail attention, and nothing left to look forward to once the day arrives. It is the &quot;mania&quot; stage of the crowding score, where attention peaks and the buyers are already in. Checked every two hours from news searches (read by the light model), the FDA calendar and the earnings dates of Stocktwits-trending stocks and your open cards{last ? <>; last checked {fmtEtAgo(last)}</> : null}.</p>
-      <section className="card small">
-        <b>Why it is hard to trade.</b> The famous ones are famous because they worked. Plenty of events kept running afterwards (Nvidia after its May 2023 guidance), the scout&apos;s FDA test found no reliable run-up into known decision dates, and the timing is unforgiving: Tesla rose 70% into its S&amp;P 500 date, so shorting early hurt. That is why this tab also records what each one did after the date, so you can see how often it really works today. Paper research only; &quot;Research it&quot; writes a scored card like any other.
-      </section>
 
       <Movers briefs={briefs} />
 
