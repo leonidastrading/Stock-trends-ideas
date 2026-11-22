@@ -1,12 +1,19 @@
+import CardChips from "@/components/CardChips";
 import Ticker from "@/components/Ticker";
+import * as store from "@/lib/scout/store";
 import { recentDiffs } from "@/lib/scout/filing-diff";
 import { fmtEtAgo } from "@/lib/time";
+
+/** "2026-11-19" → "Nov 19, 2026" (the year matters: the comparison is with a year earlier). */
+const day = (d: string | null) => (d ? new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : "?");
 
 const FLAG: Record<string, [string, string]> = { red_flag: ["red flag", "error"], positive: ["positive", "ok"], mixed: ["mixed", "late"], routine: ["routine", ""], no_prior: ["no prior year", ""], error: ["not read", ""] };
 
 /** Filings page: every 10-K / 10-Q the filing-change reader compared with a year earlier, newest first. */
 export default async function FilingChanges() {
-  const diffs = await recentDiffs(60).catch(() => []);
+  const [diffs, briefs] = await Promise.all([recentDiffs(60).catch(() => []), store.cardBriefsSince(365).catch(() => [] as store.CardBrief[])]);
+  // The scout's cards on each stock (a year back), newest first.
+  const cardsOn = (sym: string | null) => (sym ? briefs.filter((c) => c.primaryTicker === sym || c.tickers.includes(sym)) : []);
   const notable = diffs.filter((d) => d.read && d.flag !== "routine");
   const rest = diffs.filter((d) => !notable.includes(d));
   return (
@@ -20,16 +27,17 @@ export default async function FilingChanges() {
       {notable.length === 0 && <p className="small muted">{diffs.length ? "Nothing notable yet: the filings read so far changed little." : "Nothing read yet: the reader runs every half hour and works through card stocks first."}</p>}
       {notable.map((d) => (
         <div key={d.accession} id={`diff-${d.accession}`} className="small" style={{ borderTop: "1px solid var(--border)", padding: "8px 0" }}>
-          <span className={`tag ${FLAG[d.flag]?.[1] ?? ""}`}>{FLAG[d.flag]?.[0] ?? d.flag}</span> {d.ticker ? <Ticker symbol={d.ticker} /> : null} <b>{d.company}</b> · <a href={d.url} target="_blank" rel="noreferrer">{d.form} filed {d.filed}</a> vs <a href={d.priorUrl ?? "#"} target="_blank" rel="noreferrer">{d.priorFiled}</a>
+          <span className={`tag ${FLAG[d.flag]?.[1] ?? ""}`}>{FLAG[d.flag]?.[0] ?? d.flag}</span> {d.ticker ? <Ticker symbol={d.ticker} /> : null} <b>{d.company}</b> · <a href={d.url} target="_blank" rel="noreferrer">{d.form} filed {day(d.filed)}</a> vs <a href={d.priorUrl ?? "#"} target="_blank" rel="noreferrer">{d.form} filed {day(d.priorFiled)}</a>
           <span className="muted"> · {d.source === "smallcap" ? "small-cap batch" : "card stock"} · risk-factor similarity {d.similarity ?? "?"} · {d.added} paragraphs added, {d.removed} removed · read {fmtEtAgo(d.createdAt)}</span>
           <div><b>{d.read!.headline}</b></div>
           {d.read!.findings.length > 0 && <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>{d.read!.findings.map((f, i) => <li key={i}><span className={f.direction === "negative" ? "neg" : f.direction === "positive" ? "pos" : "muted"}>{f.type.replace("_", " ")}</span> · {f.why} <span className="muted history-note">“{f.quote}”</span></li>)}</ul>}
+          <div>{cardsOn(d.ticker).length ? <>Scout cards on {d.ticker}: <CardChips cards={cardsOn(d.ticker)} max={8} /></> : <span className="muted">No scout cards on {d.ticker ?? "this company"} yet.</span>}</div>
           {d.read!.research && <div className="muted">Worth researching ({d.read!.research_direction}): {d.read!.research_why}</div>}
           {d.mechanical && (d.mechanical.customers.added.length > 0 || d.mechanical.customers.dropped.length > 0) && <div className="muted">Customers named as a share of revenue: new {d.mechanical.customers.added.join(", ") || "none"}; dropped {d.mechanical.customers.dropped.join(", ") || "none"}.</div>}
           {d.mechanical && d.mechanical.shifts.length > 0 && <div className="muted">Watch words per 10k words (last year → now): {d.mechanical.shifts.map((s) => `${s.word} ${s.before}→${s.after}`).join(" · ")}</div>}
         </div>
       ))}
-      {rest.length > 0 && <details className="small"><summary>Little or no change ({rest.length})</summary><ul>{rest.map((d) => <li key={d.accession} id={`diff-${d.accession}`}>{d.ticker ?? d.cik} · <a href={d.url} target="_blank" rel="noreferrer">{d.form} {d.filed}</a> · {d.flag === "no_prior" ? "no comparable filing a year earlier" : d.flag === "error" ? `not read: ${d.error}` : `similarity ${d.similarity ?? "?"}${d.error ? ` (${d.error})` : ""}`} <span className="muted">· {d.source === "smallcap" ? "small cap" : "card stock"}</span></li>)}</ul></details>}
+      {rest.length > 0 && <details className="small"><summary>Little or no change ({rest.length})</summary><ul>{rest.map((d) => <li key={d.accession} id={`diff-${d.accession}`}>{d.ticker ?? d.cik} · <a href={d.url} target="_blank" rel="noreferrer">{d.form} {day(d.filed)}</a>{cardsOn(d.ticker).length ? <> <CardChips cards={cardsOn(d.ticker)} max={4} /></> : null} · {d.flag === "no_prior" ? "no comparable filing a year earlier" : d.flag === "error" ? `not read: ${d.error}` : `similarity ${d.similarity ?? "?"}${d.error ? ` (${d.error})` : ""}`} <span className="muted">· {d.source === "smallcap" ? "small cap" : "card stock"}</span></li>)}</ul></details>}
     </section>
   );
 }
