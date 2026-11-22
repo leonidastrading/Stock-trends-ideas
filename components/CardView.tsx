@@ -1,5 +1,6 @@
 import { KIND_LABEL, SCOUT, type Kind } from "@/config/scout";
 import CardSignals from "@/components/CardSignals";
+import CardNews from "@/components/CardNews";
 import Direction from "@/components/Direction";
 import CardAsk from "@/components/CardAsk";
 import CardCollapse from "@/components/CardCollapse";
@@ -186,6 +187,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
         <h3>Evidence</h3>
         <ul className="evidence">{k.evidence.map((e, i) => <li key={i}><span className="src">{e.source}</span>{e.metric}: {e.value} <span className="muted">({e.change_vs_12m} vs 12m, as of {e.as_of})</span></li>)}</ul>
       </div>
+      <CardNews symbols={[...new Set([c.primaryTicker, ...k.tickers.map((t) => t.symbol)])].slice(0, 3)} since={c.createdAt} />
       <div className="card-chart">
         <div className="small muted card-chart-head"><span>{c.primaryTicker} · chart</span><a href={chartUrl(c.primaryTicker)} target="_blank" rel="noreferrer">Open full chart →</a></div>
         <StockChart symbol={c.primaryTicker} tvSymbol={tvSymbol(c.primaryTicker, info?.exchange)} entry={track?.entryDate && track.entryPrice ? { date: track.entryDate, price: track.entryPrice, direction: track.direction, exitDate: track.exitDate, exitPrice: track.exitPrice, exitReason: track.exitReason, label: "scout entry", cardId: c.id } : { date: pendingEntryDay, price: null, direction: c.direction, label: "entry at the next open", cardId: c.id }} />
