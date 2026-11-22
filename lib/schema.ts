@@ -661,6 +661,16 @@ CREATE INDEX IF NOT EXISTS pr_watch_seen_idx ON pr_watch (seen_at);
 ALTER TABLE pr_watch ADD COLUMN IF NOT EXISTS earlier_at timestamptz;
 ALTER TABLE pr_watch ADD COLUMN IF NOT EXISTS earlier_headline text;
 ALTER TABLE pr_watch ADD COLUMN IF NOT EXISTS earlier_source text;
+-- Stocktwits' trending ten, kept at 9 AM and 3 PM ET every day.
+CREATE TABLE IF NOT EXISTS st_snapshots (
+  id serial PRIMARY KEY,
+  et_date date NOT NULL,
+  slot text NOT NULL,
+  taken_at timestamptz NOT NULL DEFAULT now(),
+  market jsonb,
+  items jsonb NOT NULL,
+  UNIQUE (et_date, slot)
+);
 -- Market cap and short interest per card, frozen once, for splitting results by size and by short interest.
 CREATE TABLE IF NOT EXISTS card_profiles (
   card_id integer PRIMARY KEY,

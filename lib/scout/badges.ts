@@ -2,7 +2,7 @@
 import { query as q } from "../db";
 import * as store from "./store";
 
-export const BADGE_TABS = ["research", "bubbles", "ideas", "news", "drift", "rumors", "themes", "investigate", "inbox", "filings", "congress", "watchlist"] as const;
+export const BADGE_TABS = ["research", "bubbles", "stocktwits", "ideas", "news", "drift", "rumors", "themes", "investigate", "inbox", "filings", "congress", "watchlist"] as const;
 export type BadgeTab = (typeof BADGE_TABS)[number];
 
 const n = async (sql: string, since: string) => Number((await q(sql, [since]).catch(() => [{ n: 0 }]))[0]?.n ?? 0);
@@ -20,6 +20,8 @@ export async function badgeCounts(since: Partial<Record<BadgeTab, string>>, now 
   add("research", (s) => n(`SELECT count(*) AS n FROM research_requests WHERE finished_at > $1`, s));
   // Newly listed hype setups, only the loud ones (mania or building).
   add("bubbles", async (s) => (await n(`SELECT count(*) AS n FROM bubble_events WHERE first_seen > $1 AND level IN ('mania', 'building')`, s)) + (await n(`SELECT count(*) AS n FROM bubble_movers WHERE first_seen > $1`, s)));
+  // A new trending snapshot (9 AM and 3 PM).
+  add("stocktwits", (s) => n(`SELECT count(*) AS n FROM st_snapshots WHERE taken_at > $1`, s));
   add("themes", (s) => n(`SELECT count(*) AS n FROM theme_runs WHERE created_at > $1`, s));
   add("investigate", (s) => n(`SELECT count(*) AS n FROM investigations WHERE status = 'done' AND created_at > $1`, s));
   add("inbox", (s) => n(`SELECT count(*) AS n FROM inbox_files WHERE read_at > $1`, s));

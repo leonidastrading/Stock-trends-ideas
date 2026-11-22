@@ -23,6 +23,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ name: strin
       case "crowding": result = await import("@/lib/scout/crowding").then(({ runCrowdingBatch }) => runCrowdingBatch(deps.data ?? null, deps.now, deps.env)); break;
       case "readthrough": result = await import("@/lib/scout/readthrough").then(({ runReadthrough }) => runReadthrough(deps)); break;
       case "bubbles": result = await import("@/lib/scout/bubbles").then(({ runBubbles }) => runBubbles(deps)); break;
+      case "sttrending": result = await import("@/lib/scout/st-trending").then(({ runStTrending }) => runStTrending({ data: deps.data ?? null, now: deps.now })); break;
       case "listings": result = await import("@/lib/scout/listing-wait").then(({ runListingWatch }) => runListingWatch(deps.data ?? null, deps.now)); break;
       case "petitions": result = await import("@/lib/scout/petitions").then(({ runPetitionWatch }) => runPetitionWatch(deps.env, deps.now)); break;
     }
