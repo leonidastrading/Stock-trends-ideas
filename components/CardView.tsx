@@ -1,6 +1,7 @@
 import { KIND_LABEL, SCOUT, type Kind } from "@/config/scout";
 import CardSignals from "@/components/CardSignals";
 import CardNews from "@/components/CardNews";
+import { gateReason } from "@/lib/scout/gate-reason";
 import Direction from "@/components/Direction";
 import CardAsk from "@/components/CardAsk";
 import CardCollapse from "@/components/CardCollapse";
@@ -100,6 +101,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
           <a className="tag source-tag" href={fromUrl} target={/^https?:/.test(fromUrl) ? "_blank" : undefined} rel="noreferrer" title={`${from.note} · ${c.origin === "human" ? "human-originated" : "found by the scout"} · click to open`}>{from.tag} ↗</a>
           <span className="small muted" title={`card #${c.id} · ${c.model} · version ${c.versionId}`}>{fmtEtAgo(c.createdAt)}</span>
         </div>
+        {gateReason(c.status, c.gateNotes) && <div className="small warn" style={{ marginTop: 4 }}><b>{c.status === "late" ? "Late" : "Not promoted"}:</b> {gateReason(c.status, c.gateNotes)}.</div>}
         {track?.invalidatedAt && (
           <div className="invalidated-banner">
             <div className="invalidated-label">✗ INVALIDATED</div>
