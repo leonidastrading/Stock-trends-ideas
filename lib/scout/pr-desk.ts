@@ -30,6 +30,25 @@ export function scoreHeadline(h: string): Scored {
   return { stars: hot3.length * 3 + hot2.length * 2, hot: [...hot3, ...hot2], sinkers: SINKERS.filter((w) => has(h, w)), earnings: /financial results|quarter(ly)? results|reports? (q[1-4]|first|second|third|fourth|fiscal)/i.test(h) };
 }
 
+const STOP = new Set("the and for with from into that this its their will has have announces announced reports report inc corp company shares stock update says said news after over new".split(" "));
+/** Pure: a headline's distinctive word stems (first 6 letters), for spotting the same story told again. */
+export const stems = (h: string) => new Set(h.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w.length >= 4 && !STOP.has(w)).map((w) => w.slice(0, 6)));
+
+/**
+ * Pure: the earliest earlier headline on the same stock telling the same story (3+ shared stems, or half of the
+ * shorter one's), or null. Aggregators re-write news hours or a day later (fiscal.ai ran California's Nov 19 Nvidia
+ * subpoena on Nov 20 at 2:01 PM), and the feed dates the re-write, not the news.
+ */
+export function earlierVersion(headline: string, publishedAt: string, earlier: Array<{ ts: string; headline: string; source: string }>): { ts: string; headline: string; source: string } | null {
+  const a = stems(headline);
+  const same = earlier.filter((e) => Date.parse(e.ts) < Date.parse(publishedAt) - 30 * 60_000).filter((e) => {
+    const b = stems(e.headline);
+    const shared = [...a].filter((w) => b.has(w)).length;
+    return shared >= 3 || shared >= Math.ceil(Math.min(a.size, b.size) / 2) && shared >= 2;
+  });
+  return same.sort((x, y) => x.ts.localeCompare(y.ts))[0] ?? null;
+}
+
 /** Pure: is this ET moment in a press-release window (weekdays 6:55-9:40 AM and 3:55-6:30 PM)? */
 export function inWindow(date: string, minutes: number): boolean {
   const dow = new Date(`${date}T12:00:00Z`).getUTCDay();
@@ -85,11 +104,15 @@ export async function runPrDesk(deps: { data: MarketData | null; now: Date; env?
       let shareCalls = 0;
       for (const n of news) {
         const s = n.symbols[0], sc = scoreHeadline(n.headline), snap = snaps[s];
+        const flagged = sc.stars >= 3 || sc.sinkers.length > 0;
         const shares = sc.stars >= 3 && shareCalls++ < PR.sharesPerRun ? await sharesOut(s, env) : null;
+        // Old news told again? The stock's own headlines over the 3 days before (hot and flagged ones only).
+        const prior = flagged ? await data.getNews([s], new Date(Date.parse(n.ts) - 3 * 86400_000), new Date(Date.parse(n.ts) - 60_000), 50).catch(() => [] as NewsItem[]) : [];
+        const old = flagged ? earlierVersion(n.headline, n.ts, prior) : null;
         const r = await q(
-          `INSERT INTO pr_watch (news_id, symbol, published_at, seen_at, headline, url, source, stars, hot, sinkers, earnings, shares_out_m, prev_close, price_seen, vol_seen)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) ON CONFLICT (news_id) DO NOTHING RETURNING id`,
-          [n.id, s, n.ts, now.toISOString(), n.headline.slice(0, 400), n.url, n.source, sc.stars, sc.hot, sc.sinkers, sc.earnings, shares, snap?.prevClose ?? null, snap?.price ?? null, snap?.volume ?? null],
+          `INSERT INTO pr_watch (news_id, symbol, published_at, seen_at, headline, url, source, stars, hot, sinkers, earnings, shares_out_m, prev_close, price_seen, vol_seen, earlier_at, earlier_headline, earlier_source)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) ON CONFLICT (news_id) DO NOTHING RETURNING id`,
+          [n.id, s, n.ts, now.toISOString(), n.headline.slice(0, 400), n.url, n.source, sc.stars, sc.hot, sc.sinkers, sc.earnings, shares, snap?.prevClose ?? null, snap?.price ?? null, snap?.volume ?? null, old?.ts ?? null, old?.headline.slice(0, 400) ?? null, old?.source ?? null],
         );
         if (r.length) logged++;
       }
@@ -123,6 +146,8 @@ export interface PrRow {
   id: number; symbol: string; publishedAt: string; seenAt: string; headline: string; url: string | null; source: string; stars: number; hot: string[]; sinkers: string[]; earnings: boolean;
   sharesOutM: number | null; prevClose: number | null; priceSeen: number | null; volSeen: number | null; pricePub: number | null; p15: number | null; p60: number | null; high60: number | null; vol60: number | null;
   dayOpen: number | null; dayClose: number | null; nextClose: number | null;
+  /** An earlier headline on the same story (this one is old news told again), or null. */
+  earlier: { at: string; headline: string; source: string } | null;
 }
 
 const n = (v: unknown) => (v === null || v === undefined || Number(v) < 0 ? null : Number(v));
@@ -131,12 +156,14 @@ export async function prRows(days = 30, limit = 1500): Promise<PrRow[]> {
     id: Number(r.id), symbol: String(r.symbol), publishedAt: new Date(r.published_at as string).toISOString(), seenAt: new Date(r.seen_at as string).toISOString(), headline: String(r.headline), url: (r.url as string) || null, source: String(r.source ?? ""),
     stars: Number(r.stars), hot: (r.hot as string[]) ?? [], sinkers: (r.sinkers as string[]) ?? [], earnings: !!r.earnings, sharesOutM: n(r.shares_out_m), prevClose: n(r.prev_close), priceSeen: n(r.price_seen), volSeen: n(r.vol_seen),
     pricePub: n(r.price_pub), p15: n(r.p15), p60: n(r.p60), high60: n(r.high60), vol60: n(r.vol60), dayOpen: n(r.day_open), dayClose: n(r.day_close), nextClose: n(r.next_close),
+    earlier: r.earlier_at ? { at: new Date(r.earlier_at as string).toISOString(), headline: String(r.earlier_headline ?? ""), source: String(r.earlier_source ?? "") } : null,
   }));
 }
 
 /** Pure: the groups the method predicts should differ, with mean moves from the moment the scout saw the headline. */
-export type PrGroup = "hot_small" | "hot" | "plain" | "sinker" | "earnings";
-export function prGroup(r: Pick<PrRow, "stars" | "sinkers" | "earnings" | "sharesOutM">): PrGroup {
+export type PrGroup = "hot_small" | "hot" | "old_news" | "plain" | "sinker" | "earnings";
+export function prGroup(r: Pick<PrRow, "stars" | "sinkers" | "earnings" | "sharesOutM"> & { earlier?: PrRow["earlier"] }): PrGroup {
+  if (r.earlier) return "old_news";
   if (r.sinkers.length) return "sinker";
   if (r.earnings) return "earnings";
   if (r.stars >= 3) return r.sharesOutM !== null && r.sharesOutM <= PR.smallSharesM ? "hot_small" : "hot";
@@ -146,7 +173,7 @@ export function prGroup(r: Pick<PrRow, "stars" | "sinkers" | "earnings" | "share
 export function groupStats(rows: PrRow[]): Array<{ group: PrGroup; n: number; m15: number | null; m60: number | null; mClose: number | null; mNext: number | null; upClose: number | null }> {
   const move = (a: number | null, b: number | null) => (a && b ? (b / a - 1) * 100 : null);
   const avg = (xs: Array<number | null>) => { const v = xs.filter((x): x is number => x !== null); return v.length ? Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 10) / 10 : null; };
-  return (["hot_small", "hot", "plain", "earnings", "sinker"] as PrGroup[]).map((g) => {
+  return (["hot_small", "hot", "old_news", "plain", "earnings", "sinker"] as PrGroup[]).map((g) => {
     const xs = rows.filter((r) => prGroup(r) === g && r.priceSeen);
     const closes = xs.map((r) => move(r.priceSeen, r.dayClose)).filter((x): x is number => x !== null);
     return { group: g, n: xs.length, m15: avg(xs.map((r) => move(r.priceSeen, r.p15))), m60: avg(xs.map((r) => move(r.priceSeen, r.p60))), mClose: avg(closes), mNext: avg(xs.map((r) => move(r.priceSeen, r.nextClose))), upClose: closes.length ? Math.round((closes.filter((x) => x > 0).length / closes.length) * 100) : null };

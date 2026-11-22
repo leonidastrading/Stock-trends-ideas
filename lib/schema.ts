@@ -658,6 +658,9 @@ CREATE TABLE IF NOT EXISTS pr_watch (
   next_close numeric
 );
 CREATE INDEX IF NOT EXISTS pr_watch_seen_idx ON pr_watch (seen_at);
+ALTER TABLE pr_watch ADD COLUMN IF NOT EXISTS earlier_at timestamptz;
+ALTER TABLE pr_watch ADD COLUMN IF NOT EXISTS earlier_headline text;
+ALTER TABLE pr_watch ADD COLUMN IF NOT EXISTS earlier_source text;
 -- Market cap and short interest per card, frozen once, for splitting results by size and by short interest.
 CREATE TABLE IF NOT EXISTS card_profiles (
   card_id integer PRIMARY KEY,

@@ -7,7 +7,7 @@ import { toEt } from "@/lib/time";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const GROUP: Record<PrGroup, string> = { hot_small: `hot keywords, under ${PR.smallSharesM}M shares`, hot: "hot keywords, larger or unknown share count", plain: "no hot keywords", earnings: "earnings results", sinker: "offering / dilution / bad words" };
+const GROUP: Record<PrGroup, string> = { hot_small: `hot keywords, under ${PR.smallSharesM}M shares`, hot: "hot keywords, larger or unknown share count", old_news: "old news told again (an earlier headline on the same story)", plain: "no hot keywords", earnings: "earnings results", sinker: "offering / dilution / bad words" };
 const pct = (a: number | null, b: number | null) => (a && b ? (b / a - 1) * 100 : null);
 const fmt = (x: number | null, digits = 1) => (x === null ? "—" : `${x > 0 ? "+" : x < 0 ? "−" : ""}${Math.abs(x).toFixed(digits)}%`);
 const cls = (x: number | null) => (x === null ? "muted" : x > 0 ? "pos" : x < 0 ? "neg" : "");
@@ -28,6 +28,7 @@ function Release({ r }: { r: PrRow }) {
         {r.sharesOutM !== null && <span className={`tag ${r.sharesOutM <= PR.smallSharesM ? "ok" : ""}`}>{r.sharesOutM}M shares</span>}
         <span className="small muted">{toEt(new Date(r.seenAt)).date} · {GROUP[g]}</span>
       </div>
+      {r.earlier && <div className="small warn">Old news: first reported {toEt(new Date(r.earlier.at)).date} {time(r.earlier.at)} ET by {r.earlier.source || "another outlet"} (&quot;{r.earlier.headline.slice(0, 140)}&quot;). The feed dates this re-write, not the news.</div>}
       <div className="pr-headline">{r.url ? <a href={r.url} target="_blank" rel="noreferrer">{r.headline}</a> : r.headline} <span className="small muted">{r.source}</span></div>
       <div className="pr-grid small">
         <div>

@@ -44,3 +44,15 @@ describe("press-release desk", () => {
     expect(s).toMatchObject({ n: 2, m60: 5, mClose: 0, upClose: 50 });
   });
 });
+
+import { earlierVersion } from "@/lib/scout/pr-desk";
+describe("old news told again", () => {
+  it("finds the earlier headline on the same story (the Nvidia subpoena, re-written a day later)", () => {
+    const prior = [
+      { ts: "2026-11-19T22:10:00Z", headline: "Attorney General Bonta Serves Investigative Subpoena on Nvidia", source: "benzinga" },
+      { ts: "2026-11-20T15:00:00Z", headline: "Nvidia shares slip in afternoon trade", source: "benzinga" },
+    ];
+    expect(earlierVersion("California Attorney General Launches Investigation into NVIDIA", "2026-11-20T19:01:43Z", prior)).toMatchObject({ ts: "2026-11-19T22:10:00Z" });
+    expect(earlierVersion("Nvidia Unveils New Blackwell Server Line", "2026-11-20T19:01:43Z", prior)).toBeNull();
+  });
+});
