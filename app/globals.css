@@ -479,3 +479,7 @@ a.source-tag:hover { background: color-mix(in srgb, var(--accent) 14%, transpare
 
 .score-filters { margin: 4px 0 8px; }
 .score-filters > summary { cursor: pointer; color: var(--text-secondary); padding: 4px 0; }
+
+.filters-panel { margin: 6px 0 10px; border: 1px solid var(--border); border-radius: 10px; padding: 6px 10px; }
+.filters-panel > summary.filters-summary { cursor: pointer; padding: 4px 0; font-size: 14px; }
+.filters-panel[open] > summary.filters-summary { margin-bottom: 6px; }

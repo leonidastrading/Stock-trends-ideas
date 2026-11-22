@@ -140,6 +140,16 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   const capCount = (k: string) => bySource.filter((c) => (!status || c.status === status) && confOk(c) && capOk(c, k) && shortOk(c) && dirOk(c) && scoresOk(c)).length;
   const shortCount = (m: string) => bySource.filter((c) => (!status || c.status === status) && confOk(c) && capOk(c) && shortOk(c, m) && dirOk(c) && scoresOk(c)).length;
   const dirCount = (d: string) => bySource.filter((c) => (!status || c.status === status) && confOk(c) && capOk(c) && shortOk(c) && dirOk(c, d) && scoresOk(c)).length;
+  // What is filtered, in words, for the folded filters line.
+  const activeFilters = [
+    dir ? (dir === "long" ? "▲ long" : "▼ short") : "",
+    status ? status.replace("_", " ") : "",
+    conf ? `confidence ${CONF_BANDS.find((b) => b.key === conf)!.label.replace(/^Confidence /, "")}` : "",
+    cap ? (cap === "unknown" ? "size unknown" : SIZE_KEYS.find((s) => s.key === cap)?.label ?? cap) : "",
+    shortBand ? SHORT_BANDS.find((b) => b.key === shortBand)!.label : "",
+    ...SCORE_FILTERS.filter((f) => scoreSel[f.param]).map((f) => `${f.label} ${SCORE_BANDS(f.param).find((b) => b.key === scoreSel[f.param])!.label}`),
+    source ? PLAYER_LABEL[source].replace(/^Scout · /, "") : "",
+  ].filter(Boolean);
   const scoreCount = (param: ScoreParam, key: string) => bySource.filter((c) => (!status || c.status === status) && confOk(c) && capOk(c) && shortOk(c) && dirOk(c) && scoresOk(c, { param, key })).length;
 
   return (
@@ -155,6 +165,11 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
         {!sw && <div className="muted" style={{ marginTop: 6 }}>Sending to the Swing ideas log is not configured yet (SWING_API_URL / SWING_API_USER / SWING_API_PASSWORD).</div>}
       </details>
       <span id="cards" />
+      {/* All the filters fold away; the line shows what is on and how many cards it leaves. */}
+      <details className="filters-panel">
+        <summary className="filters-summary">
+          <b>Filters</b> <span className="muted">· {days === 365 ? "1 year" : `${days} days`} · {SORTS.find((s) => s.value === sort)?.label}{activeFilters.length ? ` · ${activeFilters.join(" · ")}` : ""} · {rows.length} card{rows.length === 1 ? "" : "s"}</span>
+        </summary>
       <div className="toolbar">
         <FilterLinks params={params} name="days" value={days === 7 ? "" : String(days)} reset={["page", "card"]} options={[{ value: "", label: "7 days" }, { value: "30", label: "30 days" }, { value: "90", label: "90 days" }, { value: "365", label: "1 year" }]} />
         <FilterLinks params={params} name="sort" value={sort === "best" ? "" : sort} reset={["page", "card"]} options={SORTS.map((s) => ({ value: s.value === "best" ? "" : s.value, label: s.label }))} />
@@ -183,6 +198,8 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
       <div className="toolbar">
         <FilterLinks params={params} name="source" value={source} reset={["page", "card"]} options={[{ value: "", label: "All sources", count: shownCards.length }, ...PLAYERS.filter((p) => sourceCounts.get(p)).map((p) => ({ value: p, label: PLAYER_LABEL[p].replace(/^Scout · /, ""), count: sourceCounts.get(p) }))]} />
       </div>
+      {activeFilters.length > 0 && <p className="small"><a href={hrefWith({ days: params.days, sort: params.sort }, {})}>Clear filters</a></p>}
+      </details>
       {penny.size > 0 && <p className="small muted">{showPenny ? <>Showing {penny.size} short{penny.size === 1 ? "" : "s"} on stocks under $5 (the scout does not suggest these). <a href={hrefWith(params, { penny: undefined })}>Hide them</a></> : <>{penny.size} short{penny.size === 1 ? "" : "s"} on stocks under $5 hidden (the scout does not suggest these). <a href={hrefWith(params, { penny: "1" })}>Show</a></>}</p>}
       <div className="toolbar" style={{ justifyContent: "space-between" }}><CollapseAll /><Pager params={params} name="page" page={page.page} pages={page.pages} total={page.total} label="cards" hash="#cards" /></div>
       {page.items.map((c) => {
