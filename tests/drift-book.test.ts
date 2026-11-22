@@ -11,3 +11,13 @@ describe("down-drift scoreboard", () => {
     expect(bookStats([])).toEqual({ n: 0, wins: 0, mean: null, median: null });
   });
 });
+
+import { entryDay } from "@/app/drift/DriftBook";
+describe("when a not-yet-entered short enters", () => {
+  it("the next weekday open", () => {
+    expect(entryDay("2026-11-20", "2026-11-22")).toBe("2026-11-23"); // card Friday, today Sunday → Monday
+    expect(entryDay("2026-11-22", "2026-11-22")).toBe("2026-11-23");
+    expect(entryDay("2026-11-23", "2026-11-23")).toBe("2026-11-24");
+    expect(entryDay("2026-11-20", "2026-11-23", true)).toBe("2026-11-23"); // Monday before 9:30: today's open
+  });
+});

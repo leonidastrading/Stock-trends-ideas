@@ -2,6 +2,18 @@ import Ticker from "@/components/Ticker";
 import type { MarketData } from "@/lib/alpaca";
 import { paperResult } from "@/lib/scout/paper-result";
 import type { StoredCard, Track } from "@/lib/scout/store";
+import { addDays, toEt } from "@/lib/time";
+
+const weekday = (d: string) => ![0, 6].includes(new Date(`${d}T12:00:00Z`).getUTCDay());
+const dayLabel = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+
+/** Pure: the session a not-yet-entered track enters at: the next weekday after today (or after the card's day). */
+export function entryDay(cardDate: string, today: string, beforeOpen = false): string {
+  if (beforeOpen && cardDate < today && weekday(today)) return today;
+  let d = addDays(cardDate > today ? cardDate : today, 1);
+  while (!weekday(d)) d = addDays(d, 1);
+  return d;
+}
 
 const pct = (x: number | null) => (x === null ? "?" : `${x > 0 ? "+" : x < 0 ? "−" : ""}${Math.abs(x * 100).toFixed(1)}%`);
 
@@ -22,6 +34,8 @@ export default async function DriftBook({ cards, tracks, data }: { cards: Stored
   const syms = [...new Set([...open.map((t) => t.symbol), "SPY"])];
   const snaps = (open.length && data?.getSnapshots ? await data.getSnapshots(syms).catch(() => ({})) : {}) as Record<string, { price: number }>;
   const spyNow = snaps.SPY?.price ?? null;
+  const et = toEt(new Date());
+  const today = et.date, beforeOpen = et.minutes < 9 * 60 + 30;
   const results = closed.map((t) => paperResult(t, null, null)).filter((r): r is NonNullable<typeof r> => !!r);
   const all = bookStats(results);
   const byStatus = (s: string) => bookStats(closed.filter((t) => byId.get(t.cardId)?.status === s).map((t) => paperResult(t, null, null)).filter((r): r is NonNullable<typeof r> => !!r));
@@ -42,11 +56,11 @@ export default async function DriftBook({ cards, tracks, data }: { cards: Stored
                 <tr key={t.cardId}>
                   <td><Ticker symbol={t.symbol} /></td>
                   <td className="small"><a href={`/cards/${c.id}`}>#{c.id}</a> <span className={`tag ${c.status}`}>{c.status.replace("_", " ")}</span>{t.invalidatedAt ? <span className="tag neg">invalidated</span> : null}</td>
-                  <td className="small">{t.entryDate ? `${t.entryDate} @ $${t.entryPrice?.toFixed(2)}` : `${t.cardDate} (next open)`}</td>
-                  <td className="num">{r ? `${r.days}d` : "0d"}</td>
-                  <td className={`num ${r ? (r.ret >= 0 ? "pos" : "neg") : "muted"}`}>{r ? pct(r.ret) : "?"}</td>
-                  <td className={`num ${r && r.spy !== null ? (r.ret - r.spy >= 0 ? "pos" : "neg") : "muted"}`}>{r && r.spy !== null ? pct(r.ret - r.spy) : "?"}</td>
-                  <td className="small">{t.deadlineDate}{t.maxDrawdownPct !== null ? <span className="muted"> · worst {t.maxDrawdownPct}%</span> : null}</td>
+                  <td className="small">{t.entryDate ? `${t.entryDate} @ $${t.entryPrice?.toFixed(2)}` : <span className="muted">enters {dayLabel(entryDay(t.cardDate, today, beforeOpen))} open</span>}</td>
+                  <td className="num">{r ? `${r.days}d` : "—"}</td>
+                  <td className={`num ${r ? (r.ret >= 0 ? "pos" : "neg") : "muted"}`}>{r ? pct(r.ret) : t.entryDate ? "no price" : "not entered yet"}</td>
+                  <td className={`num ${r && r.spy !== null ? (r.ret - r.spy >= 0 ? "pos" : "neg") : "muted"}`}>{r && r.spy !== null ? pct(r.ret - r.spy) : "—"}</td>
+                  <td className="small">{t.invalidatedAt ? <span className="warn">exits at the next open (invalidated)</span> : t.deadlineDate}{t.maxDrawdownPct !== null ? <span className="muted"> · worst {t.maxDrawdownPct}%</span> : null}</td>
                 </tr>
               );
             })}</tbody>
