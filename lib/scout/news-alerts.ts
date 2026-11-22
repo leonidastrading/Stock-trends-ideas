@@ -73,9 +73,18 @@ export async function runNewsAlerts(deps: { data: MarketData | null; now: Date; 
   const base = (env.DASHBOARD_URL ?? "").replace(/\/$/, "");
   const cardBy = new Map<string, number>();
   for (const c of cards) for (const t of c.card.tickers) if (!cardBy.has(t.symbol) || c.id > cardBy.get(t.symbol)!) cardBy.set(t.symbol, c.id);
+  let stale = 0;
   for (const p of picks) {
     const sym = p.symbol;
     const card = cardBy.get(sym);
+    // Old news told again: aggregators (fiscal.ai) re-write stories hours later and the feed dates the re-write (MT
+    // Newswires had Nvidia's congressional probe at 6:31 AM on Nov 20; the alert went out at 2:01 PM). Halts and
+    // filings are always fresh; headlines with an earlier version on the same stock in the 3 days before are skipped.
+    if (p.why !== "halt" && p.why !== "filing" && deps.data) {
+      const { priorVersion } = await import("./pr-desk");
+      const company = (await store.symbolInfo([sym]).catch(() => new Map<string, store.SymbolInfo>())).get(sym)?.name ?? null;
+      if (await priorVersion(deps.data, sym, p.headline, p.ts, { fetchImpl: deps.fetchImpl, company }).catch(() => null)) { stale++; continue; }
+    }
     await sendPush({ title: `${p.why === "halt" ? "⛔ HALT" : p.why === "filing" ? "📄 8-K" : p.bigStory ? "🔥" : "📰"} ${sym}${card ? ` · card #${card}` : p.bigStory ? ` · big story (${p.why})` : ""}`, message: `${p.headline}\n${p.source} · ${new Date(p.ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })} ET`, click: p.url.startsWith("http") ? p.url : `${base}/news`, tags: [p.why === "halt" ? "no_entry" : "newspaper"], priority: p.why === "halt" || p.why === "filing" ? 5 : 4 }, env).catch(() => undefined);
   }
   // Price watch: big moves on big companies, from 4 AM to 8 PM ET on weekdays (up to 3 a run, biggest first).
@@ -92,5 +101,5 @@ export async function runNewsAlerts(deps: { data: MarketData | null; now: Date; 
   // A move also covers its lower level (a stock first seen at -11% does not push again for 5%).
   const done = [...picks.flatMap((p) => [p.key, ...(p.cooldown ? [`story:${p.symbol}:${hour}`] : [])]), ...moves.flatMap((m) => [m.key, ...[5, 10].filter((l) => l < m.level).map((l) => `move:${m.symbol}:${m.date}:${m.phase}:${l}`)])];
   if (done.length) await store.cachePut("news-alerts:sent", { keys: [...done, ...sentKeys].slice(0, ALERTS.keep) }).catch(() => undefined);
-  return `${picks.length + moves.length} alert${picks.length + moves.length === 1 ? "" : "s"} sent${moves.length ? ` (${moves.length} big moves)` : ""} (${fast.length + alpaca.length} items checked, ${mine.size} of your stocks)`;
+  return `${picks.length - stale + moves.length} alert${picks.length - stale + moves.length === 1 ? "" : "s"} sent${moves.length ? ` (${moves.length} big moves)` : ""}${stale ? `, ${stale} old news skipped` : ""} (${fast.length + alpaca.length} items checked, ${mine.size} of your stocks)`;
 }

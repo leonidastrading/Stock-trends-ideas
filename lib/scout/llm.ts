@@ -17,6 +17,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { callCost, modelFor } from "@/config/scout";
 import { RECHECK_PROMPT, RECHECK_SCHEMA } from "./recheck";
 import { BUBBLE_PROMPT, BUBBLE_SCHEMA } from "./bubbles";
+import { OLD_NEWS_PROMPT, OLD_NEWS_SCHEMA } from "./pr-desk";
 import { CARD_JSON_SCHEMA } from "./card";
 import { TRIAGE_JSON_SCHEMA, TRIAGE_SYSTEM_PROMPT } from "./discovery";
 import { SYSTEM_PROMPT } from "./prompt";
@@ -33,7 +34,7 @@ export interface ModelReply {
   costUsd: number | null;
 }
 
-export type Purpose = "research" | "triage" | "stories" | "review" | "inbox" | "inbox_digest" | "truth" | "rumors" | "investigate_plan" | "investigate_leads" | "investigate_report" | "filing_diff" | "readthrough" | "site_digest" | "earnings_card" | "rumor_check" | "invalidation" | "themes" | "image_read" | "dots" | "dots_scan" | "recheck" | "bubbles";
+export type Purpose = "research" | "triage" | "stories" | "review" | "inbox" | "inbox_digest" | "truth" | "rumors" | "investigate_plan" | "investigate_leads" | "investigate_report" | "filing_diff" | "readthrough" | "site_digest" | "earnings_card" | "rumor_check" | "invalidation" | "themes" | "image_read" | "dots" | "dots_scan" | "recheck" | "bubbles" | "old_news";
 export type CallModel = (args: { model: string; effort: Effort; user: string; purpose?: Purpose; images?: Array<{ mediaType: string; data: string }> }) => Promise<ModelReply>;
 
 const PROMPTS: Record<Purpose, { system: string; schema: Record<string, unknown> }> = {
@@ -50,6 +51,7 @@ const PROMPTS: Record<Purpose, { system: string; schema: Record<string, unknown>
   dots_scan: { system: DOTS_SCAN_PROMPT, schema: DOTS_SCAN_SCHEMA as unknown as Record<string, unknown> },
   dots: { system: DOTS_PROMPT, schema: DOTS_SCHEMA as unknown as Record<string, unknown> },
   themes: { system: THEMES_PROMPT, schema: THEMES_SCHEMA as unknown as Record<string, unknown> },
+  old_news: { system: OLD_NEWS_PROMPT, schema: OLD_NEWS_SCHEMA as unknown as Record<string, unknown> },
   bubbles: { system: BUBBLE_PROMPT, schema: BUBBLE_SCHEMA as unknown as Record<string, unknown> },
   recheck: { system: RECHECK_PROMPT, schema: RECHECK_SCHEMA as unknown as Record<string, unknown> },
   invalidation: { system: INVALIDATION_PROMPT, schema: INVALIDATION_SCHEMA as unknown as Record<string, unknown> },

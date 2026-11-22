@@ -56,3 +56,18 @@ describe("old news told again", () => {
     expect(earlierVersion("Nvidia Unveils New Blackwell Server Line", "2026-11-20T19:01:43Z", prior)).toBeNull();
   });
 });
+
+import { keyWords, priorVersion } from "@/lib/scout/pr-desk";
+describe("finding the earlier version across outlets", () => {
+  it("picks the headline's distinctive words for the search", () => {
+    expect(keyWords("NVIDIA Subject to Congressional Probe Regarding China Sales")).toEqual(["Congressional", "Regarding", "Subject"]);
+  });
+
+  it("finds it in Google News when the stock's own feed does not have it (word match, no model)", async () => {
+    const rss = `<rss><channel><item><title>Nvidia Subject to Congressional Probe Over Ties to Commerce Department, Possible China Sales - MarketScreener</title><link>https://ms/1</link><pubDate>Fri, 20 Nov 2026 11:31:00 GMT</pubDate><source>MarketScreener</source></item></channel></rss>`;
+    const fetchImpl = (async () => new Response(rss, { status: 200 })) as unknown as typeof fetch;
+    const data = { getNews: async () => [] } as never;
+    const hit = await priorVersion(data, "NVDA", "NVIDIA Subject to Congressional Probe Regarding China Sales", "2026-11-20T19:01:43Z", { fetchImpl, company: "NVIDIA Corporation Common Stock", judge: false });
+    expect(hit).toMatchObject({ ts: "2026-11-20T11:31:00.000Z", source: "MarketScreener" });
+  });
+});
