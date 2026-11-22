@@ -54,7 +54,7 @@ export default function TickerSearch() {
     if (!noMatch) return;
     setTheme("busy");
     const observation = `Vadim searched for "${noMatch}", which is not a US-listed ticker or company name. Work out what it is (a private company, a product, a person, a theme), what is changing about it now, and which listed stocks would move because of it (suppliers, partners, customers, competitors, holders). Say whether there is a trade, which way, and how late it is.`;
-    const res = await fetch("/api/notice", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ observation, term: noMatch.slice(0, 80), kind: null }) });
+    const res = await fetch("/api/notice", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ observation, term: noMatch.slice(0, 80), kind: null, from: { label: "Home search", url: "/" } }) });
     const j = await res.json().catch(() => ({ errors: [`HTTP ${res.status}`] }));
     setTheme(res.ok && j.ok ? { cardId: j.cardId, status: j.status } : { error: (j.errors ?? ["failed"]).join("; ") });
   }
@@ -64,7 +64,7 @@ export default function TickerSearch() {
     setResearch("busy");
     const observation = `Vadim asked the scout to research ${r.symbol}${r.name ? ` (${r.name})` : ""}. Find what is changing for this company now (news, filings, insider and Congress trades, options positioning, public attention, the next catalyst) and say whether there is a trade, which way, and how late it is.${r.news.length ? ` Recent headlines: ${r.news.map((n) => n.headline).join(" | ").slice(0, 600)}.` : ""}`;
     // A dropped connection (phone asleep, page left) does not stop the research on the server: say where it lands.
-    const res = await fetch("/api/notice", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ observation, term: `${r.symbol} on request`, tickers: [r.symbol], kind: null }) }).catch(() => null);
+    const res = await fetch("/api/notice", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ observation, term: `${r.symbol} on request`, tickers: [r.symbol], kind: null, from: { label: "Home search", url: "/" } }) }).catch(() => null);
     if (!res) { setResearch({ error: `Lost the connection while it ran. The research may still finish: a card shows up on Ideas (and here when you search ${r.symbol} again); a rejection is listed under Desk reports below.` }); return; }
     const j = await res.json().catch(() => ({ errors: [`HTTP ${res.status}`] }));
     setResearch(res.ok && j.ok ? { cardId: j.cardId, status: j.status } : { error: (j.errors ?? ["failed"]).join("; ") });

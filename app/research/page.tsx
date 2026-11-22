@@ -4,7 +4,7 @@ import SetupNotice from "@/components/SetupNotice";
 import Ticker from "@/components/Ticker";
 import { hasDatabase } from "@/lib/db";
 import { paperResult } from "@/lib/scout/paper-result";
-import { isStale, listRequests, type ResearchRequest } from "@/lib/scout/research-requests";
+import { fromCandidates, isStale, listRequests, type ResearchRequest } from "@/lib/scout/research-requests";
 import * as store from "@/lib/scout/store";
 import { fmtEtAgo } from "@/lib/time";
 import ResearchForm, { RefreshWhileRunning } from "./ResearchForm";
@@ -15,15 +15,14 @@ export const runtime = "nodejs";
 /** Research: ask the scout about a stock or an idea, and every research you started from any tab, with its result. */
 export default async function ResearchPage() {
   if (!hasDatabase()) return <SetupNotice />;
-  const [requests, cards, tracks] = await Promise.all([listRequests(200).catch(() => [] as ResearchRequest[]), store.cardsSince(365), store.allTracks()]);
+  const [logged, cards, tracks, cands] = await Promise.all([listRequests(200).catch(() => [] as ResearchRequest[]), store.cardsSince(365), store.allTracks(), store.candidatesSince(120).catch(() => [] as store.Candidate[])]);
+  const now = new Date();
+  // Research from before requests were logged comes from the scout's own record, in the same list.
+  const first = logged.length ? logged[logged.length - 1].createdAt : now.toISOString();
+  const requests = [...logged, ...fromCandidates(cands, first)].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const byId = new Map(cards.map((c) => [c.id, c]));
   const track = new Map(tracks.map((t) => [t.cardId, t]));
-  const now = new Date();
   const running = requests.some((r) => r.status === "running" && !isStale(r, now));
-  // Before this tab existed, research you asked for was not logged; your own cards from then are listed below the log.
-  const first = requests.length ? requests[requests.length - 1].createdAt : now.toISOString();
-  const logged = new Set(requests.map((r) => r.cardId).filter(Boolean));
-  const earlier = cards.filter((c) => c.origin === "human" && c.createdAt < first && !logged.has(c.id)).slice(0, 40);
 
   const result = (c: store.StoredCard) => {
     const t = track.get(c.id);
@@ -70,13 +69,6 @@ export default async function ResearchPage() {
           </table></div>
         )}
       </section>
-      {earlier.length > 0 && (
-        <section className="card">
-          <h2>Earlier cards you asked for</h2>
-          <p className="small muted">From before this tab logged requests (rejected ones from then were not kept).</p>
-          <ul className="notice-recent">{earlier.map((c) => <li key={c.id}><span className="small muted">{fmtEtAgo(c.createdAt)}</span> {result(c)}</li>)}</ul>
-        </section>
-      )}
     </>
   );
 }

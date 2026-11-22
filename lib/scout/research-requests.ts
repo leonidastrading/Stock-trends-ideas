@@ -5,6 +5,7 @@
  * you last looked. The cards themselves are written and scored exactly as before.
  */
 import { query as q } from "../db";
+import type { Candidate } from "./store";
 
 export interface ResearchRequest {
   id: number; createdAt: string; finishedAt: string | null; term: string; tickers: string[]; fromLabel: string | null; fromUrl: string | null;
@@ -57,4 +58,19 @@ export const isStale = (r: ResearchRequest, now = new Date()) => r.status === "r
 
 export async function listRequests(limit = 200): Promise<ResearchRequest[]> {
   return (await q(`SELECT * FROM research_requests ORDER BY id DESC LIMIT $1`, [limit])).map(toReq);
+}
+
+/**
+ * Pure: research you asked for before requests were logged, from the scout's own record of what it researched.
+ * Only your requests (a "Research it" button, the Home search or I noticed something: they carry where they came
+ * from); your bots' inbox documents and the scout's own scans are not listed. Only from before `before`, so nothing
+ * shows twice. Ids are negative so they never clash with logged requests.
+ */
+export function fromCandidates(cands: Candidate[], before: string): ResearchRequest[] {
+  return cands
+    .filter((c) => c.origin === "human" && c.sourceLabel && c.createdAt < before)
+    .map((c) => ({
+      id: -c.id, createdAt: c.createdAt, finishedAt: c.createdAt, term: c.term, tickers: c.tickersHint, fromLabel: c.sourceLabel ?? null, fromUrl: c.sourceUrl ?? null,
+      status: c.outcome === "card" ? "card" : c.outcome === "rejected" ? "rejected" : "error", cardId: c.cardId, cardStatus: null, reason: c.outcome === "card" ? null : c.reason,
+    }));
 }

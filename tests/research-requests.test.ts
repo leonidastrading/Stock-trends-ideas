@@ -16,3 +16,14 @@ describe("research you asked for", () => {
     expect(isStale({ ...r, status: "card" }, new Date("2026-11-22T21:00:00Z"))).toBe(false);
   });
 });
+
+import { fromCandidates } from "@/lib/scout/research-requests";
+import type { Candidate } from "@/lib/scout/store";
+
+describe("research from before requests were logged", () => {
+  it("lists your own earlier research (not your bots' or the scout's), only from before the log started", () => {
+    const c = (id: number, createdAt: string, origin: "human" | "scout", sourceLabel: string | null, outcome: Candidate["outcome"] = "card") => ({ id, createdAt, origin, sourceLabel, sourceUrl: "/", term: `t${id}`, tickersHint: ["MU"], outcome, reason: outcome === "card" ? null : "already priced", cardId: outcome === "card" ? 300 + id : null }) as Candidate;
+    const rows = fromCandidates([c(1, "2026-11-22T20:29:00Z", "human", "Your note"), c(2, "2026-11-22T20:10:00Z", "human", null), c(3, "2026-11-22T20:00:00Z", "scout", "Themes"), c(4, "2026-11-22T20:50:00Z", "human", "News"), c(5, "2026-11-22T19:00:00Z", "human", "Court", "rejected")], "2026-11-22T20:47:00Z");
+    expect(rows.map((r) => [r.id, r.status, r.cardId, r.reason])).toEqual([[-1, "card", 301, null], [-5, "rejected", null, "already priced"]]);
+  });
+});
