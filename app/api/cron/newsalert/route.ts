@@ -24,7 +24,11 @@ export async function GET(request: Request) {
   // this job's 60 seconds, which timed it out.
   try {
     const { runNewsAlerts } = await import("@/lib/scout/news-alerts");
-    return NextResponse.json({ status: "ok", result: await runNewsAlerts({ data: marketDataFromEnv(), now: new Date() }) });
+    const data = marketDataFromEnv(), now = new Date();
+    const result = await runNewsAlerts({ data, now });
+    // The press-release desk rides on the same minute (logging only in its windows; no AI).
+    const pr = await import("@/lib/scout/pr-desk").then(({ runPrDesk }) => runPrDesk({ data, now })).catch((e) => `pr desk failed: ${e instanceof Error ? e.message.slice(0, 120) : e}`);
+    return NextResponse.json({ status: "ok", result, pr });
   } catch (err) {
     return NextResponse.json({ status: "error", error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }

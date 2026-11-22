@@ -492,3 +492,11 @@ a.source-tag:hover { background: color-mix(in srgb, var(--accent) 14%, transpare
 
 .filter-title { color: var(--text-muted); margin-right: 4px; min-width: 7.5em; display: inline-block; }
 .filters-actions { margin-top: 8px; gap: 8px; align-items: center; }
+
+/* Press releases: one headline with its timeline, prices and what followed. */
+.pr-item { padding: 12px 14px; }
+.pr-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pr-headline { font-weight: 600; margin: 6px 0 8px; overflow-wrap: anywhere; }
+.pr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 18px; border-top: 1px solid var(--border); padding-top: 8px; }
+.pr-label { text-transform: uppercase; letter-spacing: .06em; font-weight: 700; color: var(--text-secondary); margin-bottom: 4px; }
+.pr-row { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }

@@ -630,6 +630,34 @@ CREATE TABLE IF NOT EXISTS bubble_movers (
   spy_after20 numeric
 );
 CREATE INDEX IF NOT EXISTS bubble_movers_symbol_idx ON bubble_movers (symbol, last_seen);
+-- Press-release desk: each company headline in the press-release windows, its keyword score and what followed.
+CREATE TABLE IF NOT EXISTS pr_watch (
+  id serial PRIMARY KEY,
+  news_id bigint NOT NULL UNIQUE,
+  symbol text NOT NULL,
+  published_at timestamptz NOT NULL,
+  seen_at timestamptz NOT NULL,
+  headline text NOT NULL,
+  url text,
+  source text,
+  stars integer NOT NULL DEFAULT 0,
+  hot text[] NOT NULL DEFAULT '{}',
+  sinkers text[] NOT NULL DEFAULT '{}',
+  earnings boolean NOT NULL DEFAULT false,
+  shares_out_m numeric,
+  prev_close numeric,
+  price_seen numeric,
+  vol_seen numeric,
+  price_pub numeric,
+  p15 numeric,
+  p60 numeric,
+  high60 numeric,
+  vol60 numeric,
+  day_open numeric,
+  day_close numeric,
+  next_close numeric
+);
+CREATE INDEX IF NOT EXISTS pr_watch_seen_idx ON pr_watch (seen_at);
 -- Market cap and short interest per card, frozen once, for splitting results by size and by short interest.
 CREATE TABLE IF NOT EXISTS card_profiles (
   card_id integer PRIMARY KEY,

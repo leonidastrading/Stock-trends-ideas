@@ -58,6 +58,8 @@ export interface Mover { symbol: string; price: number; changePct: number }
 
 export interface Asset { symbol: string; name: string; exchange: string; active: boolean; tradable: boolean }
 
+export interface MinuteBar { t: string; o: number; h: number; l: number; c: number; v: number }
+
 export interface DailyBar {
   symbol: string;
   date: string;
@@ -182,6 +184,21 @@ export class AlpacaClient {
     return out;
   }
 
+  /** One stock's 1-minute bars (extended hours included) in [start, end]; free data is the IEX feed. */
+  async getMinuteBars(symbol: string, start: Date, end: Date): Promise<MinuteBar[]> {
+    const out: MinuteBar[] = [];
+    let pageToken: string | undefined;
+    do {
+      const resp = await this.get<{ bars: Record<string, Array<{ t: string; o: number; h: number; l: number; c: number; v: number }>> | null; next_page_token?: string | null }>(
+        DATA_HOST, "/v2/stocks/bars",
+        { symbols: symbol, timeframe: "1Min", start: start.toISOString(), end: end.toISOString(), adjustment: "raw", feed: "iex", sort: "asc", limit: 10000, page_token: pageToken },
+      );
+      for (const r of resp.bars?.[symbol] ?? []) out.push({ t: r.t, o: r.o, h: r.h, l: r.l, c: r.c, v: r.v });
+      pageToken = resp.next_page_token ?? undefined;
+    } while (pageToken);
+    return out;
+  }
+
   /** Headlines tagged with any of `symbols` in [start, end), newest first, up to `max`. */
   async getNews(symbols: string[], start: Date, end: Date, max = 500): Promise<NewsItem[]> {
     const out: NewsItem[] = [];
@@ -272,6 +289,8 @@ export interface BarOptions { feed?: "iex" | "sip"; adjustment?: "split" | "raw"
 export interface MarketData {
   getDailyBars(symbols: readonly string[], start: string, end: string, opts?: BarOptions): Promise<DailyBar[]>;
   getNews(symbols: string[], start: Date, end: Date, max?: number): Promise<NewsItem[]>;
+  /** Optional: one stock's 1-minute bars (market data only). */
+  getMinuteBars?(symbol: string, start: Date, end: Date): Promise<MinuteBar[]>;
   getCalendar(start: string, end: string): Promise<Session[]>;
   /** Optional: what a symbol currently is (asset metadata). */
   getAsset?(symbol: string): Promise<Asset | null>;
