@@ -298,7 +298,7 @@ export async function setTapped(cardId: number, response: unknown): Promise<void
   await q(`UPDATE tracks SET tapped_at = coalesce(tapped_at, now()), swing_response = $2 WHERE card_id = $1`, [cardId, JSON.stringify(response)]);
 }
 
-export async function addTrackEvent(cardId: number, kind: "invalidated" | "sent_to_swing" | "send_failed" | "excluded", detail: string | null): Promise<void> {
+export async function addTrackEvent(cardId: number, kind: "invalidated" | "sent_to_swing" | "send_failed" | "excluded" | "tracked_from_listing" | "listing_not_followed", detail: string | null): Promise<void> {
   await q(`INSERT INTO track_events (card_id, kind, detail) VALUES ($1, $2, $3)`, [cardId, kind, detail]);
 }
 

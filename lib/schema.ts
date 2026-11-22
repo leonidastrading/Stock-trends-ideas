@@ -133,7 +133,7 @@ CREATE TABLE IF NOT EXISTS tracks (
 CREATE TABLE IF NOT EXISTS track_events (
   id bigserial PRIMARY KEY,
   card_id bigint NOT NULL REFERENCES cards(id),
-  kind text NOT NULL,                -- invalidated | sent_to_swing | send_failed | excluded (wrong security; left out of scoring)
+  kind text NOT NULL,                -- invalidated | sent_to_swing | send_failed | excluded (wrong security; left out of scoring) | tracked_from_listing | listing_not_followed
   at timestamptz NOT NULL DEFAULT now(),
   detail text
 );

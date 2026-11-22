@@ -22,6 +22,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ name: strin
       case "filingdiff": result = await import("@/lib/scout/filing-diff-run").then(({ runFilingDiffs }) => runFilingDiffs(deps)); break;
       case "crowding": result = await import("@/lib/scout/crowding").then(({ runCrowdingBatch }) => runCrowdingBatch(deps.data ?? null, deps.now, deps.env)); break;
       case "readthrough": result = await import("@/lib/scout/readthrough").then(({ runReadthrough }) => runReadthrough(deps)); break;
+      case "listings": result = await import("@/lib/scout/listing-wait").then(({ runListingWatch }) => runListingWatch(deps.data ?? null, deps.now)); break;
       case "petitions": result = await import("@/lib/scout/petitions").then(({ runPetitionWatch }) => runPetitionWatch(deps.env, deps.now)); break;
     }
     console.log(result!);

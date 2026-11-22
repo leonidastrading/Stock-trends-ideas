@@ -72,7 +72,7 @@ export function ideaResult(card: StoredCard, t: Track, bars: BarsBySymbol): Idea
     baseline.push(r4(signedReturn(t.direction, e.o, closed ? x.o : x.c) - spyRet));
   }
   return {
-    cardId: card.id, origin: card.origin, tapped: !!t.tappedAt, kind: card.kind, status: card.status as "promoted" | "late", rankScore: card.rankScore, symbol: t.symbol, direction: t.direction,
+    cardId: card.id, origin: card.origin, tapped: !!t.tappedAt, kind: card.kind, status: card.status === "promoted" ? "promoted" : "late" /* a card tracked from its listing (not promoted when written) counts with the late ones */, rankScore: card.rankScore, symbol: t.symbol, direction: t.direction,
     entryDate: t.entryDate, exitDate: closed ? t.exitDate : null, closed, ret: r4(ret), spyRet: spyRet === null ? null : r4(spyRet), sectorRet: sectorRet === null ? null : r4(sectorRet),
     excess: spyRet === null ? null : r4(ret - spyRet), excessSector: sectorRet === null ? null : r4(ret - sectorRet), maxDrawdownPct: t.maxDrawdownPct, baseline,
   };
