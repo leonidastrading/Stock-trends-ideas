@@ -483,3 +483,6 @@ a.source-tag:hover { background: color-mix(in srgb, var(--accent) 14%, transpare
 .filters-panel { margin: 6px 0 10px; border: 1px solid var(--border); border-radius: 10px; padding: 6px 10px; }
 .filters-panel > summary.filters-summary { cursor: pointer; padding: 4px 0; font-size: 14px; }
 .filters-panel[open] > summary.filters-summary { margin-bottom: 6px; }
+
+.filter-title { color: var(--text-muted); margin-right: 4px; min-width: 7.5em; display: inline-block; }
+.filters-actions { margin-top: 8px; gap: 8px; align-items: center; }

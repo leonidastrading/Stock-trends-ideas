@@ -2,7 +2,8 @@ import CardActions from "@/components/CardActions";
 import { originLink } from "@/lib/scout/origin-tag";
 import CardView from "@/components/CardView";
 import { CollapseAll } from "@/components/CardCollapse";
-import Pager, { FilterLinks, hrefWith, paginate } from "@/components/Pager";
+import Pager, { hrefWith, paginate } from "@/components/Pager";
+import IdeasFilters, { type FilterGroup } from "@/components/IdeasFilters";
 import SetupNotice from "@/components/SetupNotice";
 import TickerSearch from "@/components/TickerSearch";
 import { hasDatabase } from "@/lib/db";
@@ -58,15 +59,20 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   if (!hasDatabase()) return <SetupNotice />;
   const sp = await searchParams;
   const days = [7, 30, 90, 365].includes(Number(sp.days)) ? Number(sp.days) : 7;
-  const source = (PLAYERS as readonly string[]).includes(sp.source ?? "") ? (sp.source as Player) : "";
-  const status = sp.status && sp.status in STATUS_RANK ? sp.status : "";
   const sort = SORTS.some((s) => s.value === sp.sort) ? sp.sort! : "best";
-  const conf = CONF_BANDS.some((b) => b.key === sp.conf) ? sp.conf! : "";
-  const cap = SIZE_KEYS.some((s) => s.key === sp.cap) || sp.cap === "unknown" ? sp.cap! : "";
-  const dir = sp.dir === "long" || sp.dir === "short" ? sp.dir : "";
-  const shortBand = SHORT_BANDS.some((b) => b.key === sp.short) ? sp.short! : "";
-  const scoreSel = Object.fromEntries(SCORE_FILTERS.map((f) => [f.param, SCORE_BANDS(f.param).some((b) => b.key === sp[f.param]) ? sp[f.param]! : ""])) as Record<ScoreParam, string>;
-  const params: Record<string, string | undefined> = { days: days === 7 ? undefined : String(days), source: source || undefined, status: status || undefined, sort: sort === "best" ? undefined : sort, conf: conf || undefined, cap: cap || undefined, short: shortBand || undefined, dir: dir || undefined, ...Object.fromEntries(SCORE_FILTERS.map((f) => [f.param, scoreSel[f.param] || undefined])), page: sp.page };
+  // Each filter group takes any number of values (comma-separated in the address); none = any.
+  const many = (v: string | undefined, ok: (x: string) => boolean) => new Set((v ?? "").split(",").map((x) => x.trim()).filter((x) => x && ok(x)));
+  const sel: Record<string, Set<string>> = {
+    dir: many(sp.dir, (x) => x === "long" || x === "short"),
+    status: many(sp.status, (x) => x in STATUS_RANK),
+    conf: many(sp.conf, (x) => CONF_BANDS.some((b) => b.key === x)),
+    cap: many(sp.cap, (x) => SIZE_KEYS.some((s) => s.key === x) || x === "unknown"),
+    short: many(sp.short, (x) => SHORT_BANDS.some((b) => b.key === x)),
+    ...Object.fromEntries(SCORE_FILTERS.map((f) => [f.param, many(sp[f.param], (x) => SCORE_BANDS(f.param).some((b) => b.key === x))])),
+    source: many(sp.source, (x) => (PLAYERS as readonly string[]).includes(x)),
+  };
+  const joined = (k: string) => (sel[k].size ? [...sel[k]].join(",") : undefined);
+  const params: Record<string, string | undefined> = { days: days === 7 ? undefined : String(days), sort: sort === "best" ? undefined : sort, ...Object.fromEntries(Object.keys(sel).map((k) => [k, joined(k)])), penny: sp.penny, page: sp.page };
 
   const [cards, candidates, tracks, fb, recent] = await Promise.all([store.cardsSince(days), store.candidatesSince(days), store.allTracks(), store.latestFeedback(), store.cardsSince(120)]);
   const [reviews, profiles] = await Promise.all([store.allReviews(), profilesForCards(cards)]);
@@ -76,28 +82,6 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   const shortPx = shortSyms.length ? await (marketDataFromEnv()?.getSnapshots?.(shortSyms) ?? Promise.resolve({} as Record<string, { price: number }>)).catch(() => ({} as Record<string, { price: number }>)) : {};
   const penny = new Set(cards.filter((c) => isPennyShort(c, shortPx[c.primaryTicker]?.price)).map((c) => c.id));
   // Size and short-interest filters: the card's market cap and % of float short (frozen when written, else today's).
-  const capOk = (c: store.StoredCard, k = cap) => !k || (sizeKey(profiles.get(c.id)?.marketCap) ?? "unknown") === k;
-  const shortOk = (c: store.StoredCard, k = shortBand) => {
-    if (!k) return true;
-    const v = shortPct(profiles.get(c.id));
-    if (k === "unknown") return v === null;
-    const b = SHORT_BANDS.find((x) => x.key === k)!;
-    return v !== null && v >= b.lo && v < b.hi;
-  };
-  const confOk = (c: store.StoredCard, k = conf) => {
-    if (!k) return true;
-    const b = CONF_BANDS.find((x) => x.key === k)!;
-    return c.card.confidence >= b.lo && c.card.confidence < b.hi;
-  };
-  const dirOk = (c: store.StoredCard, d = dir) => !d || c.direction === d;
-  /** Every score filter, with one of them replaced (for that filter's own counts). */
-  const scoresOk = (c: store.StoredCard, over?: { param: ScoreParam; key: string }) => SCORE_FILTERS.every((f) => {
-    const k = over && over.param === f.param ? over.key : scoreSel[f.param];
-    if (!k) return true;
-    const b = SCORE_BANDS(f.param).find((x) => x.key === k)!;
-    const v = f.get(c);
-    return v >= b.lo && v < b.hi;
-  });
   const opp = opposingCalls(recent, tracks);
   const t = new Map(tracks.map((x) => [x.cardId, x]));
   const termOf = new Map(candidates.filter((c) => c.cardId !== null).map((c) => [c.cardId!, c.term]));
@@ -119,11 +103,24 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   const today = toEt(new Date()).date;
   const sw = swingConfigured();
 
+  // The filter groups: what each card's value is in that group, and the choices offered.
+  const band = (bands: ReadonlyArray<{ key: string; lo: number; hi: number }>, v: number | null) => (v === null ? "unknown" : bands.find((b) => v >= b.lo && v < b.hi)?.key ?? "");
+  const GROUPS: Array<{ param: string; title: string; options: Array<{ value: string; label: string }>; keyOf: (c: store.StoredCard) => string; scores?: boolean }> = [
+    { param: "dir", title: "Side", options: [{ value: "long", label: "▲ Long" }, { value: "short", label: "▼ Short" }], keyOf: (c) => c.direction },
+    { param: "status", title: "Status", options: [{ value: "promoted", label: "Promoted" }, { value: "late", label: "Late" }, { value: "not_promoted", label: "Not promoted" }], keyOf: (c) => c.status },
+    { param: "conf", title: "Confidence", options: CONF_BANDS.map((b) => ({ value: b.key, label: b.label.replace(/^Confidence /, "") })), keyOf: (c) => band(CONF_BANDS, c.card.confidence) },
+    { param: "cap", title: "Size", options: [...SIZE_KEYS.map((s) => ({ value: s.key, label: s.label })), { value: "unknown", label: "unknown" }], keyOf: (c) => sizeKey(profiles.get(c.id)?.marketCap) ?? "unknown" },
+    { param: "short", title: "Short interest", options: SHORT_BANDS.map((b) => ({ value: b.key, label: b.label.replace(/^Short /, "") })), keyOf: (c) => band(SHORT_BANDS.filter((b) => b.key !== "unknown"), shortPct(profiles.get(c.id))) },
+    ...SCORE_FILTERS.map((f) => ({ param: f.param, title: `${f.label[0].toUpperCase()}${f.label.slice(1)}`, options: SCORE_BANDS(f.param).map((b) => ({ value: b.key, label: b.label })), keyOf: (c: store.StoredCard) => band(SCORE_BANDS(f.param), f.get(c)), scores: true })),
+    { param: "source", title: "Source", options: PLAYERS.filter((pl) => cards.some((c) => playerFor(c) === pl)).map((pl) => ({ value: pl, label: PLAYER_LABEL[pl].replace(/^Scout · /, "") })), keyOf: (c) => playerFor(c) },
+  ];
+  /** Does a card pass every group (but one, for that group's own counts)? */
+  const passes = (c: store.StoredCard, except?: string) => GROUPS.every((g) => g.param === except || !sel[g.param].size || sel[g.param].has(g.keyOf(c)));
+
   // One list of every card in the window: filtered by source and status, sorted, 10 a page.
   const wantedId = Number(sp.card);
-  const bySource = cards.filter((c) => (!repeats.has(c.id) || c.id === wantedId) && (!source || playerFor(c) === source) && (showPenny || !penny.has(c.id) || c.id === wantedId));
-  const byConf = bySource.filter((c) => confOk(c) && capOk(c) && shortOk(c) && dirOk(c) && scoresOk(c));
-  const rows = byConf.filter((c) => !status || c.status === status).sort((a, b) =>
+  const base = cards.filter((c) => (!repeats.has(c.id) || c.id === wantedId) && (showPenny || !penny.has(c.id) || c.id === wantedId));
+  const rows = base.filter((c) => passes(c) || c.id === wantedId).sort((a, b) =>
     sort === "newest" ? b.createdAt.localeCompare(a.createdAt)
       : sort === "confidence" ? b.card.confidence - a.card.confidence || b.rankScore - a.rankScore
       : sort === "catalyst" ? (a.catalystDate && a.catalystDate >= today ? a.catalystDate : "9999").localeCompare(b.catalystDate && b.catalystDate >= today ? b.catalystDate : "9999") || b.rankScore - a.rankScore
@@ -132,25 +129,15 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   const at = wanted ? rows.findIndex((c) => c.id === wanted) : -1;
   const page = paginate(rows, at >= 0 ? Math.floor(at / PAGE) + 1 : Number(sp.page ?? 1), PAGE);
 
-  const sourceCounts = new Map<string, number>();
-  const shownCards = cards.filter((c) => !repeats.has(c.id));
-  for (const c of shownCards) sourceCounts.set(playerFor(c), (sourceCounts.get(playerFor(c)) ?? 0) + 1);
-  const statusCount = (v: string) => byConf.filter((c) => !v || c.status === v).length;
-  const confCount = (n: string) => bySource.filter((c) => (!status || c.status === status) && confOk(c, n) && capOk(c) && shortOk(c) && dirOk(c) && scoresOk(c)).length;
-  const capCount = (k: string) => bySource.filter((c) => (!status || c.status === status) && confOk(c) && capOk(c, k) && shortOk(c) && dirOk(c) && scoresOk(c)).length;
-  const shortCount = (m: string) => bySource.filter((c) => (!status || c.status === status) && confOk(c) && capOk(c) && shortOk(c, m) && dirOk(c) && scoresOk(c)).length;
-  const dirCount = (d: string) => bySource.filter((c) => (!status || c.status === status) && confOk(c) && capOk(c) && shortOk(c) && dirOk(c, d) && scoresOk(c)).length;
+  // Each choice's count: the cards it would add, given the other groups as they are now.
+  const filterGroups: FilterGroup[] = GROUPS.map((g) => ({
+    param: g.param, title: g.title, scores: g.scores, selected: [...sel[g.param]],
+    options: g.options.map((o) => ({ ...o, count: base.filter((c) => passes(c, g.param) && g.keyOf(c) === o.value).length })),
+  }));
   // What is filtered, in words, for the folded filters line.
-  const activeFilters = [
-    dir ? (dir === "long" ? "▲ long" : "▼ short") : "",
-    status ? status.replace("_", " ") : "",
-    conf ? `confidence ${CONF_BANDS.find((b) => b.key === conf)!.label.replace(/^Confidence /, "")}` : "",
-    cap ? (cap === "unknown" ? "size unknown" : SIZE_KEYS.find((s) => s.key === cap)?.label ?? cap) : "",
-    shortBand ? SHORT_BANDS.find((b) => b.key === shortBand)!.label : "",
-    ...SCORE_FILTERS.filter((f) => scoreSel[f.param]).map((f) => `${f.label} ${SCORE_BANDS(f.param).find((b) => b.key === scoreSel[f.param])!.label}`),
-    source ? PLAYER_LABEL[source].replace(/^Scout · /, "") : "",
-  ].filter(Boolean);
-  const scoreCount = (param: ScoreParam, key: string) => bySource.filter((c) => (!status || c.status === status) && confOk(c) && capOk(c) && shortOk(c) && dirOk(c) && scoresOk(c, { param, key })).length;
+  const summary = [days === 365 ? "1 year" : `${days} days`, SORTS.find((x) => x.value === sort)?.label ?? "",
+    ...GROUPS.filter((g) => sel[g.param].size).map((g) => `${g.title.toLowerCase()}: ${g.options.filter((o) => sel[g.param].has(o.value)).map((o) => o.label).join(" or ")}`),
+    `${rows.length} card${rows.length === 1 ? "" : "s"}`].filter(Boolean).join(" · ");
 
   return (
     <>
@@ -165,41 +152,8 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
         {!sw && <div className="muted" style={{ marginTop: 6 }}>Sending to the Swing ideas log is not configured yet (SWING_API_URL / SWING_API_USER / SWING_API_PASSWORD).</div>}
       </details>
       <span id="cards" />
-      {/* All the filters fold away; the line shows what is on and how many cards it leaves. */}
-      <details className="filters-panel">
-        <summary className="filters-summary">
-          <b>Filters</b> <span className="muted">· {days === 365 ? "1 year" : `${days} days`} · {SORTS.find((s) => s.value === sort)?.label}{activeFilters.length ? ` · ${activeFilters.join(" · ")}` : ""} · {rows.length} card{rows.length === 1 ? "" : "s"}</span>
-        </summary>
-      <div className="toolbar">
-        <FilterLinks params={params} name="days" value={days === 7 ? "" : String(days)} reset={["page", "card"]} options={[{ value: "", label: "7 days" }, { value: "30", label: "30 days" }, { value: "90", label: "90 days" }, { value: "365", label: "1 year" }]} />
-        <FilterLinks params={params} name="sort" value={sort === "best" ? "" : sort} reset={["page", "card"]} options={SORTS.map((s) => ({ value: s.value === "best" ? "" : s.value, label: s.label }))} />
-      </div>
-      <div className="toolbar">
-        <FilterLinks params={params} name="dir" value={dir} reset={["page", "card"]} options={[{ value: "", label: "Long and short", count: dirCount("") }, { value: "long", label: "▲ Long", count: dirCount("long") }, { value: "short", label: "▼ Short", count: dirCount("short") }]} />
-        <FilterLinks params={params} name="status" value={status} reset={["page", "card"]} options={[{ value: "", label: "Any status", count: statusCount("") }, { value: "promoted", label: "Promoted", count: statusCount("promoted") }, { value: "late", label: "Late", count: statusCount("late") }, { value: "not_promoted", label: "Not promoted", count: statusCount("not_promoted") }]} />
-      </div>
-      <div className="toolbar">
-        <FilterLinks params={params} name="conf" value={conf} reset={["page", "card"]} options={[{ value: "", label: "Any confidence", count: confCount("") }, ...CONF_BANDS.map((b) => ({ value: b.key, label: b.label, count: confCount(b.key) }))]} />
-      </div>
-      <details className="score-filters" open={SCORE_FILTERS.some((f) => scoreSel[f.param])}>
-        <summary className="small">Scores: novelty, materiality, evidence, early, rank{SCORE_FILTERS.some((f) => scoreSel[f.param]) ? ` (${SCORE_FILTERS.filter((f) => scoreSel[f.param]).length} on)` : ""}</summary>
-        {SCORE_FILTERS.map((f) => (
-          <div className="toolbar" key={f.param}>
-            <FilterLinks params={params} name={f.param} value={scoreSel[f.param]} reset={["page", "card"]} options={[{ value: "", label: `Any ${f.label}`, count: scoreCount(f.param, "") }, ...SCORE_BANDS(f.param).map((b) => ({ value: b.key, label: `${f.label[0].toUpperCase()}${f.label.slice(1)} ${b.label}`, count: scoreCount(f.param, b.key) }))]} />
-          </div>
-        ))}
-      </details>
-      <div className="toolbar">
-        <FilterLinks params={params} name="cap" value={cap} reset={["page", "card"]} options={[{ value: "", label: "Any size", count: capCount("") }, ...SIZE_KEYS.map((s) => ({ value: s.key, label: s.label, count: capCount(s.key) })), { value: "unknown", label: "size unknown", count: capCount("unknown") }]} />
-      </div>
-      <div className="toolbar">
-        <FilterLinks params={params} name="short" value={shortBand} reset={["page", "card"]} options={[{ value: "", label: "Any short interest", count: shortCount("") }, ...SHORT_BANDS.map((b) => ({ value: b.key, label: b.label, count: shortCount(b.key) }))]} />
-      </div>
-      <div className="toolbar">
-        <FilterLinks params={params} name="source" value={source} reset={["page", "card"]} options={[{ value: "", label: "All sources", count: shownCards.length }, ...PLAYERS.filter((p) => sourceCounts.get(p)).map((p) => ({ value: p, label: PLAYER_LABEL[p].replace(/^Scout · /, ""), count: sourceCounts.get(p) }))]} />
-      </div>
-      {activeFilters.length > 0 && <p className="small"><a href={hrefWith({ days: params.days, sort: params.sort }, {})}>Clear filters</a></p>}
-      </details>
+      {/* All the filters fold away (remembered); tick any number per group, then Apply. */}
+      <IdeasFilters days={String(days)} sort={sort} sorts={SORTS} groups={filterGroups} summary={summary} keep={{ penny: sp.penny ?? "" }} />
       {penny.size > 0 && <p className="small muted">{showPenny ? <>Showing {penny.size} short{penny.size === 1 ? "" : "s"} on stocks under $5 (the scout does not suggest these). <a href={hrefWith(params, { penny: undefined })}>Hide them</a></> : <>{penny.size} short{penny.size === 1 ? "" : "s"} on stocks under $5 hidden (the scout does not suggest these). <a href={hrefWith(params, { penny: "1" })}>Show</a></>}</p>}
       <div className="toolbar" style={{ justifyContent: "space-between" }}><CollapseAll /><Pager params={params} name="page" page={page.page} pages={page.pages} total={page.total} label="cards" hash="#cards" /></div>
       {page.items.map((c) => {
