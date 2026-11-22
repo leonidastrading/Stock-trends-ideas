@@ -3,7 +3,8 @@ import Ticker from "@/components/Ticker";
 import CardAsk from "@/components/CardAsk";
 import { marketDataFromEnv } from "@/lib/alpaca";
 import { hasDatabase } from "@/lib/db";
-import { themeRuns, themeSends, type Theme, type ThemeRun } from "@/lib/scout/themes";
+import { guessQuoteLink, themeRuns, themeSends, type Theme, type ThemeRun } from "@/lib/scout/themes";
+import { query as q } from "@/lib/db";
 import { swingConfigured } from "@/lib/scout/swing";
 import { fmtEtAgo } from "@/lib/time";
 import CardChips from "@/components/CardChips";
@@ -48,6 +49,16 @@ export default async function ThemesPage() {
   // Every scout card on any of a theme's stocks.
   const briefs = await store.cardBriefsSince(120).catch(() => [] as store.CardBrief[]);
   const cardsFor = (t: Theme) => briefs.filter((c) => t.tickers.some((x) => c.primaryTicker === x || c.tickers.includes(x)));
+  // Quotes written before quotes carried their source's link: find the document or article they came from.
+  if (latest?.themes.some((t) => t.quotes.some((x) => !x.url))) {
+    const from = new Date(Date.parse(latest.createdAt) - 15 * 86400_000).toISOString();
+    const [docs, articles] = await Promise.all([
+      store.inboxDocsSince(from).catch(() => []),
+      q(`SELECT url, title FROM site_articles WHERE seen_at >= $1 AND seen_at <= $2`, [from, latest.createdAt]).then((r) => r.map((x) => ({ url: String(x.url), title: String(x.title) }))).catch(() => []),
+    ]);
+    const before = docs.filter((d) => d.readAt <= latest.createdAt);
+    for (const t of latest.themes) for (const x of t.quotes) if (!x.url) x.url = guessQuoteLink(x, before, articles);
+  }
   // The exchange of each idea's main ticker, so the chart opens the right listing.
   const info = latest ? await store.symbolInfo(latest.themes.map((t) => t.tickers[0]).filter(Boolean)).catch(() => new Map<string, store.SymbolInfo>()) : new Map<string, store.SymbolInfo>();
   return (
@@ -78,18 +89,18 @@ export default async function ThemesPage() {
             {/* Written with the theme and never changed; older themes get a fixed one from their own title. */}
             <div className={`card-thesis card-thesis-${t.direction}`}><span className="card-thesis-label">{t.direction === "long" ? "▲" : "▼"} Thesis</span> {t.one_line?.trim() || `${t.direction === "long" ? "Long" : "Short"} ${t.tickers.join(", ")}: ${t.title.replace(/\.$/, "")}.`}</div>
             </div>
+            <div className="small" style={{ margin: "6px 0" }}>{cardsFor(t).length ? <><b>Cards on {t.tickers.join(", ")}:</b> <CardChips cards={cardsFor(t)} max={50} /></> : <span className="muted">No scout cards on {t.tickers.join(", ")} in the last 120 days.</span>}</div>
             <div>{t.thesis}</div>
             <div className="small" style={{ marginTop: 6 }}><b>Catalyst:</b> {t.catalyst || "none dated"}</div>
             <div className="small theme-agree">
               <b>Who agrees:</b> <span className="tag">{t.agreement.documents} documents</span><span className="tag">{t.agreement.websites} website articles</span><span className="tag">{t.agreement.stocktwits} Stocktwits posts</span>
             </div>
-            {t.quotes.length > 0 && <ul className="small theme-quotes">{t.quotes.map((q, k) => <li key={k}>&ldquo;{q.text}&rdquo; <span className="muted">— {q.source}</span></li>)}</ul>}
+            {t.quotes.length > 0 && <ul className="small theme-quotes">{t.quotes.map((x, k) => <li key={k}>{x.url ? <a href={x.url} target={x.url.startsWith("/") ? undefined : "_blank"} rel="noreferrer">&ldquo;{x.text}&rdquo;</a> : <>&ldquo;{x.text}&rdquo;</>} <span className="muted">— {x.source}</span></li>)}</ul>}
             {t.disagreement && <div className="small"><b>Who disagrees:</b> {t.disagreement}</div>}
             <div className="small warn" style={{ marginTop: 4 }}><b>Crowding:</b> {t.crowding}</div>
             <div className="small" style={{ marginTop: 4 }}><b>What would break it:</b> {t.breaks_it}</div>
             {s.each.some((e) => e.move !== null) && <div className="small muted" style={{ marginTop: 4 }}>Since published: {s.each.map((e) => `${e.s} ${pct(e.move)}${t.prices?.[e.s] ? ` (from $${t.prices[e.s].toFixed(2)})` : ""}`).join(" · ")}</div>}
             {t.tickers[0] && <div style={{ marginTop: 10 }}><StockChart symbol={t.tickers[0]} tvSymbol={tvSymbol(t.tickers[0], info.get(t.tickers[0])?.exchange)} height={520} entry={{ date: latest.etDate, price: t.prices?.[t.tickers[0]] ?? null, direction: t.direction, label: "theme published" }} /></div>}
-            <div className="small" style={{ marginTop: 8 }}>{cardsFor(t).length ? <>Scout cards on {t.tickers.join(", ")}: <CardChips cards={cardsFor(t)} max={50} /></> : <span className="muted">No scout cards on {t.tickers.join(", ")} yet.</span>}</div>
             <div className="small rumor-actions" style={{ marginTop: 8 }}>
               <ThemeSend run={latest.id} index={i} ticker={t.tickers[0]} side={t.direction} sent={sends.has(`${latest.id}:${i}`)} configured={sw} />
               <ThemeResearch run={latest.id} index={i} />

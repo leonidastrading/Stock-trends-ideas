@@ -700,6 +700,12 @@ export async function inboxDocsSince(from: string): Promise<Array<{ path: string
   return (await q(`SELECT path, sha, read_at, text, result FROM inbox_files WHERE read_at >= $1 ORDER BY read_at DESC`, [from])).map((r) => ({ path: r.path, sha: r.sha, readAt: iso(r.read_at)!, text: r.text ?? null, result: r.result ?? null }));
 }
 
+/** The newest stored copy of one inbox document. */
+export async function inboxDoc(path: string): Promise<{ path: string; readAt: string; text: string | null } | null> {
+  const r = (await q(`SELECT path, read_at, text FROM inbox_files WHERE path = $1 ORDER BY read_at DESC LIMIT 1`, [path]))[0];
+  return r ? { path: r.path, readAt: iso(r.read_at)!, text: r.text ?? null } : null;
+}
+
 export async function setInboxText(path: string, sha: string, text: string): Promise<void> {
   await q(`UPDATE inbox_files SET text = $3 WHERE path = $1 AND sha = $2`, [path, sha, text]);
 }

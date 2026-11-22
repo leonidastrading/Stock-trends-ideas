@@ -25,7 +25,7 @@ Pick the top 3 ideas by agreement: an idea counts more when several independent 
 - title (12 words or fewer, in plain English a non-expert gets at a glance: what happened and what it means for which company (e.g. 'FBI warns of a new AI hacking tool; could lift demand for CrowdStrike'). No trader jargon (read-through, print, beat-and-raise, TAM) and no unexplained acronyms or code names), direction (long or short), 1-3 US tickers that express it best;
 - one_line: the thesis as ONE plain-English sentence of 35 words or fewer a non-expert gets at a glance, starting with Long or Short and the main ticker, then the reason and what should happen by when (no jargon, acronyms spelled out);
 - the thesis in plain words, and why it should play out within 1-2 weeks (a dated catalyst if there is one);
-- agreement: how many sources of each kind make the call, and 2-4 short quotes or paraphrases with where they came from;
+- agreement: how many sources of each kind make the call, and 2-4 short quotes or paraphrases with where they came from, each with the bracketed reference of its source exactly as given ([D3], [W12], [S40], or [T] for the trending list);
 - disagreement: who argues the other side, if anyone;
 - crowding: consensus trades can be priced already; say how crowded it looks (a stock up a lot on heavy chatter is late) and what that means for entry;
 - what would break it;
@@ -44,7 +44,7 @@ export const THEMES_SCHEMA = {
           title: { type: "string" }, one_line: { type: "string" }, direction: { type: "string", enum: ["long", "short"] }, tickers: { type: "array", items: { type: "string" } },
           thesis: { type: "string" }, catalyst: { type: "string" },
           agreement: { type: "object", additionalProperties: false, required: ["documents", "websites", "stocktwits"], properties: { documents: { type: "integer" }, websites: { type: "integer" }, stocktwits: { type: "integer" } } },
-          quotes: { type: "array", items: { type: "object", additionalProperties: false, required: ["text", "source"], properties: { text: { type: "string" }, source: { type: "string" } } } },
+          quotes: { type: "array", items: { type: "object", additionalProperties: false, required: ["text", "source", "ref"], properties: { text: { type: "string" }, source: { type: "string" }, ref: { type: "string", description: "The source's bracketed reference, e.g. D3, W12, S40 or T" } } } },
           disagreement: { type: "string" }, crowding: { type: "string" }, breaks_it: { type: "string" }, confidence: { type: "integer" },
         },
       },
@@ -59,7 +59,7 @@ const themeSchema = z.object({
   /** One-sentence thesis, written with the theme (older runs have none). */
   one_line: z.string().max(400).optional().catch(undefined),
   agreement: z.object({ documents: z.number().catch(0), websites: z.number().catch(0), stocktwits: z.number().catch(0) }).catch({ documents: 0, websites: 0, stocktwits: 0 }),
-  quotes: z.array(z.object({ text: z.string(), source: z.string() })).catch([]),
+  quotes: z.array(z.object({ text: z.string(), source: z.string(), ref: z.string().optional().catch(undefined), url: z.string().optional().catch(undefined) })).catch([]),
   disagreement: z.string().catch(""), crowding: z.string().catch(""), breaks_it: z.string().catch(""),
   confidence: z.number().catch(0).transform((n) => Math.max(0, Math.min(100, Math.round(n)))),
 });
@@ -78,37 +78,89 @@ export async function themeRuns(limit = 30): Promise<ThemeRun[]> {
   return rows.map((r) => ({ id: Number(r.id), createdAt: new Date(r.created_at as string).toISOString(), etDate: r.et_date instanceof Date ? r.et_date.toISOString().slice(0, 10) : String(r.et_date).slice(0, 10), themes: (r.themes as Theme[]) ?? [], sources: (r.sources as ThemeRun["sources"]) ?? { documents: 0, websites: 0, stocktwits: 0 }, costUsd: r.cost_usd === null ? null : Number(r.cost_usd) }));
 }
 
-type Stream = { messages?: Array<{ body?: string; created_at?: string; entities?: { sentiment?: { basic?: string } | null } }> };
+type Stream = { messages?: Array<{ id?: number; body?: string; created_at?: string; user?: { username?: string }; entities?: { sentiment?: { basic?: string } | null } }> };
+
+/** The page that shows one inbox document (with the quote highlighted when given). */
+export const docLink = (path: string, quote?: string) => `/inbox/doc?${new URLSearchParams({ path, ...(quote ? { q: quote.slice(0, 120) } : {}) })}${quote ? "#quote" : ""}`;
+
+/** Pure: the link for a quote's reference ("D3", "[W12]"), or undefined. */
+export function refUrl(ref: string | undefined, refs: Record<string, string>): string | undefined {
+  const k = (ref ?? "").replace(/[[\]\s]/g, "").toUpperCase();
+  return k ? refs[k] : undefined;
+}
+
+const norm = (s: string) => s.toLowerCase().replace(/[‘’“”"'`]/g, "").replace(/[^a-z0-9$%. ]+/g, " ").replace(/\s+/g, " ").trim();
+const labelWords = (path: string) => (path.split("/").pop() ?? "").replace(/\.[a-z]+$/i, "").replace(/^\d{4}-\d{2}-\d{2}-?/, "").split(/[-_\s]+/).filter((w) => w.length > 1).map((w) => w.toLowerCase());
+
+/**
+ * Pure: a link for a quote written before quotes carried a reference: the document whose text contains it, or
+ * whose file name the quote's source names ("discord wsb" for 2026-11-21-discord-wsb.md), or the website article
+ * whose title it quotes.
+ */
+export function guessQuoteLink(quote: { text: string; source: string }, docs: Array<{ path: string; text: string | null }>, articles: Array<{ url: string; title: string }>): string | undefined {
+  const t = norm(quote.text);
+  const probe = t.slice(0, 60);
+  if (probe.length >= 20) {
+    const d = docs.find((x) => x.text && norm(x.text).includes(probe));
+    if (d) return docLink(d.path, quote.text);
+    const a = articles.find((x) => norm(x.title).includes(probe) || probe.includes(norm(x.title).slice(0, 40)));
+    if (a) return a.url;
+  }
+  const src = new Set(norm(quote.source).split(" "));
+  const byName = docs.find((x) => { const w = labelWords(x.path); return w.length >= 2 && w.every((y) => src.has(y)); });
+  if (byName) return docLink(byName.path, quote.text);
+  return undefined;
+}
+
+/** Pure: where a quote sits in the text (case and spacing ignored), or null. Tries the whole quote, then its first words. */
+export function findQuote(text: string, quote: string): { start: number; end: number } | null {
+  const words = quote.replace(/[“”"‘’]/g, "").split(/\s+/).filter(Boolean);
+  for (const n of [words.length, 12, 8, 5]) {
+    if (n > words.length || n < 3) continue;
+    const pattern = words.slice(0, n).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("[\\s\\S]{0,3}?\\s*");
+    const m = new RegExp(pattern, "i").exec(text);
+    if (m) return { start: m.index, end: m.index + m[0].length };
+  }
+  return null;
+}
 
 /** The sources, as text for the model, and how many of each. */
-export async function gatherSources(now: Date, fetchImpl?: typeof fetch): Promise<{ text: string; counts: ThemeRun["sources"] }> {
+export async function gatherSources(now: Date, fetchImpl?: typeof fetch): Promise<{ text: string; counts: ThemeRun["sources"]; refs: Record<string, string> }> {
   const since = new Date(now.getTime() - THEMES.days * 86400_000);
   const docs = (await store.inboxDocsSince(since.toISOString()).catch(() => [])).filter((d) => d.text);
-  const sites = await q(`SELECT a.title, a.published, a.seen_at, s.label FROM site_articles a JOIN sites s ON s.id = a.site_id WHERE a.seen_at >= $1 AND NOT a.baseline ORDER BY a.seen_at DESC LIMIT 200`, [since.toISOString()]).catch(() => []);
+  const sites = await q(`SELECT a.url, a.title, a.published, a.seen_at, s.label FROM site_articles a JOIN sites s ON s.id = a.site_id WHERE a.seen_at >= $1 AND NOT a.baseline ORDER BY a.seen_at DESC LIMIT 200`, [since.toISOString()]).catch(() => []);
   const parts: string[] = [];
+  // Each source gets a short reference ([D3], [W12], [S40]) the model quotes back, so every quote links to where it came from.
+  const refs: Record<string, string> = {};
   let budget = THEMES.maxSourceChars;
   const add = (s: string) => { const t = s.slice(0, Math.max(0, budget)); budget -= t.length; if (t) parts.push(t); };
 
   add(`DOCUMENTS (${docs.length}, newest first):`);
-  for (const d of docs.sort((a, b) => b.readAt.localeCompare(a.readAt))) add(`\n### ${d.path.split("/").pop()} (received ${d.readAt.slice(0, 10)})\n${d.text!.replace(/\s+\n/g, "\n").slice(0, THEMES.maxDocChars)}`);
+  for (const [i, d] of docs.sort((a, b) => b.readAt.localeCompare(a.readAt)).entries()) { refs[`D${i + 1}`] = docLink(d.path); add(`\n### [D${i + 1}] ${d.path.split("/").pop()} (received ${d.readAt.slice(0, 10)})\n${d.text!.replace(/\s+\n/g, "\n").slice(0, THEMES.maxDocChars)}`); }
 
-  add(`\n\nWEBSITE ARTICLES (${sites.length} titles):\n${sites.map((s) => `- ${String(s.seen_at).slice(0, 10)} [${s.label}] ${s.title}`).join("\n")}`);
+  sites.forEach((s, i) => { refs[`W${i + 1}`] = String(s.url); });
+  add(`\n\nWEBSITE ARTICLES (${sites.length} titles):\n${sites.map((s, i) => `- [W${i + 1}] ${String(s.seen_at).slice(0, 10)} (${s.label}) ${s.title}`).join("\n")}`);
 
   // Stocktwits: the trending list, and recent posts on the top trending stocks.
-  let twits = 0;
+  let twits = 0, posts = 0;
   try {
     const trending = (await getJson<{ symbols?: StTrending[] }>(`${ST_HOST}/trending/symbols/equities.json`, { headers: ST_UA, fetchImpl, cacheMs: 10 * 60000 })).symbols ?? [];
-    add(`\n\nSTOCKTWITS TRENDING (now):\n${trending.slice(0, 25).map((t, i) => `${i + 1}. ${t.symbol}${t.title ? ` (${t.title})` : ""}${t.watchlist_count ? `, ${t.watchlist_count} watchers` : ""}${t.trends?.summary ? `: ${t.trends.summary.slice(0, 240)}` : ""}`).join("\n")}`);
+    refs.T = "https://stocktwits.com/sentiment/trending";
+    add(`\n\nSTOCKTWITS TRENDING (now) [T]:\n${trending.slice(0, 25).map((t, i) => `${i + 1}. ${t.symbol}${t.title ? ` (${t.title})` : ""}${t.watchlist_count ? `, ${t.watchlist_count} watchers` : ""}${t.trends?.summary ? `: ${t.trends.summary.slice(0, 240)}` : ""}`).join("\n")}`);
     for (const t of trending.slice(0, 12)) {
       const s = await getJson<Stream>(`${ST_HOST}/streams/symbol/${encodeURIComponent(t.symbol)}.json?limit=20`, { headers: ST_UA, fetchImpl, cacheMs: 10 * 60000, minIntervalMs: 400 }).catch(() => null);
       const msgs = (s?.messages ?? []).filter((m) => m.body && m.body.length > 20).slice(0, 12);
       twits += msgs.length;
-      if (msgs.length) add(`\n$${t.symbol} posts:\n${msgs.map((m) => `- [${m.entities?.sentiment?.basic ?? "untagged"}] ${m.body!.replace(/\s+/g, " ").slice(0, 220)}`).join("\n")}`);
+      if (msgs.length) add(`\n$${t.symbol} posts:\n${msgs.map((m) => {
+        const ref = `S${++posts}`;
+        refs[ref] = m.id && m.user?.username ? `https://stocktwits.com/${encodeURIComponent(m.user.username)}/message/${m.id}` : `https://stocktwits.com/symbol/${encodeURIComponent(t.symbol)}`;
+        return `- [${ref}] (${m.entities?.sentiment?.basic ?? "untagged"}) ${m.body!.replace(/\s+/g, " ").slice(0, 220)}`;
+      }).join("\n")}`);
     }
   } catch {
     add("\n\nSTOCKTWITS: not reachable right now.");
   }
-  return { text: parts.join(""), counts: { documents: docs.length, websites: sites.length, stocktwits: twits } };
+  return { text: parts.join(""), counts: { documents: docs.length, websites: sites.length, stocktwits: twits }, refs };
 }
 
 /** One run: read the sources, pick the top 3, log them with today's prices. Returns a summary. */
@@ -121,11 +173,11 @@ export async function runThemes(deps: { data: MarketData | null; callModel: Call
     return `waiting: daily AI cap reached ($${all.cost.toFixed(2)}); Themes runs after the reset`;
   }
   if (mine >= (settings.themesCapUsd ?? THEMES.capUsd)) return "skipped: today's Themes budget is used";
-  const { text, counts } = await gatherSources(deps.now, deps.fetchImpl);
+  const { text, counts, refs } = await gatherSources(deps.now, deps.fetchImpl);
   if (counts.documents + counts.websites + counts.stocktwits === 0) return "skipped: no sources to read";
   const r = await deps.callModel({ model: settings.model, effort: "medium", purpose: "themes", user: `Today is ${today}.\n\n${text}\n\nReply with the JSON object.` });
   await store.logLlmCall({ etDate: today, model: settings.model, purpose: "themes", usage: r.usage, costUsd: r.costUsd, ok: true });
-  const themes = parseThemes(r.text);
+  const themes = parseThemes(r.text).map((t) => ({ ...t, quotes: t.quotes.map((x) => { const url = refUrl(x.ref, refs); return { ...x, url: url?.startsWith("/inbox/doc?") ? docLink(new URLSearchParams(url.slice(url.indexOf("?") + 1)).get("path") ?? "", x.text) : url }; }) }));
   // Prices now, so the page can show how each idea has done since.
   const syms = [...new Set(themes.flatMap((t) => t.tickers))];
   const snaps = syms.length && deps.data?.getSnapshots ? await deps.data.getSnapshots(syms).catch(() => ({} as Record<string, { price: number }>)) : {};
