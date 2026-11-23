@@ -21,7 +21,7 @@ export const TOP_NEWS = { candidates: 70, fromFeed: 50, general: 45, picks: 10, 
 /** Law firms' class-action ads ("investors have opportunity to lead… lawsuit"): never top news. */
 export const CLASS_ACTION_AD = /\b(securities fraud lawsuit|class action (lawsuit )?(has been )?filed (on behalf|against)|announces .{0,30}class action|encourages .{0,30}investors|investors? (have|has|who) .{0,40}(opportunity|lead|contact)|shareholder alert|investor alert|investor notice|discuss your rights|law group|contact the .{0,40}(law|attorney|firm)|sued for securities law violations|rosen law|pomerantz|levi & korsinsky|bragar|bronstein|faruqi|glancy|kessler topaz|schall law|sbs law|robbins geller|reminds investors|deadline alert)\b/i;
 
-const reply = z.object({ picks: z.array(z.object({ id: z.string(), why: z.string().catch("") })).catch([]) });
+const reply = z.object({ picks: z.array(z.object({ id: z.string(), event: z.string().catch(""), why: z.string().catch("") })).catch([]) });
 
 export interface TopPick { id: string; at: string; headline: string; url: string; source: string; symbols: string[]; why: string; kind: FeedItem["kind"] }
 export interface TopNews { at: string; by: "ai" | "rules"; picks: TopPick[] }
@@ -42,12 +42,36 @@ export function candidates(items: FeedItem[], now: Date, max = TOP_NEWS.candidat
   return [...first.values()].sort((a, b) => weight(b, now) - weight(a, now) || b.at.localeCompare(a.at)).slice(0, max);
 }
 
+const STORY_STOP = new Set(["says", "said", "with", "from", "after", "over", "amid", "into", "that", "this", "will", "could", "would", "about", "share", "shares", "stock", "stocks", "market", "markets", "report", "reports", "news", "live", "update", "updates", "week", "year", "today", "more", "than", "have", "been", "their", "what", "when", "which", "trump"]);
+/** Pure: a headline's distinctive words (4+ letters, common words out, cut to 6 letters so "reinstates" meets "reinstated"). */
+export function storyWords(headline: string): Set<string> {
+  return new Set(headline.toLowerCase().replace(/[’']s\b/g, "").split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !STORY_STOP.has(w)).map((w) => w.slice(0, 6)));
+}
+/** Pure: two headlines about the same story: three or more distinctive words in common. */
+export function sameStory(a: string, b: string): boolean {
+  const x = storyWords(a); let n = 0;
+  for (const w of storyWords(b)) if (x.has(w)) n++;
+  return n >= 3;
+}
+/**
+ * Pure: one item per story, keeping the first. A later item is the same story when it matches any headline already
+ * folded into a kept one (so the market-reaction piece is caught through the reaction it shares words with).
+ */
+export function oneStoryEach<T extends { headline: string }>(items: T[]): T[] {
+  const groups: Array<{ keep: T; heads: string[] }> = [];
+  for (const i of items) {
+    const g = groups.find((x) => x.heads.some((h) => sameStory(h, i.headline)));
+    if (g) g.heads.push(i.headline); else groups.push({ keep: i, heads: [i.headline] });
+  }
+  return groups.map((g) => g.keep);
+}
+
 const pick = (i: FeedItem, why: string): TopPick => ({ id: i.id, at: i.at, headline: i.headline, url: i.url, source: i.source, symbols: i.symbols.slice(0, 4), why, kind: i.kind });
 
 /** Pure: the rule-based ten: strongest first, at most one story per stock. */
 export function ruleTop(items: FeedItem[], now: Date, n = TOP_NEWS.picks): TopPick[] {
   const used = new Set<string>(); const out: TopPick[] = [];
-  for (const i of candidates(items, now)) {
+  for (const i of oneStoryEach(candidates(items, now))) {
     if (i.symbols.length && i.symbols.every((s) => used.has(s))) continue;
     i.symbols.forEach((s) => used.add(s));
     out.push(pick(i, topReason(i)));
@@ -96,10 +120,19 @@ export function aiCandidates(items: FeedItem[], general: FeedItem[], now: Date):
   return out;
 }
 
-/** Pure: the model's picks mapped onto the candidates (unknown ids and repeats dropped). */
-export function applyPicks(cands: FeedItem[], picks: Array<{ id: string; why: string }>, n = TOP_NEWS.picks): TopPick[] {
-  const by = new Map(cands.map((c) => [c.id, c])); const seen = new Set<string>();
-  return picks.filter((p) => by.has(p.id) && !seen.has(p.id) && seen.add(p.id)).slice(0, n).map((p) => pick(by.get(p.id)!, p.why.trim()));
+/** Pure: the model's picks mapped onto the candidates: unknown ids, repeats, repeated events and same-story headlines dropped. */
+export function applyPicks(cands: FeedItem[], picks: Array<{ id: string; why: string; event?: string }>, n = TOP_NEWS.picks): TopPick[] {
+  const by = new Map(cands.map((c) => [c.id, c])); const seen = new Set<string>(), events = new Set<string>();
+  const label = (e: string | undefined) => (e ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean).sort().join(" ");
+  const kept = picks.filter((p) => {
+    if (!by.has(p.id) || seen.has(p.id)) return false;
+    seen.add(p.id);
+    const e = label(p.event);
+    if (e && events.has(e)) return false;
+    if (e) events.add(e);
+    return true;
+  }).map((p) => pick(by.get(p.id)!, p.why.trim()));
+  return oneStoryEach(kept).slice(0, n);
 }
 
 /** Pure: the list the model reads. */
@@ -132,6 +165,6 @@ export async function runTopNews(deps: ResearchDeps): Promise<string> {
 /** The latest pick when fresh enough, else the rules' ten from the live feed. */
 export async function topNews(items: FeedItem[], now = new Date()): Promise<TopNews> {
   const hit = await store.cacheGet<TopNews>("topnews").catch(() => null);
-  if (hit?.data?.picks?.length && now.getTime() - Date.parse(hit.data.at) < TOP_NEWS.maxAgeH * 3600_000) return hit.data;
+  if (hit?.data?.picks?.length && now.getTime() - Date.parse(hit.data.at) < TOP_NEWS.maxAgeH * 3600_000) return { ...hit.data, picks: oneStoryEach(hit.data.picks) };
   return { at: now.toISOString(), by: "rules", picks: ruleTop(items, now) };
 }

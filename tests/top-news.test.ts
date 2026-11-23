@@ -73,3 +73,25 @@ describe("more law-firm ads", () => {
     expect(CLASS_ACTION_AD.test("Coastal Financial Corporation Sued for Securities Law Violations - Contact the DJS Law Group to Discuss Your Rights - CCB")).toBe(true);
   });
 });
+
+import { oneStoryEach, sameStory } from "@/lib/scout/top-news";
+describe("one pick per story", () => {
+  const H = [
+    "Jensen Huang reinstated as Nvidia CEO, board says",
+    "NVIDIA Reinstates Jensen Huang as President and CEO",
+    "Trump: Trump praises NVIDIA's board for returning Jensen Huang as CEO, says the government sees no national security risk",
+    "Nasdaq roars back by 6% as Nvidia soars on Huang’s return, S&P 500 rebounds 4%: Live updates",
+    "Fed's Waller says a 50 basis point hike is on the table for December",
+    "Nvidia faces California subpoena over China chip sales",
+  ];
+  it("folds the filing, the reaction and the market move into the first report", () => {
+    expect(sameStory(H[0], H[1])).toBe(true);
+    expect(sameStory(H[0], H[5])).toBe(false); // same company, another story
+    expect(oneStoryEach(H.map((headline) => ({ headline }))).map((x) => x.headline)).toEqual([H[0], H[4], H[5]]);
+  });
+  it("drops picks the model labels as the same event", () => {
+    const cands = [item("a", 1, 4, ["AAPL"], "Apple buys a chip designer"), item("b", 2, 3, ["QQQ"], "Tech rally lifts Nasdaq to a record"), item("c", 3, 3, ["MSFT"], "Microsoft cuts cloud prices")];
+    const got = applyPicks(cands, [{ id: "a", event: "Apple chip deal", why: "x" }, { id: "b", event: "apple chip deal", why: "y" }, { id: "c", event: "microsoft price cut", why: "z" }]);
+    expect(got.map((p) => p.id)).toEqual(["a", "c"]);
+  });
+});
