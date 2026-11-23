@@ -273,6 +273,8 @@ a.button.primary { background: var(--accent); border-color: var(--accent); color
 .nav-link:hover { color: var(--text-primary); background: color-mix(in srgb, var(--text-primary) 8%, transparent); }
 .nav-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .nav-link.active { color: var(--text-primary); background: color-mix(in srgb, var(--accent) 20%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
+/* A red flag on an item you have not seen before. */
+.new-flag { display: inline-block; margin-right: 8px; padding: 1px 6px; border-radius: 4px; background: #e5484d; color: #fff; font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em; line-height: 16px; vertical-align: 2px; }
 .nav-badge { display: inline-block; min-width: 16px; height: 16px; margin-left: 4px; padding: 0 4px; border-radius: 999px; background: #e5484d; color: #fff; font-size: 10.5px; font-weight: 700; line-height: 16px; text-align: center; vertical-align: 2px; text-decoration: none; animation: badge-in .25s ease-out; }
 @keyframes badge-in { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
@@ -567,6 +569,8 @@ a.source-tag:hover { background: color-mix(in srgb, var(--accent) 14%, transpare
 .cal-logo-box { height: 40px; width: 100%; display: flex; align-items: center; justify-content: center; }
 .cal-logo { max-height: 40px; max-width: 90%; object-fit: contain; }
 .cal-logo-text { font-weight: 800; font-size: 15px; color: var(--cal-tile-ink); letter-spacing: 0.02em; }
+/* The same logo on a thesis card, before the ticker. */
+.cal-logo.card-logo { max-height: 30px; max-width: 96px; vertical-align: middle; margin-right: 10px; border-radius: 4px; }
 .cal-sym { font-size: 10px; font-weight: 600; color: var(--cal-tile-ink); letter-spacing: 0.04em; }
 .cal-cap { font-weight: 400; opacity: 0.75; letter-spacing: 0; }
 /* Plain one-tone logos flip on a background of the same tone (Zoom's white wordmark on a light tile, a black one on a dark tile). */

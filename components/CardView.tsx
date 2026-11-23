@@ -3,6 +3,7 @@ import CardSignals from "@/components/CardSignals";
 import CardNews from "@/components/CardNews";
 import CardFundamentals from "@/components/CardFundamentals";
 import { gateReason } from "@/lib/scout/gate-reason";
+import CompanyLogo from "@/components/CompanyLogo";
 import Direction from "@/components/Direction";
 import CardAsk from "@/components/CardAsk";
 import CardCollapse from "@/components/CardCollapse";
@@ -125,7 +126,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
           </div>
         )}
         {track?.excluded && <div className="small neg" style={{ marginTop: 6 }}><b>Excluded from scoring: wrong security.</b> {track.excluded}</div>}
-        <div style={{ margin: "8px 0 4px" }}><Direction direction={c.direction} ticker={c.primaryTicker} name={info?.name ?? company ?? (info ? "company name unavailable" : "company name loading — reload in a moment")} warn={wrong} />
+        <div style={{ margin: "8px 0 4px" }}><CompanyLogo symbol={c.primaryTicker} name={info?.name ?? company ?? c.primaryTicker} variant="card" /><Direction direction={c.direction} ticker={c.primaryTicker} name={info?.name ?? company ?? (info ? "company name unavailable" : "company name loading — reload in a moment")} warn={wrong} />
           {q ? (
             <span className="quote" title={`Last trade ${q.at ? fmtEtAgo(q.at) : ""} (IEX feed; may differ slightly from the consolidated price). Change vs the previous session's close.`}>
               <b>${q.price.toFixed(q.price < 1 ? 4 : 2)}</b>

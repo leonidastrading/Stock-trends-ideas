@@ -41,7 +41,8 @@ export async function POST(request: Request) {
   if (!parsed.success) return NextResponse.json({ ok: false, errors: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) }, { status: 422 });
   const { observation, term, kind, tickers, direct, from, background, doc } = parsed.data;
   try {
-    if (observation.length > PASTE_CHARS && !direct) {
+    // A long paste, or a document uploaded on its own (however short): the ideas are pulled out first.
+    if ((observation.length > PASTE_CHARS || doc) && !direct) {
       const deps = defaultDeps();
       const { ideasFrom } = await import("@/lib/scout/inbox");
       const { items } = await ideasFrom(observation, doc ? `document Vadim uploaded: ${doc}` : "text pasted into I noticed something", deps);

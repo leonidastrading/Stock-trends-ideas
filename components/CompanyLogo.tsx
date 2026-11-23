@@ -21,14 +21,15 @@ export function logoTone(px: Uint8ClampedArray): "mono-light" | "mono-dark" | "c
   return lum > 0.75 ? "mono-light" : lum < 0.3 ? "mono-dark" : "color";
 }
 
-/** A company's logo (Financial Modeling Prep's public image), or its ticker in a tile when there is none. */
-export default function CompanyLogo({ symbol, name }: { symbol: string; name: string }) {
+/** A company's logo (Financial Modeling Prep's public image), or its ticker in a tile when there is none (nothing, on a thesis card). */
+export default function CompanyLogo({ symbol, name, variant = "tile" }: { symbol: string; name: string; variant?: "tile" | "card" }) {
   const [failed, setFailed] = useState(false);
   const [tone, setTone] = useState("color");
-  if (failed) return <span className="cal-logo-text" aria-hidden="true">{symbol}</span>;
+  // On a thesis card the ticker is already beside it: no logo, nothing shown.
+  if (failed) return variant === "card" ? null : <span className="cal-logo-text" aria-hidden="true">{symbol}</span>;
   return (
     <img
-      className={`cal-logo ${tone}`}
+      className={`cal-logo ${variant === "card" ? "card-logo " : ""}${tone}`}
       src={`https://financialmodelingprep.com/image-stock/${encodeURIComponent(symbol)}.png`}
       alt={name}
       loading="lazy"
