@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const LINKS: Array<{ href: string; label: string; badge?: string }> = [
-  { href: "/", label: "Home" }, { href: "/ideas", label: "Ideas", badge: "ideas" }, { href: "/research", label: "Research", badge: "research" }, { href: "/favorites", label: "★ Favorites" }, { href: "/news", label: "News", badge: "news" }, { href: "/prs", label: "Press releases" },
+  { href: "/", label: "Home" }, { href: "/ideas", label: "Ideas", badge: "ideas" }, { href: "/research", label: "Research", badge: "research" }, { href: "/favorites", label: "★ Favorites" }, { href: "/news", label: "News", badge: "news" }, { href: "/prs", label: "Press releases" }, { href: "/calendar", label: "Calendar" },
   { href: "/drift", label: "Drift", badge: "drift" }, { href: "/rumors", label: "Rumors", badge: "rumors" }, { href: "/themes", label: "Themes", badge: "themes" }, { href: "/bubbles", label: "Bubbles", badge: "bubbles" }, { href: "/stocktwits", label: "Stocktwits", badge: "stocktwits" }, { href: "/dots", label: "Dots" }, { href: "/pharma", label: "Pharma" }, { href: "/court", label: "Court" }, { href: "/positioning", label: "Positioning" }, { href: "/chart", label: "Chart" }, { href: "/investigate", label: "Investigate", badge: "investigate" },
   { href: "/map", label: "Map" }, { href: "/chat", label: "Chat" }, { href: "/notice", label: "I noticed something" }, { href: "/inbox", label: "Inbox", badge: "inbox" },
   { href: "/filings", label: "Filings", badge: "filings" }, { href: "/congress", label: "Congress", badge: "congress" }, { href: "/watchlist", label: "Watch-list", badge: "watchlist" },
