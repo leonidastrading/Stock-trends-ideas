@@ -1,5 +1,6 @@
 import LinkedText from "@/components/LinkedText";
 import FilingChanges from "@/components/FilingChanges";
+import SiteChanges from "@/components/SiteChanges";
 import ExpandRow from "@/components/ExpandRow";
 import InsiderChart from "@/components/InsiderChart";
 import { tvSymbol } from "@/config/links";
@@ -62,6 +63,8 @@ export default async function FilingsPage() {
       </section>
 
       <FilingChanges />
+
+      <SiteChanges />
 
       <section className="card">
         <h2>Signals now</h2>

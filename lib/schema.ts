@@ -675,6 +675,39 @@ CREATE TABLE IF NOT EXISTS st_snapshots (
 -- and a note when the prices disagree for another reason (the track is then left out of the points until checked).
 ALTER TABLE tracks ADD COLUMN IF NOT EXISTS split_factor numeric NOT NULL DEFAULT 1;
 ALTER TABLE tracks ADD COLUMN IF NOT EXISTS price_check text;
+-- Company websites watched for quiet edits (open-card stocks): each page's latest text.
+CREATE TABLE IF NOT EXISTS site_watch (
+  symbol text NOT NULL,
+  url text NOT NULL,
+  kind text NOT NULL,
+  last_text text,
+  checked_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (symbol, url)
+);
+-- What changed on a watched page (lines removed and added), the light model's read, and both versions archived.
+CREATE TABLE IF NOT EXISTS site_changes (
+  id serial PRIMARY KEY,
+  symbol text NOT NULL,
+  url text NOT NULL,
+  kind text NOT NULL,
+  found_at timestamptz NOT NULL DEFAULT now(),
+  old_date text,
+  old_archive text,
+  new_archive text,
+  removed jsonb,
+  added jsonb,
+  read jsonb
+);
+CREATE INDEX IF NOT EXISTS site_changes_symbol_idx ON site_changes (symbol, found_at);
+-- Web addresses cited by cards and investigations, saved to the Wayback Machine as evidence.
+CREATE TABLE IF NOT EXISTS evidence_archive (
+  url text PRIMARY KEY,
+  cited_by text[] NOT NULL DEFAULT '{}',
+  first_cited timestamptz NOT NULL DEFAULT now(),
+  archive_url text,
+  saved_at timestamptz,
+  attempts integer NOT NULL DEFAULT 0
+);
 -- Market cap and short interest per card, frozen once, for splitting results by size and by short interest.
 CREATE TABLE IF NOT EXISTS card_profiles (
   card_id integer PRIMARY KEY,

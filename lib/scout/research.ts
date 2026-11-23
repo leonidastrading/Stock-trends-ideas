@@ -212,6 +212,8 @@ export async function researchCandidate(input: ResearchInput, deps: ResearchDeps
     status: gated.status, gateNotes: gated.notes, catalystDate: cDate, rankScore: rankScore(gated.card),
   });
   const candidate = await store.addCandidate({ ...base, outcome: "card", reason: gated.status, cardId: stored.id });
+  // Save the card's sources to the Wayback Machine (in the background job), so they stay verifiable.
+  await import("./evidence-archive").then(({ queueEvidence, urlsIn }) => queueEvidence(urlsIn(`${JSON.stringify(gated.card)} ${input.observation ?? ""} ${input.source?.url ?? ""}`), `card:${stored.id}`)).catch(() => undefined);
   // How crowded the stock is as the card is written (attention, news, searches, extension): recorded once, never back-filled.
   await import("./crowding").then(({ recordEntryCrowding }) => recordEntryCrowding(stored.id, stored.primaryTicker, deps.data, deps.now, deps.fetchImpl)).catch(() => undefined);
   // The name each symbol trades as and its next earnings, for the card's header.

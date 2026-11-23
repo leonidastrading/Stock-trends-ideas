@@ -5,6 +5,8 @@ import { coverageOf } from "@/lib/sources/coverage";
 import { digestsFor } from "@/lib/scout/site-digest";
 import { latestRechecks, VERDICT_LABEL, type Recheck } from "@/lib/scout/recheck";
 import { fmtEtAgo } from "@/lib/time";
+import { siteChanges, type SiteChange } from "@/lib/scout/site-watch";
+import { savedCopies } from "@/lib/scout/evidence-archive";
 
 const FLAG: Record<string, [string, string]> = { red_flag: ["red flag", "error"], positive: ["positive", "ok"], mixed: ["mixed", "late"], routine: ["routine", ""], no_prior: ["no prior year", ""], error: ["not read", ""] };
 
@@ -36,12 +38,12 @@ function priceLine(rc: Recheck): string {
 /** On a card: how crowded the stock was when the card was written and is now, analyst coverage, and the latest filing change. */
 export default async function CardSignals({ cardId, symbol }: { cardId: number; symbol: string }) {
   if (!hasDatabase()) return null;
-  const [crowd, cov, diffs, sites, rechecks] = await Promise.all([crowdingFor([cardId]).catch(() => new Map()), coverageOf([symbol]).catch(() => new Map()), diffsFor([symbol], 1).catch(() => []), digestsFor([symbol], 60, 3).catch(() => []), latestRechecks([cardId]).catch(() => new Map<number, Recheck>())]);
+  const [crowd, cov, diffs, sites, rechecks, web, saved] = await Promise.all([crowdingFor([cardId]).catch(() => new Map()), coverageOf([symbol]).catch(() => new Map()), diffsFor([symbol], 1).catch(() => []), digestsFor([symbol], 60, 3).catch(() => []), latestRechecks([cardId]).catch(() => new Map<number, Recheck>()), siteChanges([symbol], 120, 3).catch(() => [] as SiteChange[]), savedCopies(`card:${cardId}`).catch(() => [])]);
   const rc = rechecks.get(cardId);
   const c = crowd.get(cardId);
   const cv = cov.get(symbol);
   const d = diffs[0];
-  if (!c?.entry && !c?.latest && !cv && !d && !sites.length && !rc) return null;
+  if (!c?.entry && !c?.latest && !cv && !d && !sites.length && !rc && !web.length && !saved.some((x) => x.archiveUrl)) return null;
   return (
     <>
       {rc && <><dt>Still valid?</dt><dd className="small">
@@ -57,6 +59,12 @@ export default async function CardSignals({ cardId, symbol }: { cardId: number; 
         {c.latest && <Reading r={c.latest} label={`latest (${c.latest.measuredOn})`} />}
         <div className="muted">Rules of thumb from the research, not a tested model: early (stage 0–1) is the best entry; late (3–4) means the crowd is there. The scoreboard checks whether it helps.</div>
       </dd></>}
+      {web.length > 0 && <><dt>Company website</dt><dd className="small">{web.map((w) => <div key={w.id}>
+        <span className={`tag ${w.read?.direction === "negative" ? "error" : w.read?.direction === "positive" ? "ok" : ""}`}>{w.read?.direction ?? "changed"}</span> <b>{w.kind} page</b> <a href={w.url} target="_blank" rel="noreferrer">now</a>{w.oldUrl ? <> · <a href={w.oldUrl} target="_blank" rel="noreferrer">before ({w.oldDate})</a></> : <span className="muted"> · before: {w.oldDate}</span>}{w.newUrl ? <> · <a href={w.newUrl} target="_blank" rel="noreferrer">saved copy</a></> : null} <span className="muted">({fmtEtAgo(w.foundAt)})</span>
+        {w.read?.headline ? <div>{w.read.headline}</div> : null}
+        {w.read?.findings.length ? <ul style={{ margin: "2px 0 0", paddingLeft: 18 }}>{w.read.findings.slice(0, 3).map((f, i) => <li key={i}>{f.what} <span className="muted">“{f.quote.slice(0, 160)}”</span></li>)}</ul> : null}
+      </div>)}</dd></>}
+      {saved.some((x) => x.archiveUrl) && <><dt>Saved sources</dt><dd className="small">{saved.filter((x) => x.archiveUrl).map((x) => <div key={x.url}><a href={x.archiveUrl!} target="_blank" rel="noreferrer">saved copy</a> <span className="muted">of {x.url.replace(/^https?:\/\//, "").slice(0, 90)}</span></div>)}<div className="muted">Saved to the Wayback Machine when the card was written, so the sources stay checkable if they change.</div></dd></>}
       {sites.length > 0 && <><dt>Your websites</dt><dd className="small">{sites.map((x) => <div key={x.url}><a href={x.url} target="_blank" rel="noreferrer">{x.title}</a> <span className="muted">({x.site}{x.published ? `, ${x.published.slice(0, 10)}` : ""})</span> — {x.summary}</div>)}</dd></>}
       {cv && <><dt>Analyst coverage</dt><dd className="small">{cv.analysts === null ? "not known" : <><b className={cv.band === "low" ? "pos" : ""}>{cv.band} coverage</b> <span className="muted">({cv.analysts} analyst{cv.analysts === 1 ? "" : "s"}, Finnhub)</span></>}</dd></>}
       {d && <><dt>Filing changes</dt><dd className="small">

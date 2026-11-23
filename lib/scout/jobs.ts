@@ -9,6 +9,8 @@ export const JOBS = {
   crowding: { everyMin: 15, about: "crowding for open cards (weekdays)" },
   readthrough: { everyMin: 20, about: "supply-chain read-through after capex raises" },
   bubbles: { everyMin: 120, about: "Bubbles: fixed-date events with a run-up into them, and what happened after" },
+  sitewatch: { everyMin: 30, about: "quiet edits to the websites of open-card companies" },
+  evidence: { everyMin: 10, about: "saving cited web pages to the Wayback Machine" },
   sttrending: { everyMin: 10, about: "Stocktwits' trending ten at 9 AM and 3 PM ET" },
   listings: { everyMin: 180, about: "cards written before their stock listed (IPOs): start the paper track once it trades" },
   petitions: { everyMin: 360, about: "FDA citizen petitions on regulations.gov (short sellers' weekly)" },
