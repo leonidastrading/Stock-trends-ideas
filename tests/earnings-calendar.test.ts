@@ -13,11 +13,10 @@ describe("earnings calendar", () => {
     expect(weekDays("2026-11-30")).toEqual(["2026-11-30", "2026-12-01", "2026-12-02", "2026-12-03", "2026-12-04"]);
   });
 
-  it("ranks by size, lifting trending and carded stocks", () => {
-    const r = rankReports([rep("SMALL", 2e9), rep("BIG", 500e9), rep("HYPE", 3e9), rep("NONE", null)], new Set(["HYPE"]), new Set());
+  it("sorts by market cap only, flagging trending and carded stocks", () => {
+    const r = rankReports([rep("SMALL", 2e9), rep("BIG", 500e9), rep("HYPE", 3e9), rep("NONE", null)], new Set(["HYPE"]), new Set(["SMALL"]));
     expect(r.map((x) => x.symbol)).toEqual(["BIG", "HYPE", "SMALL", "NONE"]);
-    expect(r[1].trending).toBe(true);
-    expect(rankReports([rep("A", 1e9), rep("B", 5e9)], new Set(), new Set(["A"]))[0].symbol).toBe("A"); // 9 + 1 beats 9.7
+    expect([r[1].trending, r[2].hasCard]).toEqual([true, true]);
   });
 
   it("splits a day by timing", () => {
@@ -30,5 +29,16 @@ describe("share classes", () => {
   it("keeps one line per company", () => {
     const a = { ...rep("CENT", 2.8e9), name: "Central Garden & Pet Company" }, b = { ...rep("CENTA", 2.8e9), name: "Central Garden & Pet Company" };
     expect(rankReports([a, b, rep("ZM", 24e9)], new Set(), new Set()).map((x) => x.symbol)).toEqual(["ZM", "CENT"]);
+  });
+});
+
+import { logoTone } from "@/components/CompanyLogo";
+describe("logo tone", () => {
+  const px = (rgba: number[], n = 100) => new Uint8ClampedArray(Array.from({ length: n }, () => rgba).flat());
+  it("flags plain white and plain black logos, leaves colored ones", () => {
+    expect(logoTone(px([255, 255, 255, 255]))).toBe("mono-light");
+    expect(logoTone(px([20, 20, 20, 255]))).toBe("mono-dark");
+    expect(logoTone(px([42, 120, 214, 255]))).toBe("color");
+    expect(logoTone(px([255, 255, 255, 0]))).toBe("color"); // transparent only
   });
 });

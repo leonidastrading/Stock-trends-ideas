@@ -540,9 +540,9 @@ a.source-tag:hover { background: color-mix(in srgb, var(--accent) 14%, transpare
 .viz-legend .sw.round { border-radius: 50%; }
 
 /* Calendar tab: an earnings board in the style of a "most anticipated" chart */
-:root { --cal-frame: #e2b98a; --cal-ink: #2b2118; --cal-ink-2: #5c4a39; --cal-panel: #f8f7f4; --cal-rule: #d9cfc2; --cal-tile: #ffffff; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --cal-frame: #4a3a28; --cal-ink: #f3e6d6; --cal-ink-2: #c9b49c; --cal-panel: #1f1d1a; --cal-rule: #3a352f; --cal-tile: #f4f2ee; } }
-:root[data-theme="dark"] { --cal-frame: #4a3a28; --cal-ink: #f3e6d6; --cal-ink-2: #c9b49c; --cal-panel: #1f1d1a; --cal-rule: #3a352f; --cal-tile: #f4f2ee; }
+:root { --cal-frame: #e2b98a; --cal-ink: #2b2118; --cal-ink-2: #5c4a39; --cal-panel: #f8f7f4; --cal-rule: #d9cfc2; --cal-tile: #ffffff; --cal-tile-ink: #4a4440; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --cal-frame: #4a3a28; --cal-ink: #f3e6d6; --cal-ink-2: #c9b49c; --cal-panel: #1f1d1a; --cal-rule: #3a352f; --cal-tile: #2a2724; --cal-tile-ink: #d8d2ca; } }
+:root[data-theme="dark"] { --cal-frame: #4a3a28; --cal-ink: #f3e6d6; --cal-ink-2: #c9b49c; --cal-panel: #1f1d1a; --cal-rule: #3a352f; --cal-tile: #2a2724; --cal-tile-ink: #d8d2ca; }
 .cal-nav { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
 .cal-board { background: var(--cal-frame); color: var(--cal-ink); border-radius: 10px; padding: 16px 16px 10px; margin-bottom: 14px; }
 .cal-head { text-align: center; margin-bottom: 12px; }
@@ -560,13 +560,25 @@ a.source-tag:hover { background: color-mix(in srgb, var(--accent) 14%, transpare
 .cal-day-cols.one { grid-template-columns: 1fr; }
 .cal-slot-name { text-align: center; font-size: 12px; font-weight: 600; padding: 2px 0 6px; background: var(--cal-frame); margin: 0 -3px 8px; color: var(--cal-ink); }
 .cal-slot { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
-.cal-tile { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 4px 4px; border-radius: 6px; background: var(--cal-tile); text-decoration: none; color: #444; border: 1px solid transparent; position: relative; }
+.cal-tile { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 4px 4px; border-radius: 6px; background: var(--cal-tile); color: var(--cal-tile-ink); border: 1px solid var(--cal-rule); position: relative; }
+.cal-tile-link { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 100%; text-decoration: none; color: inherit; }
 .cal-tile:hover { border-color: var(--accent); }
 .cal-tile.carded { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .cal-logo-box { height: 40px; width: 100%; display: flex; align-items: center; justify-content: center; }
 .cal-logo { max-height: 40px; max-width: 90%; object-fit: contain; }
-.cal-logo-text { font-weight: 800; font-size: 15px; color: #333; letter-spacing: 0.02em; }
-.cal-sym { font-size: 10px; font-weight: 600; color: #555; letter-spacing: 0.04em; }
+.cal-logo-text { font-weight: 800; font-size: 15px; color: var(--cal-tile-ink); letter-spacing: 0.02em; }
+.cal-sym { font-size: 10px; font-weight: 600; color: var(--cal-tile-ink); letter-spacing: 0.04em; }
+.cal-cap { font-weight: 400; opacity: 0.75; letter-spacing: 0; }
+/* Plain one-tone logos flip on a background of the same tone (Zoom's white wordmark on a light tile, a black one on a dark tile). */
+.cal-logo.mono-light { filter: invert(1); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .cal-logo.mono-light { filter: none; } :root:not([data-theme="light"]) .cal-logo.mono-dark { filter: invert(1); } }
+:root[data-theme="dark"] .cal-logo.mono-light { filter: none; }
+:root[data-theme="dark"] .cal-logo.mono-dark { filter: invert(1); }
+.cal-cards { display: flex; flex-wrap: wrap; gap: 3px; justify-content: center; font-size: 10px; font-weight: 700; }
+.cal-cards a { text-decoration: none; padding: 1px 4px; border-radius: 3px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.cal-cards a.long { color: var(--pos); background: color-mix(in srgb, var(--pos) 14%, transparent); }
+.cal-cards a.short { color: var(--neg); background: color-mix(in srgb, var(--neg) 14%, transparent); }
+.cal-dot { color: var(--accent); font-size: 8px; margin-left: 2px; vertical-align: 2px; }
 .cal-flags { position: absolute; top: 2px; right: 2px; display: flex; gap: 2px; }
 .cal-flag { font-size: 9px; font-weight: 700; line-height: 1; padding: 2px 3px; border-radius: 3px; color: #fff; }
 .cal-flag.st { background: #2a78d6; }
@@ -592,3 +604,11 @@ a.source-tag:hover { background: color-mix(in srgb, var(--accent) 14%, transpare
   .cal-logo-text { font-size: 12px; }
   .cal-title { font-size: 20px; }
 }
+
+/* News: top ten of the last 24 hours */
+.top-news-list { margin: 6px 0 0; padding-left: 22px; }
+.top-news-list li { padding: 6px 0; border-top: 1px solid var(--border); }
+.top-news-list li:first-child { border-top: 0; }
+.top-news-list li::marker { font-weight: 700; color: var(--text-muted); }
+.top-news-head { font-weight: 600; font-size: 15px; color: var(--text-primary); text-decoration: none; }
+.top-news-head:hover { text-decoration: underline; }

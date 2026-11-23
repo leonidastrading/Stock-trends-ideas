@@ -1,7 +1,6 @@
 /**
  * The earnings calendar tab: a week of reports (Nasdaq's calendar), Monday to Friday, before the open and after the
- * close, ranked like a "most anticipated" board: biggest companies first, lifted when the stock is trending on
- * Stocktwits or the scout has a card on it.
+ * close, biggest companies first, with the scout's cards on each reporting stock.
  */
 import type { EarningsReport } from "../sources/earnings-data";
 
@@ -21,17 +20,13 @@ export function weekDays(monday: string): string[] {
 
 export interface CalEntry extends EarningsReport { score: number; trending: boolean; hasCard: boolean }
 
-/** Pure: rank a slot's reports (market cap on a log scale, plus attention), biggest first. */
+/** Pure: a slot's reports by market capitalization, biggest first (unknown size last); flags for trending and carded. */
 export function rankReports(rows: EarningsReport[], trending: Set<string>, carded: Set<string>): CalEntry[] {
   // One company, several share classes (CENT and CENTA): keep the first listed.
   const seen = new Set<string>();
   const one = rows.filter((r) => { const k = `${r.name.toLowerCase()}|${r.marketCap ?? r.symbol}`; if (seen.has(k)) return false; seen.add(k); return true; });
   return one
-    .map((r) => {
-      const t = trending.has(r.symbol), c = carded.has(r.symbol);
-      const cap = r.marketCap && r.marketCap > 0 ? Math.log10(r.marketCap) : 6;
-      return { ...r, trending: t, hasCard: c, score: cap + (t ? 1.5 : 0) + (c ? 1 : 0) };
-    })
+    .map((r) => ({ ...r, trending: trending.has(r.symbol), hasCard: carded.has(r.symbol), score: r.marketCap ?? -1 }))
     .sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol));
 }
 
