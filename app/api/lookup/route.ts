@@ -12,6 +12,15 @@ export async function GET(request: Request) {
   if (!checkBasicAuth(request.headers.get("authorization"))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!hasDatabase()) return NextResponse.json({ ok: false, errors: ["database not connected"] }, { status: 503 });
   const sp = new URL(request.url).searchParams;
+  // ?card=<number> → whether that card exists (the search box goes straight to it).
+  if (sp.has("card")) {
+    const { cardNumber } = await import("@/lib/scout/card-number");
+    const id = cardNumber(sp.get("card") ?? "");
+    const { getCard } = await import("@/lib/scout/store");
+    const c = id ? await getCard(id).catch(() => null) : null;
+    if (!c) return NextResponse.json({ ok: false, errors: [`there is no card #${id ?? sp.get("card")}`] }, { status: 404 });
+    return NextResponse.json({ ok: true, card: { id: c.id, title: c.card.title, ticker: c.primaryTicker, direction: c.direction, status: c.status } });
+  }
   const list = await listings().catch(() => []);
   // ?listed=A,B,C → which of these are real listed symbols (for colouring tickers in answers).
   if (sp.has("listed")) {

@@ -4,6 +4,7 @@ import CardNews from "@/components/CardNews";
 import LinkedText from "@/components/LinkedText";
 import { useEffect, useRef, useState } from "react";
 import { chartUrl } from "@/config/links";
+import { cardNumber } from "@/lib/scout/card-number";
 import type { Lookup } from "@/lib/scout/lookup";
 
 const cardLink = (id: number) => `/cards/${id}`;
@@ -42,6 +43,14 @@ export default function TickerSearch() {
     if (pick || hi >= 0) setQ(what);
     setOpen(false);
     setBusy(true); setError(null); setResearch("idle"); setNoMatch(null); setTheme("idle");
+    // A card number ("102", "#102") opens that card.
+    const card = pick || hi >= 0 ? null : cardNumber(what);
+    if (card) {
+      const found = await fetch(`/api/lookup?card=${card}`).catch(() => null);
+      if (found?.ok) { window.location.assign(cardLink(card)); return; }
+      setBusy(false); setR(null);
+      return setError(found?.status === 404 ? `There is no card #${card}.` : `Could not look up card #${card}; try again.`);
+    }
     const res = await fetch(`/api/lookup?symbol=${encodeURIComponent(what)}`);
     const j = await res.json().catch(() => ({ errors: [`HTTP ${res.status}`] }));
     setBusy(false);
@@ -83,7 +92,7 @@ export default function TickerSearch() {
               else if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => Math.max(h - 1, -1)); }
               else if (e.key === "Escape") setOpen(false);
             }}
-            placeholder="Ticker or company: NVDA, nvidia, $pltr…" aria-label="Ticker or company" autoComplete="off" role="combobox" aria-expanded={open && sugs.length > 0} style={{ width: 280 }} />
+            placeholder="Ticker, company or card number: NVDA, nvidia, #102…" aria-label="Ticker, company or card number" autoComplete="off" role="combobox" aria-expanded={open && sugs.length > 0} style={{ width: 330 }} />
           {open && sugs.length > 0 && (
             <ul className="suggest" role="listbox">
               {sugs.map((s, i) => (
