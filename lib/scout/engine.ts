@@ -94,12 +94,16 @@ export async function continueDaily(requestOrigin: string, r: { more: boolean; p
   return startJob(origin, `/api/cron/daily?pass=${r.pass + 1}&done=${r.done.join(",")}`, `lock:daily:pass${r.pass + 1}`, 3);
 }
 
+/** In the story desk's own call, research starts only in its first 150 seconds (the rest of the 5 minutes is for it to finish, and for upkeep). */
+export const STORY_RESEARCH_BY = 150_000;
+
 /** The story desk on its own: safe to call hourly (cron-job.org or the Run now button). */
 export async function runStoriesJob(deps = defaultDeps()) {
   const run = await store.startRun("stories");
   const started = Date.now();
   try {
-    const r = await runStories(deps);
+    // Trades the desk has no time to research in this call's 5 minutes are queued and done within minutes.
+    const r = await runStories({ ...deps, startBy: deps.startBy ?? started + STORY_RESEARCH_BY });
     console.log(`stories: ${r.headlinesRead} headlines (${r.fromStream ?? "?"} stream${r.streamSources ? `: ${r.streamSources}` : ""}; ${r.fromFast ?? "?"} fast), ${r.detected.length} detected, ${r.researched.length} researched${r.nearest ? ` · ${r.nearest}` : ""}${r.error ? ` · ${r.error}` : ""}`);
     // The filings desk: at most one new filing signal researched per call (three a day), if the story scan left time.
     const filings = Date.now() - started < 120_000
