@@ -95,3 +95,30 @@ describe("one pick per story", () => {
     expect(got.map((p) => p.id)).toEqual(["a", "c"]);
   });
 });
+
+describe("one company's news is one story", () => {
+  it("folds the report, the price move, the filing and the market reaction into the first", async () => {
+    const { companiesIn, leadName, oneStoryEach } = await import("@/lib/scout/top-news");
+    const names = { NVDA: "NVIDIA Corporation Common Stock", AMAT: "Applied Materials, Inc.", E: "Eni S.p.A." };
+    const picks = [
+      { headline: "Nvidia reinstates Jensen Huang as CEO amid pressure from Trump, investors", symbols: [] as string[] },
+      { headline: "Nasdaq roars back by 6% as Nvidia soars on Huang’s return, S&P 500 rebounds 4%: Live updates", symbols: [] },
+      { headline: "NVDA up 31.7% today, no headline in the scout's feeds yet", symbols: ["NVDA"] },
+      { headline: "NVIDIA CORP files 8-K: officer or director change", symbols: ["NVDA"] },
+      { headline: "CrowdStrike to Buy Zscaler in $44 Billion Stock Swap", symbols: [] },
+      { headline: "AMAT up 13.7% today: David Tepper's Appaloosa Management Discloses New Position in Applied Materials", symbols: ["AMAT"] },
+      { headline: "Vår Energi, an Eni subsidiary, to acquire Norwegian assets from ConocoPhillips", symbols: ["E"] },
+      { headline: "Oil Futures Start Week Lower as Middle East Flows Continue", symbols: ["USO", "XLE"] },
+      { headline: "Energy shares slip with crude", symbols: ["XLE"] },
+    ];
+    expect(oneStoryEach(picks, names).map((p) => p.headline.slice(0, 12))).toEqual(["Nvidia reins", "CrowdStrike ", "AMAT up 13.7", "Vår Energi, ", "Oil Futures ", "Energy share"]);
+    // Without the names, the two items that carry the ticker still fold together; index funds never join stories.
+    expect(oneStoryEach(picks).map((p) => p.headline.slice(0, 12))).toContain("NVDA up 31.7");
+    expect(oneStoryEach(picks).map((p) => p.headline.slice(0, 12))).not.toContain("NVIDIA CORP ");
+    expect(leadName("NVIDIA Corporation Common Stock")).toBe("nvidia");
+    expect(leadName("Applied Materials, Inc.")).toBe("applied materials");
+    expect(leadName("Eni S.p.A.")).toBe("");
+    expect(leadName("Target Corporation")).toBe("");
+    expect([...companiesIn({ headline: "Citigroup Adjusts Price Target on Salesforce", symbols: ["CRM"] }, { TGT: "Target Corporation", CRM: "Salesforce, Inc." })]).toEqual(["CRM"]);
+  });
+});

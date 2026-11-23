@@ -53,15 +53,43 @@ export function sameStory(a: string, b: string): boolean {
   for (const w of storyWords(b)) if (x.has(w)) n++;
   return n >= 3;
 }
+/** Index and sector funds: a story tagged with them is about the market, not one company. */
+export const BROAD_FUNDS = new Set(["SPY", "QQQ", "DIA", "IWM", "VOO", "VTI", "IVV", "XLE", "XLF", "XLK", "XLV", "XLI", "XLY", "XLP", "XLU", "XLB", "XLRE", "XLC", "USO", "GLD", "SLV", "TLT", "UNG", "ITA", "SMH", "SOXX", "KRE", "XBI", "ARKK", "HYG", "LQD", "EEM", "EFA", "FXI", "VXX", "UVXY"]);
+
+const NAME_TAIL = /\b(incorporated|inc|corporation|corp|company|co|limited|ltd|plc|holdings?|group|sa|nv|ag|se|lp|llc|trust|class [a-c]|common stock|ordinary shares?|american depositary shares?|ads|adr|the)\b/g;
+/** First words too common to name a company on their own ("American", "Applied") or that read as plain words ("Target"). */
+const NAME_VAGUE = new Set(["american", "general", "first", "united", "national", "international", "global", "applied", "energy", "capital", "digital", "advanced", "pacific", "southern", "northern", "western", "eastern", "royal", "bank", "home", "great", "north", "south", "east", "west", "central", "standard", "universal", "premier", "liberty", "golden", "blue", "green", "black", "white", "star", "super", "alpha", "delta", "target", "block", "match", "unity", "snap", "visa", "best", "open", "life", "ally", "path", "dollar", "union", "service", "public", "power", "core", "live", "meta", "trade", "news", "focus", "arch", "vital", "summit", "prime"]);
+/** Pure: how headlines name a listed company ("NVIDIA Corporation" → "nvidia", "Applied Materials, Inc." → "applied materials"); "" when too short or vague. */
+export function leadName(name: string): string {
+  const words = name.toLowerCase().replace(/[.,]/g, " ").replace(NAME_TAIL, " ").split(/[^a-z0-9&]+/).filter(Boolean);
+  if (!words.length) return "";
+  if (words[0].length >= 4 && !NAME_VAGUE.has(words[0])) return words[0];
+  return words.length >= 2 && `${words[0]} ${words[1]}`.length >= 7 ? `${words[0]} ${words[1]}` : "";
+}
+
+/** Pure: the companies an item is about: its own tickers (funds aside) and the listed companies its headline names. */
+export function companiesIn(i: { headline: string; symbols?: string[] }, names: Record<string, string> = {}): Set<string> {
+  const out = new Set((i.symbols ?? []).filter((s) => !BROAD_FUNDS.has(s)));
+  const head = ` ${i.headline.toLowerCase().replace(/[’']s\b/g, "").replace(/[^a-z0-9&]+/g, " ")} `;
+  for (const [sym, name] of Object.entries(names)) {
+    const lead = leadName(name);
+    if (lead && head.includes(` ${lead} `)) out.add(sym);
+  }
+  return out;
+}
+
 /**
- * Pure: one item per story, keeping the first. A later item is the same story when it matches any headline already
- * folded into a kept one (so the market-reaction piece is caught through the reaction it shares words with).
+ * Pure: one item per story, keeping the first. A later item is the same story when its headline matches any headline
+ * already folded into a kept one (so the market-reaction piece is caught through the reaction it shares words with),
+ * or when it is about a company a kept one is about: the report, the filing, the price move and the market's reaction
+ * to one company's news are one story. `names` (ticker → company name) lets a headline that only names the company count.
  */
-export function oneStoryEach<T extends { headline: string }>(items: T[]): T[] {
-  const groups: Array<{ keep: T; heads: string[] }> = [];
+export function oneStoryEach<T extends { headline: string; symbols?: string[] }>(items: T[], names: Record<string, string> = {}): T[] {
+  const groups: Array<{ keep: T; heads: string[]; cos: Set<string> }> = [];
   for (const i of items) {
-    const g = groups.find((x) => x.heads.some((h) => sameStory(h, i.headline)));
-    if (g) g.heads.push(i.headline); else groups.push({ keep: i, heads: [i.headline] });
+    const cos = companiesIn(i, names);
+    const g = groups.find((x) => x.heads.some((h) => sameStory(h, i.headline)) || [...cos].some((c) => x.cos.has(c)));
+    if (g) { g.heads.push(i.headline); for (const c of cos) g.cos.add(c); } else groups.push({ keep: i, heads: [i.headline], cos });
   }
   return groups.map((g) => g.keep);
 }
@@ -121,7 +149,7 @@ export function aiCandidates(items: FeedItem[], general: FeedItem[], now: Date):
 }
 
 /** Pure: the model's picks mapped onto the candidates: unknown ids, repeats, repeated events and same-story headlines dropped. */
-export function applyPicks(cands: FeedItem[], picks: Array<{ id: string; why: string; event?: string }>, n = TOP_NEWS.picks): TopPick[] {
+export function applyPicks(cands: FeedItem[], picks: Array<{ id: string; why: string; event?: string }>, n = TOP_NEWS.picks, names: Record<string, string> = {}): TopPick[] {
   const by = new Map(cands.map((c) => [c.id, c])); const seen = new Set<string>(), events = new Set<string>();
   const label = (e: string | undefined) => (e ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean).sort().join(" ");
   const kept = picks.filter((p) => {
@@ -132,7 +160,7 @@ export function applyPicks(cands: FeedItem[], picks: Array<{ id: string; why: st
     if (e) events.add(e);
     return true;
   }).map((p) => pick(by.get(p.id)!, p.why.trim()));
-  return oneStoryEach(kept).slice(0, n);
+  return oneStoryEach(kept, names).slice(0, n);
 }
 
 /** Pure: the list the model reads. */
@@ -156,7 +184,10 @@ export async function runTopNews(deps: ResearchDeps): Promise<string> {
   if ((await store.spendOn(today)).cost >= (await store.loadSettings()).dailyCapUsd) return "top news: daily AI cap reached (rules ranking shown)";
   const r = await deps.callModel({ model: LIGHT_MODEL, effort: "low", purpose: "top_news", user: `Now: ${deps.now.toISOString()}\n\n${promptList(cands)}\n\nReply with the JSON object.` });
   await store.logLlmCall({ etDate: today, model: LIGHT_MODEL, purpose: "top_news", usage: r.usage, costUsd: r.costUsd, ok: true });
-  const picks = applyPicks(cands, reply.parse(JSON.parse(r.text)).picks);
+  // Company names for the tickers in play, so "Nvidia reinstates its CEO" and "NVDA up 30%" count as one story.
+  const inPlay = new Set(cands.flatMap((c) => c.symbols));
+  const names = Object.fromEntries((await import("./symbol-search").then(({ listings }) => listings()).catch(() => [])).filter((l) => inPlay.has(l.s)).map((l) => [l.s, l.n]));
+  const picks = applyPicks(cands, reply.parse(JSON.parse(r.text)).picks, TOP_NEWS.picks, names);
   if (!picks.length) return "top news: the model picked nothing usable";
   await store.cachePut("topnews", { at: deps.now.toISOString(), by: "ai", picks } satisfies TopNews);
   return `top news: ${picks.length} picked from ${cands.length} (${general.length} general headlines)`;

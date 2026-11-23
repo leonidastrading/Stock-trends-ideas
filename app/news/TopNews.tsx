@@ -2,11 +2,8 @@ import CardChips from "@/components/CardChips";
 import NewFlag, { SeenScope } from "@/components/NewFlag";
 import Ticker from "@/components/Ticker";
 import type { CardBrief } from "@/lib/scout/store";
-import type { TopNews as Top } from "@/lib/scout/top-news";
+import { BROAD_FUNDS, type TopNews as Top } from "@/lib/scout/top-news";
 import { ago, toEt } from "@/lib/time";
-
-/** Index and sector funds: a story tagged with them is about the market, not a card's stock. */
-const BROAD = new Set(["SPY", "QQQ", "DIA", "IWM", "VOO", "VTI", "IVV", "XLE", "XLF", "XLK", "XLV", "XLI", "XLY", "XLP", "XLU", "XLB", "XLRE", "XLC", "USO", "GLD", "SLV", "TLT", "UNG", "ITA", "SMH", "SOXX", "KRE", "XBI", "ARKK", "HYG", "LQD", "EEM", "EFA", "FXI", "VXX", "UVXY"]);
 
 const clock = (iso: string) => {
   const d = new Date(iso);
@@ -23,7 +20,7 @@ export default function TopNews({ top, cards }: { top: Top; cards: CardBrief[] }
   // The scout's promoted cards (last 60 days) whose own stock is in the story; never via index funds like SPY or QQQ.
   const since = Date.now() - 60 * 86400_000;
   const cardsOn = (syms: string[]) => {
-    const own = syms.filter((s) => !BROAD.has(s));
+    const own = syms.filter((s) => !BROAD_FUNDS.has(s));
     return cards.filter((c) => c.status === "promoted" && Date.parse(c.createdAt) >= since && own.includes(c.primaryTicker));
   };
   return (
