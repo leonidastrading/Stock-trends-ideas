@@ -1,3 +1,4 @@
+import TickerSearch from "@/components/TickerSearch";
 import { notFound } from "next/navigation";
 import CardActions from "@/components/CardActions";
 import CardChips from "@/components/CardChips";
@@ -31,6 +32,7 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
   return (
     <>
       <p className="small"><a href="/ideas">← All ideas</a></p>
+      <TickerSearch />
       <div className="small muted from-line">
         From: {from.url ? <a href={from.url}>{from.tag}</a> : from.tag}{src?.term ? ` · ${src.term.replace(/^[a-z+ ]+: /i, "")}` : ""} <span className="muted">(scored as {PLAYER_LABEL[player]})</span>
       </div>
