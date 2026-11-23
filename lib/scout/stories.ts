@@ -150,6 +150,13 @@ export function detectStories(items: NewsItem[], opts: DetectOptions = {}): Stor
     .sort((a, b) => b.latest.localeCompare(a.latest));
 }
 
+/** Pure: when no story qualifies, the busiest tickers with the counts the rule looks at (so the run says why). */
+export function nearestStories(items: NewsItem[], n = 4): string {
+  const top = detectStories(items, { minMainstream: 0, minStories: 0, maxStories: n }).filter((s) => !s.key.startsWith("macro:"));
+  if (!top.length) return items.length ? "no headline carried a ticker" : "no headlines";
+  return `closest: ${top.map((s) => `${s.key} ${s.stories} headlines (${s.mainstream} mainstream, ${s.shockHits} with shock wording)`).join("; ")}`;
+}
+
 // ---------------------------------------------------------------- triage
 
 export const STORY_SYSTEM_PROMPT = `You are the story desk of a paper-only "trend scout". You are shown breaking stories from a market news stream: shocks such as a CEO scandal, exit or death, a war or ceasefire, a ban, tariff or sanction, a regulator's move, an indictment, a recall, a strategic pivot, a guidance cut, and deal events such as an IPO filing, a big funding round or an acquisition. Some are follow-ups on stories seen days ago whose stock has barely moved while the coverage stayed loud. For each story you lay out the trades it implies, the way an event-driven trader would.
@@ -292,6 +299,11 @@ export const storyTerm = (key: string, ticker: string) => `story: ${key} → ${t
 export interface StoriesReport {
   date: string;
   headlinesRead: number;
+  /** How many of the headlines came from the Alpaca stream and from the fast sources (wires, 8-Ks, world news). */
+  fromStream?: number;
+  fromFast?: number;
+  /** When nothing was detected: the busiest tickers and why none qualified. */
+  nearest?: string;
   detected: Array<{ key: string; symbols: string[]; stories: number; mainstream: number; shockHits: number; stage: number | null; escalation: string[]; building: boolean; coverage: string | null; staleness: number | null; latest: string; sample: string[]; samples: Array<{ at: string; headline: string }> }>;
   triage: Array<{ key: string; summary: string; skipped: string | null; labels?: { novelty: string; nature: string; complexity: string }; trades: Array<{ ticker: string; direction: string; role: string; play?: string; horizon_days: number }>; attention?: string[] }>;
   researched: Array<{ term: string; outcome: string; reason?: string; cardId?: number }>;
@@ -317,7 +329,9 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
     // The fast sources too (press wires, SEC 8-Ks, Nasdaq halts, Finnhub): stories are not held back when Alpaca's stream lags.
     const fast = await import("../sources/wires").then(({ fastNews }) => fastNews(deps.env, deps.fetchImpl, deps.now)).catch(() => [] as NewsItem[]);
     const seen = new Set(items.map((n) => n.headline.toLowerCase()));
+    report.fromStream = items.length;
     items = [...items, ...fast.filter((n) => !seen.has(n.headline.toLowerCase()))];
+    report.fromFast = items.length - report.fromStream;
   } catch (err) {
     report.error = `news stream: ${err instanceof Error ? err.message : String(err)}`;
     return report;
@@ -342,7 +356,10 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
   }
   report.detected = stories.map((s) => ({ key: s.key, symbols: s.symbols, stories: s.stories, mainstream: s.mainstream, shockHits: s.shockHits, stage: s.stage ?? null, escalation: s.escalation.slice(0, 6), building: !!s.coverage?.building, coverage: s.coverage?.line ?? null, staleness: s.staleness ?? null, latest: s.latest, sample: s.headlines.slice(0, 3).map((h) => h.headline), samples: s.headlines.slice(0, 3).map((h) => ({ at: h.at, headline: h.headline })) }));
   await store.saveTickerCounts(et.date, items);
-  if (!stories.length) return report;
+  if (!stories.length) {
+    report.nearest = nearestStories(items);
+    return report;
+  }
 
   const recent = await store.recentTerms(STORY_COOLDOWN_DAYS);
   // A new stage (an institution acted) or a building story (coverage growing every day) skips the 3-day cooldown, once a day per story.

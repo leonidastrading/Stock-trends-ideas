@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { MarketData, NewsItem } from "@/lib/alpaca";
 import { query, setQuerierForTests } from "@/lib/db";
 import type { CallModel } from "@/lib/scout/llm";
-import { buildStoryPrompt, detectStories, parseStoryTriage, runStories, STORY_JSON_SCHEMA, storyTerm } from "@/lib/scout/stories";
+import { buildStoryPrompt, detectStories, nearestStories, parseStoryTriage, runStories, STORY_JSON_SCHEMA, storyTerm } from "@/lib/scout/stories";
 import * as store from "@/lib/scout/store";
 import { sampleCard } from "./card.test";
 
@@ -22,6 +22,13 @@ describe("story detection", () => {
     expect(s.map((x) => x.key)).toEqual(["macro:war", "NVDA"]);
     expect(s[1]).toMatchObject({ stories: 4, mainstream: 3, shockHits: 2 });
     expect(s[0].symbols).toEqual([]);
+  });
+  it("says which tickers came closest when nothing qualifies", () => {
+    const items = [n("Avis update", ["CAR"], false), n("Avis sued over fees", ["CAR"], false), n("Hertz update", ["HTZ"], false)];
+    expect(detectStories(items)).toEqual([]);
+    expect(nearestStories(items)).toMatch(/^closest: CAR 2 headlines \(0 mainstream, 1 with shock wording\); HTZ 1 headlines/);
+    expect(nearestStories([])).toBe("no headlines");
+    expect(nearestStories([n("World news", [])])).toBe("no headline carried a ticker");
   });
   it("a coverage spike against the ticker's daily average counts even without shock words", () => {
     const items = Array.from({ length: 9 }, (_, i) => n(`Avis update ${i}`, ["CAR"], i < 4));

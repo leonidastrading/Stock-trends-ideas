@@ -176,7 +176,7 @@ function summarize(d: unknown): string {
   if (o.discovery && typeof o.discovery === "object") parts.push(`discovery: ${(o.discovery as { headlinesRead: number }).headlinesRead} headlines, ${((o.discovery as { proposed: unknown[] }).proposed ?? []).length} proposed`);
   if (typeof o.digest === "string") parts.push(`digest: ${o.digest}`);
   if (typeof o.barsWritten === "number") parts.push(`${o.barsWritten} bars`);
-  if (Array.isArray(o.detected)) parts.push(`${o.detected.length} stories, ${(o.researched as unknown[]).length} trades researched`);
+  if (Array.isArray(o.detected)) parts.push(`${typeof o.headlinesRead === "number" ? `${o.headlinesRead.toLocaleString("en-US")} headlines read${typeof o.fromStream === "number" ? ` (${o.fromStream.toLocaleString("en-US")} from the news stream)` : ""}, ` : ""}${o.detected.length} stories, ${(o.researched as unknown[]).length} trades researched${typeof o.nearest === "string" && !o.detected.length ? ` · ${o.nearest}` : ""}`);
   if (o.stories && typeof o.stories === "object" && Array.isArray((o.stories as { detected?: unknown[] }).detected)) parts.push(`stories: ${(o.stories as { detected: unknown[] }).detected.length} detected`);
   if (Array.isArray(o.entered)) parts.push(`${o.entered.length} entered, ${(o.exited as unknown[]).length} exited, ${o.open} open`);
   if (typeof o.stoppedEarly === "string") parts.push(o.stoppedEarly);

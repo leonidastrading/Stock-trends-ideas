@@ -58,6 +58,7 @@ export async function runStoriesJob(deps = defaultDeps()) {
   const started = Date.now();
   try {
     const r = await runStories(deps);
+    console.log(`stories: ${r.headlinesRead} headlines (${r.fromStream ?? "?"} stream, ${r.fromFast ?? "?"} fast), ${r.detected.length} detected, ${r.researched.length} researched${r.nearest ? ` · ${r.nearest}` : ""}${r.error ? ` · ${r.error}` : ""}`);
     // The filings desk: at most one new filing signal researched per call (three a day), if the story scan left time.
     const filings = Date.now() - started < 120_000
       ? await import("./filings").then(({ runFilingResearch }) => runFilingResearch(deps, 1)).catch((err) => ({ error: err instanceof Error ? err.message : String(err) }))
