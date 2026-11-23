@@ -16,6 +16,18 @@ export type Slot = (typeof ST_SLOTS)[number]["key"];
 export interface StItem { rank: number; symbol: string; name: string | null; exchange: string | null; sector: string | null; watchers: number | null; summary: string | null; price: number | null; headlines: Array<{ headline: string; url: string; source: string; at: string }> }
 export interface StSnapshot { id: number; date: string; slot: Slot; takenAt: string; market: Array<{ headline: string; url: string; source: string; at: string }>; items: StItem[] }
 
+/** Pure: not a US-listed stock or ETF (a currency pair, gold, a crypto pair, an index): no scout chart or card. */
+export const notStock = (i: Pick<StItem, "symbol" | "exchange">) => /^(FX|FOREX|CRYPTO|INDEX|INDICES|FUTURES)$/i.test(i.exchange ?? "") || /\./.test(i.symbol);
+
+/** Pure: the TradingView symbol for a currency pair, gold or silver, or a crypto pair. */
+export function tvForNonStock(i: Pick<StItem, "symbol" | "exchange">): string {
+  const s = i.symbol.toUpperCase();
+  if (/^X(AU|AG|PT|PD)USD$/.test(s)) return `OANDA:${s}`;
+  if (/^[A-Z]{3}\.X$/.test(s)) return `COINBASE:${s.slice(0, 3)}USD`;
+  if (/^(FX|FOREX)$/i.test(i.exchange ?? "") && /^[A-Z]{6}$/.test(s)) return `FX:${s}`;
+  return s;
+}
+
 /** Pure: the slot to take now: the latest one whose time has come today and is not taken yet (a late first run takes only the later slot). */
 export function dueSlot(minutes: number, taken: Set<string>): Slot | null {
   const ready = ST_SLOTS.filter((s) => minutes >= s.minutes);

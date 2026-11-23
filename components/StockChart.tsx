@@ -49,8 +49,9 @@ const sma = (bars: Bar[], n: number) => bars.map((b, i) => (i + 1 < n ? null : {
 /** An extra marker on the chart: an insider's buy (below the line, green) or sale (above, red), with its text. */
 export interface ChartMark { date: string; side: "buy" | "sell"; text: string }
 
-export default function StockChart({ symbol, tvSymbol, height = 680, entry, line = false, marks: extraMarks }: { symbol: string; tvSymbol: string; height?: number; entry?: ChartEntry; line?: boolean; marks?: ChartMark[] }) {
-  const [tab, setTab] = useState<"scout" | "tv">("scout");
+export default function StockChart({ symbol, tvSymbol, height = 680, entry, line = false, marks: extraMarks, tvOnly = false }: { symbol: string; tvSymbol: string; height?: number; entry?: ChartEntry; line?: boolean; marks?: ChartMark[]; tvOnly?: boolean }) {
+  // Currencies, gold and crypto have no US stock prices for the scout chart: TradingView only.
+  const [tab, setTab] = useState<"scout" | "tv">(tvOnly ? "tv" : "scout");
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT);
   const box = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
@@ -268,7 +269,7 @@ export default function StockChart({ symbol, tvSymbol, height = 680, entry, line
   return (
     <div ref={box}>
       <div className="chart-tabs small">
-        <button type="button" className={tab === "scout" ? "active" : ""} onClick={() => setTab("scout")}>Scout chart</button>
+        {!tvOnly && <button type="button" className={tab === "scout" ? "active" : ""} onClick={() => setTab("scout")}>Scout chart</button>}
         <button type="button" className={tab === "tv" ? "active" : ""} onClick={() => setTab("tv")}>TradingView</button>
         {tab === "scout" && <>
           <span className="chart-sep" />

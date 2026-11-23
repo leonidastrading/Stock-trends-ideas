@@ -11,7 +11,7 @@ const EVERY_MS = 120_000;
  * A card's latest news: headlines on its stocks, newest first. Loads when the card comes into view, then asks again
  * every 2 minutes while the page is open and visible; headlines that arrived while you were looking are marked new.
  */
-export default function CardNews({ symbols, since }: { symbols: string[]; since: string }) {
+export default function CardNews({ symbols, since, window: span }: { symbols: string[]; since: string; window?: string }) {
   const box = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   const [items, setItems] = useState<Item[] | null>(null);
@@ -53,16 +53,16 @@ export default function CardNews({ symbols, since }: { symbols: string[]; since:
   const shown = items ? (all ? items : items.slice(0, 5)) : [];
   return (
     <div ref={box} className="card-news">
-      <h3>Latest news <span className="small muted">on {symbols.join(", ")}{items ? ` · ${after.length} since the card was written · checks every 2 minutes` : ""}</span></h3>
+      <h3>Latest news <span className="small muted">on {symbols.join(", ")}{items ? ` · ${after.length} ${span ? `in ${span}` : "since the card was written"} · checks every 2 minutes` : ""}</span></h3>
       {items === null ? <p className="small muted">Loading headlines…</p>
-        : items.length === 0 ? <p className="small muted">No headlines on {symbols.join(", ")} since the card was written.</p>
+        : items.length === 0 ? <p className="small muted">No headlines on {symbols.join(", ")} {span ? `in ${span}` : "since the card was written"}.</p>
         : (
           <ul className="card-news-list">
             {shown.map((x) => (
-              <li key={x.url + x.headline} className={x.at < since ? "muted" : undefined}>
+              <li key={x.url + x.headline} className={x.at < since && !span ? "muted" : undefined}>
                 {fresh.has(x.url + x.headline) && <span className="tag error">new</span>}{" "}
                 <a href={x.url} target="_blank" rel="noreferrer">{x.headline}</a>{" "}
-                <span className="small muted">{x.source} · {fmtEtAgo(x.at)}{x.at < since ? " · before the card" : ""}</span>
+                <span className="small muted">{x.source} · {fmtEtAgo(x.at)}{x.at < since && !span ? " · before the card" : ""}</span>
               </li>
             ))}
           </ul>

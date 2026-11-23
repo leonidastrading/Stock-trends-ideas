@@ -1,5 +1,6 @@
 "use client";
 
+import CardNews from "@/components/CardNews";
 import LinkedText from "@/components/LinkedText";
 import { useEffect, useRef, useState } from "react";
 import { chartUrl } from "@/config/links";
@@ -70,6 +71,7 @@ export default function TickerSearch() {
     setResearch(res.ok && j.ok ? { cardId: j.cardId, status: j.status } : { error: (j.errors ?? ["failed"]).join("; ") });
   }
 
+  const [weekAgo] = useState(() => new Date(Date.now() - 7 * 86400_000).toISOString());
   const extras: Array<[string, string[]]> = r ? [["Insider buys (90 days)", r.insider], ["Congress (90 days)", r.congress], ["Unusual options (30 days)", r.options], ["Trump posts (14 days)", r.truth]] : [];
   return (
     <section className="card ticker-search">
@@ -110,6 +112,7 @@ export default function TickerSearch() {
             <span className="secondary">{r.name ?? ""}</span>
             {r.nextEarnings && <span className="small muted"> · next earnings ~{r.nextEarnings}</span>}
           </div>
+          <CardNews symbols={[r.symbol]} since={weekAgo} window="the last 7 days" />
           {r.cards.length > 0 ? (
             <ul className="small" style={{ margin: "6px 0", paddingLeft: 18 }}>
               {r.cards.map((c) => (
