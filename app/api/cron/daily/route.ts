@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { background } from "@/lib/background";
 import { checkCronSecret, cronAuthProblem } from "@/lib/auth";
-import { runDaily } from "@/lib/scout/engine";
+import { continueDaily, runDaily } from "@/lib/scout/engine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +16,12 @@ export async function GET(request: Request) {
   }
   background(() => import("@/lib/scout/catchup").then(({ catchUp }) => catchUp(120_000)));
   try {
-    return NextResponse.json(await runDaily());
+    const url = new URL(request.url);
+    const pass = Math.max(1, Math.min(9, Number(url.searchParams.get("pass")) || 1));
+    const r = await runDaily(undefined, { pass, done: (url.searchParams.get("done") ?? "").split(",").filter(Boolean) });
+    // What this pass had no time for (the rest of the watch-list, the story desk, the follow-ups) runs in the next one.
+    const next = await continueDaily(url.origin, r).catch(() => false);
+    return NextResponse.json({ ...r, nextPassStarted: next });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`daily run failed: ${message}`);

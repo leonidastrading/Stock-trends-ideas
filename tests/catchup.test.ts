@@ -4,7 +4,7 @@ import { setQuerierForTests } from "@/lib/db";
 import type { CallModel } from "@/lib/scout/llm";
 import * as store from "@/lib/scout/store";
 import { drainQueue, enqueue, queueRows } from "@/lib/scout/catchup";
-import { researchCandidate } from "@/lib/scout/research";
+import { OUT_OF_TIME, researchCandidate } from "@/lib/scout/research";
 
 const emptyRss: typeof fetch = async () => new Response("<rss></rss>", { status: 200 });
 
@@ -32,6 +32,17 @@ describe("nothing is skipped when the daily AI budget runs out (PGlite)", () => 
     await researchCandidate({ origin: "scout", term: "insider: ACME CEO buys", kindHint: "event", tickersHint: ["ACME"], observation: null }, { sources: [], callModel: never, now: day1, env: {} as NodeJS.ProcessEnv, fetchImpl: emptyRss, data: null } as never);
     expect(await queueRows("pending")).toHaveLength(1);
     expect([...(await store.recentTerms(30))]).not.toContain("insider: acme ceo buys");
+  });
+
+  it("an idea a run has no time left for is queued the same way", async () => {
+    const before = (await queueRows("pending")).length;
+    const never: CallModel = async () => { throw new Error("the model must not be called when the run is out of time"); };
+    const r = await researchCandidate({ origin: "scout", term: "story: LATE CORP late", kindHint: "event", tickersHint: ["LATE"], observation: null }, { sources: [], callModel: never, now: day2, env: {} as NodeJS.ProcessEnv, fetchImpl: emptyRss, data: null, startBy: Date.now() - 1 } as never);
+    expect(r.outcome).toBe("capped");
+    expect(r.outcome !== "card" && r.reason).toBe(OUT_OF_TIME);
+    const waiting = await queueRows("pending");
+    expect(waiting).toHaveLength(before + 1);
+    expect((waiting.at(-1)!.payload as { term: string }).term).toBe("story: LATE CORP late");
   });
 
   it("after the reset the queue is worked through, oldest first; while still capped it waits", async () => {

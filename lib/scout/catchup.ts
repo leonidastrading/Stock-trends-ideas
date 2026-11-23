@@ -86,7 +86,8 @@ export async function drainQueue(deps: ResearchDeps & { data: MarketData | null 
         if (r.error && CAP_REASON.test(r.error) && r.rumors === 0) { await tried(item.id, r.error); break; }
         await finish(item.id, `${r.rumors} rumors${r.error ? ` (${r.error})` : ""}`);
       } else {
-        const res = await runJob((item.payload as { job: QueueJob }).job, deps);
+        // A queued job's own research respects this drain's deadline (what does not fit is queued again as single ideas).
+        const res = await runJob((item.payload as { job: QueueJob }).job, { ...deps, startBy: deadline });
         if (CAP_REASON.test(res)) { await tried(item.id, res); break; }
         await finish(item.id, res);
       }

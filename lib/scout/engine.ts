@@ -16,33 +16,66 @@ export function defaultDeps(now = new Date()): ResearchDeps {
   return { data, sources: allSources(data), callModel: callResearchModel, now, env: process.env };
 }
 
-/** The daily job: scan the watch-list, research candidates, and on Mondays send the digest. */
-export async function runDaily(deps = defaultDeps()) {
+/** How one pass of the daily job spends its 5 minutes (ms from its start). */
+export const DAILY_BUDGET = { measureBy: 130_000, researchBy: 140_000, storiesBy: 175_000, followupsBy: 215_000, maxPasses: 5 };
+export type DailyStep = "discovery" | "stories" | "followups";
+
+/** Pure: whether another pass is needed, and which steps are finished. */
+export function dailyProgress(done: Iterable<string>, unmeasured: number): { done: DailyStep[]; more: boolean } {
+  const steps: DailyStep[] = ["discovery", "stories", "followups"];
+  const d = steps.filter((x) => new Set(done).has(x));
+  return { done: d, more: unmeasured > 0 || d.length < steps.length };
+}
+
+/**
+ * The daily job: scan the watch-list, research candidates, and on Mondays send the digest.
+ * A function is stopped at 5 minutes, so each pass keeps to a time budget: measuring stops in time, research that
+ * would start too late goes on the catch-up queue (done within minutes), and steps it could not reach are left to
+ * the next pass (`more`), which the caller starts with the steps already `done`.
+ */
+export async function runDaily(base = defaultDeps(), opts: { done?: string[]; pass?: number } = {}) {
+  const started = Date.now();
+  const deps: ResearchDeps = { ...base, startBy: base.startBy ?? started + DAILY_BUDGET.researchBy };
+  const done = new Set<string>(opts.done ?? []);
+  const pass = opts.pass ?? 1;
   const run = await store.startRun("daily");
   try {
-    const scan = await runScan(deps);
-    let stories;
-    try {
-      stories = await runStories(deps);
-    } catch (err) {
-      stories = { error: err instanceof Error ? err.message : String(err) };
+    const scan = await runScan(deps, { measureBy: started + DAILY_BUDGET.measureBy, skipDiscovery: done.has("discovery"), resume: pass > 1 });
+    const settings = await store.loadSettings();
+    if (!scan.unmeasured && (scan.discovery || settings.discoveryPerScan <= 0 || !settings.enabled)) done.add("discovery");
+    const later = "later: no time left in this pass";
+    let stories: unknown = done.has("stories") ? "done in an earlier pass" : later;
+    if (!done.has("stories") && Date.now() < started + DAILY_BUDGET.storiesBy) {
+      try {
+        stories = await runStories(deps);
+      } catch (err) {
+        stories = { error: err instanceof Error ? err.message : String(err) };
+      }
+      done.add("stories");
     }
-    let followups;
-    try {
-      const { runFollowups } = await import("./followup");
-      followups = await runFollowups(deps);
-    } catch (err) {
-      followups = { error: err instanceof Error ? err.message : String(err) };
+    let followups: unknown = done.has("followups") ? "done in an earlier pass" : later;
+    if (!done.has("followups") && Date.now() < started + DAILY_BUDGET.followupsBy) {
+      try {
+        const { runFollowups } = await import("./followup");
+        followups = await runFollowups(deps);
+      } catch (err) {
+        followups = { error: err instanceof Error ? err.message : String(err) };
+      }
+      done.add("followups");
     }
-    let digest = "skipped";
-    try {
-      digest = await maybeSendDigest(deps.now, deps.env);
-    } catch (err) {
-      digest = `failed: ${err instanceof Error ? err.message : String(err)}`;
+    const progress = dailyProgress(done, scan.unmeasured ?? 0);
+    const more = progress.more && pass < DAILY_BUDGET.maxPasses;
+    let digest = more ? "after the last pass" : "skipped";
+    if (!more) {
+      try {
+        digest = await maybeSendDigest(deps.now, deps.env);
+      } catch (err) {
+        digest = `failed: ${err instanceof Error ? err.message : String(err)}`;
+      }
     }
     const pushed = await pushNewCards(deps.env).catch((err) => `push failed: ${err instanceof Error ? err.message : String(err)}`);
-    const detail = { ...scan, stories, followups, digest, pushed };
-    await store.finishRun(run, scan.stoppedEarly ? "skipped" : "ok", detail);
+    const detail = { ...scan, stories, followups, digest, pushed, pass, more, done: progress.done };
+    await store.finishRun(run, scan.stoppedEarly && !more ? "skipped" : "ok", detail);
     return { status: "ok" as const, ...detail };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -50,6 +83,15 @@ export async function runDaily(deps = defaultDeps()) {
     await pushFailure("daily", message, deps.env);
     throw err;
   }
+}
+
+/** Start the next pass of the daily job in its own function call (its own 5 minutes). */
+export async function continueDaily(requestOrigin: string, r: { more: boolean; pass: number; done: string[] }, env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
+  if (!r.more) return false;
+  const { startJob } = await import("./jobs");
+  // The app's public address: Vercel's own cron calls a deployment address that can sit behind Vercel's login.
+  const origin = (env.DASHBOARD_URL?.trim() || (env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${env.VERCEL_PROJECT_PRODUCTION_URL}` : requestOrigin)).replace(/\/$/, "");
+  return startJob(origin, `/api/cron/daily?pass=${r.pass + 1}&done=${r.done.join(",")}`, `lock:daily:pass${r.pass + 1}`, 3);
 }
 
 /** The story desk on its own: safe to call hourly (cron-job.org or the Run now button). */

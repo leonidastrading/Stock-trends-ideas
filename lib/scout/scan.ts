@@ -60,6 +60,10 @@ export function acceleration(signals: Signal[], kind: string | null): Accelerati
   };
 }
 
+/** Today's scan so far, across its passes: the terms gone through and how many candidates went to research. */
+interface ScanProgress { date: string; terms: string[]; researched: number }
+const PROGRESS_KEY = "scan:progress";
+
 export interface ScanReport {
   date: string;
   terms: number;
@@ -68,9 +72,17 @@ export interface ScanReport {
   risingQueries: Array<{ title: string; traffic: string }>;
   discovery: { headlinesRead: number; read: string | null; proposed: Array<{ term: string; kind: string; tickers: string[]; why: string }>; problems: string[]; error: string | null } | null;
   stoppedEarly: string | null;
+  /** Watch-list terms not reached before the run's time budget; the next pass measures them. */
+  unmeasured?: number;
 }
 
-export async function runScan(deps: ResearchDeps): Promise<ScanReport> {
+/**
+ * `measureBy` (ms since epoch) stops the measuring loop in time for the function's limit: what is left is measured by
+ * the next pass. `resume` marks that next pass: terms an earlier pass already went through today are not gone through
+ * again (so every pass moves on), and the day's candidate limit counts what earlier passes researched.
+ * `skipDiscovery` when an earlier pass did the read.
+ */
+export async function runScan(deps: ResearchDeps, opts: { measureBy?: number; skipDiscovery?: boolean; resume?: boolean } = {}): Promise<ScanReport> {
   const et = toEt(deps.now);
   await store.seedWatchlist();
   const settings = await store.loadSettings();
@@ -83,7 +95,15 @@ export async function runScan(deps: ResearchDeps): Promise<ScanReport> {
   const rank = { ok: 0, capped: 1, down: 2, missing: 3 };
   const candidates: Array<{ term: string; kind: string; tickers: string[]; results: SourceResult[]; acc: Acceleration }> = [];
 
-  for (const w of items) {
+  // What earlier passes of today's scan went through, so a later pass starts where they stopped.
+  const kept = opts.resume ? (await store.cacheGet<ScanProgress>(PROGRESS_KEY).catch(() => null))?.data ?? null : null;
+  const progress: ScanProgress = kept?.date === et.date ? kept : { date: et.date, terms: [], researched: 0 };
+  const attempted = new Set(progress.terms);
+  const saveProgress = () => store.cachePut(PROGRESS_KEY, { ...progress, terms: [...attempted] } satisfies ScanProgress).catch(() => undefined);
+
+  for (const [i, w] of items.entries()) {
+    if (attempted.has(w.term)) continue;
+    if (opts.measureBy && Date.now() > opts.measureBy) { report.unmeasured = items.slice(i).filter((x) => !attempted.has(x.term)).length; break; }
     // A source measured for this term today is not called again (quotas, rate limits); its stored signals are reused.
     const today = await store.signalsOn(w.term, et.date);
     const fresh = deps.sources.filter((s) => !today.has(s.id));
@@ -102,7 +122,10 @@ export async function runScan(deps: ResearchDeps): Promise<ScanReport> {
     const cool = cooldown.has(w.term.toLowerCase());
     report.measured.push({ term: w.term, kind: w.kind, sources: results.filter((r) => r.signals.length).length, accelerating: acc.accelerating.length, score: Math.round(acc.score * 100) / 100, candidate: acc.isCandidate, cooldown: cool });
     if (acc.isCandidate && !cool) candidates.push({ term: w.term, kind: w.kind, tickers: w.tickers, results: results.map((r) => ({ ...r, signals: signals.filter((s) => s.source === r.source) })), acc });
+    attempted.add(w.term);
+    if (attempted.size % 10 === 0) await saveProgress();
   }
+  await saveProgress();
   await recordHealth([...health.values()]);
 
   try {
@@ -117,14 +140,20 @@ export async function runScan(deps: ResearchDeps): Promise<ScanReport> {
     return report;
   }
   candidates.sort((a, b) => b.acc.score - a.acc.score);
-  for (const c of candidates.slice(0, settings.maxCandidatesPerScan)) {
+  const room = Math.max(0, settings.maxCandidatesPerScan - progress.researched);
+  progress.researched += Math.min(room, candidates.length);
+  await saveProgress();
+  for (const c of candidates.slice(0, room)) {
     const r: ResearchOutcome = await researchCandidate({ origin: "scout", term: c.term, kindHint: c.kind as never, tickersHint: c.tickers, observation: null, trigger: c.acc.accelerating, results: c.results }, deps);
     report.researched.push(r.outcome === "card" ? { term: c.term, outcome: `card: ${r.card.status}`, cardId: r.card.id } : { term: c.term, outcome: r.outcome, reason: r.reason });
     if (r.outcome === "capped") report.stoppedEarly = r.reason; // queued; the rest are queued too
   }
 
+  if (report.unmeasured) report.stoppedEarly ??= `out of time with ${report.unmeasured} of ${items.length} terms still to measure; the next pass measures them`;
   // Discovery: read the day's news and trending lists, let the model propose what the watch-list would miss.
-  if (settings.discoveryPerScan > 0) report.discovery = await runDiscovery(deps, settings.discoveryPerScan, cooldown, report);
+  // Left to the next pass when this one has no time for it (or the list is not fully measured yet).
+  const noTime = !!report.unmeasured || (!!deps.startBy && Date.now() > deps.startBy);
+  if (settings.discoveryPerScan > 0 && !opts.skipDiscovery && !noTime) report.discovery = await runDiscovery(deps, settings.discoveryPerScan, cooldown, report);
   return report;
 }
 

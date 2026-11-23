@@ -112,7 +112,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <h2>LLM spend</h2>
         <p>Today: <b>${(todaySpend?.cost ?? 0).toFixed(2)}</b> of ${settings.dailyCapUsd} cap over {todaySpend?.calls ?? 0} calls.</p>
         <p className="small">
-          <b>Waiting for the budget reset: {waiting.length}</b>{waiting.length ? " (worked through, oldest first, after midnight ET; nothing is skipped)" : " (nothing was turned away)"}.
+          <b>Waiting to be researched: {waiting.length}</b>{waiting.length ? " (queued because a run was out of time or the daily budget was used; worked through oldest first, within minutes or after the midnight ET budget reset; nothing is skipped)" : " (nothing was turned away)"}.
           {caughtUp.length ? <> Last caught up: {caughtUp.slice(0, 3).map((r) => `${what(r)} → ${r.result ?? "done"}`).join("; ")}.</> : null}
         </p>
         {waiting.length > 0 && <details className="small"><summary>What is waiting ({waiting.length})</summary><ul>{waiting.map((r) => <li key={r.id}>{r.createdAt.slice(0, 16).replace("T", " ")} UTC · {what(r)}{r.attempts ? <span className="muted"> · tried {r.attempts}×</span> : null}</li>)}</ul></details>}
@@ -180,6 +180,7 @@ function summarize(d: unknown): string {
   if (o.stories && typeof o.stories === "object" && Array.isArray((o.stories as { detected?: unknown[] }).detected)) parts.push(`stories: ${(o.stories as { detected: unknown[] }).detected.length} detected`);
   if (Array.isArray(o.entered)) parts.push(`${o.entered.length} entered, ${(o.exited as unknown[]).length} exited, ${o.open} open`);
   if (typeof o.stoppedEarly === "string") parts.push(o.stoppedEarly);
+  if (typeof o.pass === "number" && (o.pass > 1 || o.more === true)) parts.push(`pass ${o.pass}${o.more === true ? "; continues in the next pass" : ""}`);
   if (typeof o.reason === "string") parts.push(o.reason);
   // Why a run was skipped (an already-researched story, the AI cap, a source down), in the run's own words.
   if (typeof o.error === "string" && o.error) parts.push(`why: ${o.error}`);

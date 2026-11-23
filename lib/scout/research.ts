@@ -32,6 +32,8 @@ export interface ResearchDeps {
   now: Date;
   env: NodeJS.ProcessEnv;
   fetchImpl?: typeof fetch;
+  /** A run's time budget (ms since epoch): research that would start after this is queued and done within minutes instead. */
+  startBy?: number;
 }
 
 export interface ResearchInput {
@@ -76,12 +78,21 @@ export async function recordHealth(results: SourceResult[]): Promise<void> {
   for (const r of results) await store.saveHealth(r.source, r.status, r.detail ?? null);
 }
 
+/** Why an idea was queued instead of researched when its run had no time left. */
+export const OUT_OF_TIME = "waiting: this run was out of time; queued, researched within minutes";
+
 export async function researchCandidate(input: ResearchInput, deps: ResearchDeps): Promise<ResearchOutcome> {
   const settings = await store.loadSettings();
   const version = await currentVersion(settings);
   const et = toEt(deps.now);
   const base = { versionId: version.id, origin: input.origin, term: input.term, kindHint: input.kindHint, tickersHint: input.tickersHint, observation: input.observation, trigger: input.trigger ?? null, cardId: null, sourceLabel: input.source?.label ?? null, sourceUrl: input.source?.url ?? null };
 
+  // Out of time in this run (a function is stopped at 5 minutes): the idea goes on the catch-up queue, worked through within minutes.
+  if (deps.startBy && Date.now() > deps.startBy && !input.queued) {
+    const reason = OUT_OF_TIME;
+    await import("./catchup").then(({ enqueue, queuedResearch }) => enqueue("research", `${input.origin}:${input.term.toLowerCase()}:${input.tickersHint.join(",")}`, queuedResearch(input))).catch((err) => console.error(`queue failed: ${err instanceof Error ? err.message : String(err)}`));
+    return { outcome: "capped", reason, candidate: await store.addCandidate({ ...base, outcome: "rejected", reason }) };
+  }
   // Spend cap: logged as a rejection so the candidates page shows why nothing happened.
   const spend = await store.spendOn(et.date);
   if (spend.cost >= settings.dailyCapUsd) {

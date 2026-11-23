@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { checkBasicAuth } from "@/lib/auth";
 import { hasDatabase } from "@/lib/db";
-import { runDaily, runStoriesJob, runTrack } from "@/lib/scout/engine";
+import { continueDaily, runDaily, runStoriesJob, runTrack } from "@/lib/scout/engine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,7 +14,11 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as { job?: string };
   try {
     if (body.job === "track") return NextResponse.json({ ok: true, result: await runTrack() });
-    if (body.job === "daily") return NextResponse.json({ ok: true, result: await runDaily() });
+    if (body.job === "daily") {
+      const r = await runDaily();
+      const next = await continueDaily(new URL(request.url).origin, r).catch(() => false);
+      return NextResponse.json({ ok: true, result: { ...r, nextPassStarted: next } });
+    }
     if (body.job === "stories") return NextResponse.json({ ok: true, result: await runStoriesJob() });
     if (body.job === "push-test") {
       const { pushConfigured, sendPush } = await import("@/lib/notify");

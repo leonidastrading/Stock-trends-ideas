@@ -70,3 +70,37 @@ describe("one measurement per source per day", () => {
     }
   });
 });
+
+describe("the scan keeps to its time budget", () => {
+  it("stops measuring in time, and the next pass measures only what is left", async () => {
+    const { vi } = await import("vitest");
+    const { PGlite } = await import("@electric-sql/pglite");
+    const { setQuerierForTests } = await import("@/lib/db");
+    const store = await import("@/lib/scout/store");
+    const { runScan } = await import("@/lib/scout/scan");
+    const pg = new PGlite();
+    setQuerierForTests({ query: async (text, params) => (await pg.query(text, params as unknown[])).rows as Record<string, unknown>[] });
+    const realNow = Date.now.bind(Date);
+    try {
+      let calls = 0;
+      // A source with nothing to say stores no signals, so only the pass's own record stops it being asked twice.
+      const src = { id: "hacker_news", label: "HN", about: "", configured: () => true, probe: async () => { calls++; return { source: "hacker_news", status: "ok" as const, signals: [] }; } };
+      const deps = { data: null, sources: [src], callModel: async () => { throw new Error("no model in this test"); }, now: new Date("2026-11-12T12:00:00Z"), env: {} as NodeJS.ProcessEnv };
+      await store.saveSettings({ ...(await store.loadSettings()), enabled: false });
+      // Each probe "takes" a second; the budget allows three.
+      const base = realNow();
+      const clock = vi.spyOn(Date, "now").mockImplementation(() => base + calls * 1000);
+      const first = await runScan(deps, { measureBy: base + 2500 });
+      clock.mockRestore();
+      expect(calls).toBe(3);
+      expect(first.unmeasured).toBe(first.terms - 3);
+      const second = await runScan(deps, { resume: true });
+      expect(calls).toBe(first.terms); // the three from the first pass are not asked again
+      expect(second.unmeasured ?? 0).toBe(0);
+      expect(second.measured.length).toBe(first.terms - 3);
+    } finally {
+      vi.restoreAllMocks();
+      setQuerierForTests(null);
+    }
+  });
+});
