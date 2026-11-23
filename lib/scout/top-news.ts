@@ -2,7 +2,8 @@
  * Top news, last 24 hours: the ten most important stories of the day at the top of the News tab. Every half hour the
  * light model reads the day's strongest candidates (the News tab's own ranking, without its freshness decay) and
  * picks the ten that matter most to markets, with a one-line why. Its list also gets general business and world headlines
- * (Google News top, business and world stories), which the ticker-tagged feed misses or ranks low. Until a pick exists (or when the AI is off or over
+ * (Google News top, business and world stories, and newsfilter.io's CNBC, BNN Bloomberg and government news when
+ * NEWSFILTER_API_KEY is set), which the ticker-tagged feed misses or ranks low. Until a pick exists (or when the AI is off or over
  * its cap) the rule-based ranking stands in.
  */
 import { z } from "zod";
@@ -109,7 +110,13 @@ export function promptList(cands: FeedItem[]): string {
 /** One pass: the model's ten, saved for the News tab. */
 export async function runTopNews(deps: ResearchDeps): Promise<string> {
   const { newsFeed } = await import("./newsfeed");
-  const [items, general] = await Promise.all([newsFeed(deps.now), generalNews(deps.now).catch(() => [] as FeedItem[])]);
+  const [items, google, nf] = await Promise.all([
+    newsFeed(deps.now),
+    generalNews(deps.now).catch(() => [] as FeedItem[]),
+    import("../sources/newsfilter").then(({ newsfilterRecent }) => newsfilterRecent(deps.now, deps.env)).catch(() => [] as FeedItem[]),
+  ]);
+  // newsfilter first: its CNBC, Bloomberg and government items are the general news the feeds miss.
+  const general = [...nf, ...google];
   const cands = aiCandidates(items, general, deps.now);
   if (cands.length < 3) return "top news: too few stories";
   const today = toEt(deps.now).date;
