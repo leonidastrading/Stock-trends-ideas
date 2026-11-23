@@ -107,6 +107,9 @@ export interface DriftSetup {
   headlines: Array<{ date: string; headline: string; url: string; kind: string | null }>;
 }
 
+/** Pure: setups for the page: the latest event first, the stronger setup first within a day. */
+export const latestFirst = <T extends { eventDate: string; score: number }>(setups: T[]): T[] => [...setups].sort((a, b) => b.eventDate.localeCompare(a.eventDate) || b.score - a.score);
+
 const r1 = (x: number) => Math.round(x * 10) / 10;
 const etDate = (iso: string) => toEt(new Date(iso)).date;
 

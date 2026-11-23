@@ -74,3 +74,12 @@ describe("down drift: detection", () => {
     expect(playerOf("scout", "drift: ACME guidance cut")).toBe("scout_drift");
   });
 });
+
+describe("the Drift page's order", () => {
+  it("lists the latest event first, the stronger setup first within a day, without reordering the scan's own list", async () => {
+    const { latestFirst } = await import("@/lib/scout/drift");
+    const scan = [{ symbol: "OLD", eventDate: "2026-11-10", score: 9 }, { symbol: "NEWWEAK", eventDate: "2026-11-20", score: 2 }, { symbol: "NEWSTRONG", eventDate: "2026-11-20", score: 5 }, { symbol: "MID", eventDate: "2026-11-17", score: 7 }];
+    expect(latestFirst(scan).map((s) => s.symbol)).toEqual(["NEWSTRONG", "NEWWEAK", "MID", "OLD"]);
+    expect(scan[0].symbol).toBe("OLD");
+  });
+});

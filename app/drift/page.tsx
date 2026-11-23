@@ -3,7 +3,7 @@ import Ticker from "@/components/Ticker";
 import { marketDataFromEnv } from "@/lib/alpaca";
 import { hasDatabase } from "@/lib/db";
 import { panel } from "@/lib/market/panels";
-import { downgradeInfo, DRIFT, scanDrift, shortLine, type DriftSetup } from "@/lib/scout/drift";
+import { downgradeInfo, DRIFT, latestFirst, scanDrift, shortLine, type DriftSetup } from "@/lib/scout/drift";
 import * as store from "@/lib/scout/store";
 import { etLabelAgo, dayAgo } from "@/lib/time";
 import DriftResearch from "./DriftResearch";
@@ -37,7 +37,7 @@ export default async function DriftPage({ searchParams }: { searchParams: Promis
     if (!card) continue;
     bySym.set(card.primaryTicker, [...(bySym.get(card.primaryTicker) ?? []), { id: card.id, status: card.status }]);
   }
-  const all: DriftSetup[] = p.data?.setups ?? [];
+  const all: DriftSetup[] = latestFirst(p.data?.setups ?? []);
   const isDowngrade = (s: DriftSetup) => s.eventKind === "downgrade";
   const setups = kind === "downgrade" ? all.filter(isDowngrade) : kind === "other" ? all.filter((s) => !isDowngrade(s)) : all;
   const nDown = all.filter(isDowngrade).length;
