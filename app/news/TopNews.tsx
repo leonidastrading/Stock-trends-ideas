@@ -4,6 +4,9 @@ import type { CardBrief } from "@/lib/scout/store";
 import type { TopNews as Top } from "@/lib/scout/top-news";
 import { ago, toEt } from "@/lib/time";
 
+/** Index and sector funds: a story tagged with them is about the market, not a card's stock. */
+const BROAD = new Set(["SPY", "QQQ", "DIA", "IWM", "VOO", "VTI", "IVV", "XLE", "XLF", "XLK", "XLV", "XLI", "XLY", "XLP", "XLU", "XLB", "XLRE", "XLC", "USO", "GLD", "SLV", "TLT", "UNG", "ITA", "SMH", "SOXX", "KRE", "XBI", "ARKK", "HYG", "LQD", "EEM", "EFA", "FXI", "VXX", "UVXY"]);
+
 const clock = (iso: string) => {
   const d = new Date(iso);
   const t = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
@@ -13,8 +16,12 @@ const clock = (iso: string) => {
 /** The top of the News tab: the ten most important stories of the last 24 hours. */
 export default function TopNews({ top, cards }: { top: Top; cards: CardBrief[] }) {
   if (!top.picks.length) return null;
-  // The scout's cards on any of a story's stocks.
-  const cardsOn = (syms: string[]) => cards.filter((c) => syms.includes(c.primaryTicker) || c.tickers.some((t) => syms.includes(t)));
+  // The scout's promoted cards (last 60 days) whose own stock is in the story; never via index funds like SPY or QQQ.
+  const since = Date.now() - 60 * 86400_000;
+  const cardsOn = (syms: string[]) => {
+    const own = syms.filter((s) => !BROAD.has(s));
+    return cards.filter((c) => c.status === "promoted" && Date.parse(c.createdAt) >= since && own.includes(c.primaryTicker));
+  };
   return (
     <section className="card top-news">
       <h2>Top news · last 24 hours</h2>
@@ -30,7 +37,7 @@ export default function TopNews({ top, cards }: { top: Top; cards: CardBrief[] }
               <span className="muted"> · {clock(p.at)} · {p.source}</span>
               {p.symbols.length > 0 && <> · {p.symbols.map((s, i) => <span key={s}>{i ? " " : ""}<Ticker symbol={s} /></span>)}</>}
             </div>
-            {cardsOn(p.symbols).length > 0 && <div className="small top-news-cards"><span className="muted">Scout cards: </span><CardChips cards={cardsOn(p.symbols)} max={4} /></div>}
+            {cardsOn(p.symbols).length > 0 && <div className="small top-news-cards"><span className="muted">Scout cards: </span><CardChips cards={cardsOn(p.symbols)} max={3} /></div>}
           </li>
         ))}
       </ol>

@@ -67,3 +67,9 @@ describe("class-action ads", () => {
     expect(CLASS_ACTION_AD.test("Judge certifies class action against Meta over teen safety")).toBe(false);
   });
 });
+
+describe("more law-firm ads", () => {
+  it("catches 'contact the law group to discuss your rights'", () => {
+    expect(CLASS_ACTION_AD.test("Coastal Financial Corporation Sued for Securities Law Violations - Contact the DJS Law Group to Discuss Your Rights - CCB")).toBe(true);
+  });
+});

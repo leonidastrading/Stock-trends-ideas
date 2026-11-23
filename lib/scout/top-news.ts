@@ -18,7 +18,7 @@ export { TOP_NEWS_PROMPT, TOP_NEWS_SCHEMA } from "./top-news-prompt";
 export const TOP_NEWS = { candidates: 70, fromFeed: 50, general: 45, picks: 10, everyMin: 30, maxAgeH: 3 };
 
 /** Law firms' class-action ads ("investors have opportunity to lead… lawsuit"): never top news. */
-export const CLASS_ACTION_AD = /\b(securities fraud lawsuit|class action (lawsuit )?(has been )?filed (on behalf|against)|announces .{0,30}class action|encourages .{0,30}investors|investors? (have|has|who) .{0,40}(opportunity|lead|contact)|shareholder alert|investor alert|investor notice|rosen law|pomerantz|levi & korsinsky|bragar|bronstein|faruqi|glancy|kessler topaz|schall law|sbs law|robbins geller|reminds investors|deadline alert)\b/i;
+export const CLASS_ACTION_AD = /\b(securities fraud lawsuit|class action (lawsuit )?(has been )?filed (on behalf|against)|announces .{0,30}class action|encourages .{0,30}investors|investors? (have|has|who) .{0,40}(opportunity|lead|contact)|shareholder alert|investor alert|investor notice|discuss your rights|law group|contact the .{0,40}(law|attorney|firm)|sued for securities law violations|rosen law|pomerantz|levi & korsinsky|bragar|bronstein|faruqi|glancy|kessler topaz|schall law|sbs law|robbins geller|reminds investors|deadline alert)\b/i;
 
 const reply = z.object({ picks: z.array(z.object({ id: z.string(), why: z.string().catch("") })).catch([]) });
 
