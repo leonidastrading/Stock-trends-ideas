@@ -302,6 +302,8 @@ export interface StoriesReport {
   /** How many of the headlines came from the Alpaca stream and from the fast sources (wires, 8-Ks, world news). */
   fromStream?: number;
   fromFast?: number;
+  /** The stream's publishers by headline count (a publisher missing from the mainstream list stops every story). */
+  streamSources?: string;
   /** When nothing was detected: the busiest tickers and why none qualified. */
   nearest?: string;
   detected: Array<{ key: string; symbols: string[]; stories: number; mainstream: number; shockHits: number; stage: number | null; escalation: string[]; building: boolean; coverage: string | null; staleness: number | null; latest: string; sample: string[]; samples: Array<{ at: string; headline: string }> }>;
@@ -330,6 +332,9 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
     const fast = await import("../sources/wires").then(({ fastNews }) => fastNews(deps.env, deps.fetchImpl, deps.now)).catch(() => [] as NewsItem[]);
     const seen = new Set(items.map((n) => n.headline.toLowerCase()));
     report.fromStream = items.length;
+    const bySource = new Map<string, number>();
+    for (const n of items) bySource.set(n.source || "(no source)", (bySource.get(n.source || "(no source)") ?? 0) + 1);
+    report.streamSources = [...bySource].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([name, k]) => `${name} ${k}`).join(", ");
     items = [...items, ...fast.filter((n) => !seen.has(n.headline.toLowerCase()))];
     report.fromFast = items.length - report.fromStream;
   } catch (err) {

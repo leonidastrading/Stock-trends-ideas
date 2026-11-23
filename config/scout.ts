@@ -65,7 +65,8 @@ export const SCOUT = {
   mainstreamHosts: [
     "reuters.com", "bloomberg.com", "wsj.com", "ft.com", "cnbc.com", "nytimes.com", "washingtonpost.com", "apnews.com",
     "barrons.com", "marketwatch.com", "forbes.com", "businessinsider.com", "theverge.com", "techcrunch.com", "axios.com",
-    "benzinga.com", "yahoo.com", "fool.com", "seekingalpha.com", "investors.com", "economist.com", "theguardian.com", "bbc.com", "bbc.co.uk", "aljazeera.com",
+    // The Alpaca news stream's own publishers: Benzinga, and since November 2026 fiscal.ai (re-written MT Newswires stories).
+    "benzinga.com", "fiscal.ai", "mtnewswires.com", "yahoo.com", "fool.com", "seekingalpha.com", "investors.com", "economist.com", "theguardian.com", "bbc.com", "bbc.co.uk", "aljazeera.com",
   ],
 };
 

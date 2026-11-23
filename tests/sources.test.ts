@@ -63,6 +63,9 @@ describe("pure source helpers", () => {
     const item = (url: string, source = "benzinga") => ({ id: 1, ts: "2026-11-10T00:00:00Z", headline: "h", summary: "", symbols: ["X"], source, url });
     expect(isMainstream(item("https://www.reuters.com/x"))).toBe(true);
     expect(isMainstream(item("https://smallblog.example/x", "smallblog"))).toBe(false);
+    // The Alpaca stream's publisher since November 2026: without it no story ever has "mainstream" coverage.
+    expect(isMainstream(item("https://fiscal.ai/news/123", "fiscal.ai"))).toBe(true);
+    expect(isMainstream(item("", "fiscal.ai"))).toBe(true);
     expect(coverage([item("https://www.reuters.com/a"), item("https://x.example/b", "x"), item("https://www.cnbc.com/c", "cnbc")])).toEqual({ stories: 3, mainstream: 2, sources: 3 });
   });
 });
