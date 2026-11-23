@@ -3,7 +3,7 @@ import Ticker from "@/components/Ticker";
 import { marketDataFromEnv } from "@/lib/alpaca";
 import { hasDatabase } from "@/lib/db";
 import { panel } from "@/lib/market/panels";
-import { DRIFT, scanDrift, shortLine, type DriftSetup } from "@/lib/scout/drift";
+import { downgradeInfo, DRIFT, scanDrift, shortLine, type DriftSetup } from "@/lib/scout/drift";
 import * as store from "@/lib/scout/store";
 import { etLabelAgo, dayAgo } from "@/lib/time";
 import DriftResearch from "./DriftResearch";
@@ -19,7 +19,8 @@ const pct = (x: number) => `${x > 0 ? "+" : ""}${x}%`;
 const day = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }) + ` (${dayAgo(d)})`;
 
 /** Down drift: stocks still falling days after bad news. */
-export default async function DriftPage() {
+export default async function DriftPage({ searchParams }: { searchParams: Promise<{ kind?: string }> }) {
+  const kind = (await searchParams).kind === "downgrade" ? "downgrade" : (await searchParams).kind === "other" ? "other" : "all";
   if (!hasDatabase()) return <SetupNotice />;
   const data = marketDataFromEnv();
   const [p, cands, cards] = await Promise.all([
@@ -36,7 +37,10 @@ export default async function DriftPage() {
     if (!card) continue;
     bySym.set(card.primaryTicker, [...(bySym.get(card.primaryTicker) ?? []), { id: card.id, status: card.status }]);
   }
-  const setups: DriftSetup[] = p.data?.setups ?? [];
+  const all: DriftSetup[] = p.data?.setups ?? [];
+  const isDowngrade = (s: DriftSetup) => s.eventKind === "downgrade";
+  const setups = kind === "downgrade" ? all.filter(isDowngrade) : kind === "other" ? all.filter((s) => !isDowngrade(s)) : all;
+  const nDown = all.filter(isDowngrade).length;
   return (
     <>
       <h1>Drift</h1>
@@ -59,6 +63,12 @@ export default async function DriftPage() {
         {p.data ? <>{setups.length} setup{setups.length === 1 ? "" : "s"} from {p.data.scanned.toLocaleString("en-US")} stocks, prices to {day(p.data.asOf)}{p.updatedAt ? ` · checked ${etLabelAgo(p.updatedAt)}` : ""}</> : p.error ? <span className="neg">Scan failed: {p.error}</span> : "The first scan runs with the hourly job."}
         {p.data && p.error ? <span className="warn"> · latest refresh failed: {p.error}</span> : null}
       </p>
+      <div className="toolbar"><span className="filter-links small">
+        <a className={`chip ${kind === "all" ? "active" : ""}`} href="/drift">All ({all.length})</a>
+        <a className={`chip ${kind === "downgrade" ? "active" : ""}`} href="/drift?kind=downgrade">Downgrades ({nDown})</a>
+        <a className={`chip ${kind === "other" ? "active" : ""}`} href="/drift?kind=other">Other bad news ({all.length - nDown})</a>
+      </span></div>
+      {kind === "downgrade" && <p className="small muted">Analyst downgrades: prices tend to keep drifting for weeks to months after them, more than after upgrades (Womack 1996 and later work), most after downgrades from large, well-followed brokers, cuts to Sell, and in smaller, thinly covered stocks. These cards score as &quot;Scout · downgrade drift&quot; on the Scoreboard, apart from the other bad news.</p>}
       {p.data && setups.length === 0 && <p className="small muted">Nothing qualifies right now.</p>}
       {setups.map((s) => {
         const mine = bySym.get(s.symbol) ?? [];
@@ -68,6 +78,7 @@ export default async function DriftPage() {
               <Ticker symbol={s.symbol} className="neg" /> <span className={`tag ${s.stage === "building" ? "late" : ""}`}>{s.stage}</span> <span className="small secondary">{s.eventKind} · {day(s.eventDate)}</span>
             </div>
             <div>{s.eventUrl ? <a href={s.eventUrl} target="_blank" rel="noreferrer">{s.eventHeadline}</a> : s.eventHeadline}</div>
+            {isDowngrade(s) && (() => { const d = downgradeInfo(s.eventHeadline); return d ? <div className="small">{d.broker ? <b>{d.broker}</b> : "Broker not named"}{d.from || d.to ? <>: {d.from ?? "?"} → {d.to ?? "?"}</> : null} · <span className={d.strength === "strong" ? "neg" : "muted"}>{d.strength === "strong" ? "strong (to Sell or below)" : d.strength === "mild" ? "mild (to Neutral or Hold)" : "rating not in the headline"}</span>{d.topBroker ? <span className="tag">top broker</span> : null}</div> : null; })()}
             <div className="small">
               <b className="neg">{pct(s.dayPct)}</b> on the day ({pct(s.dayVsSpy)} vs SPY) · <b className="neg">{pct(s.sincePct)}</b> since ({pct(s.sinceVsSpy)} vs SPY) over {s.daysAfter} trading days, down on {s.downDays} · <b>{pct(s.totalPct)}</b> in total · {s.bouncePct}% off the low · ${s.price}
             </div>
@@ -87,7 +98,7 @@ export default async function DriftPage() {
           </section>
         );
       })}
-      <DriftBook cards={cards.filter((c) => cands.some((x) => x.cardId === c.id && x.term.startsWith("drift: ")))} tracks={tracks} data={data} />
+      <DriftBook cards={cards.filter((c) => cands.some((x) => x.cardId === c.id && x.term.startsWith("drift: ")))} tracks={tracks} data={data} downgradeIds={cands.filter((x) => x.cardId && x.term.startsWith("drift: ") && /\bdowngrade\b/.test(x.term)).map((x) => x.cardId!)} />
     </>
   );
 }

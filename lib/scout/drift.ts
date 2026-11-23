@@ -61,6 +61,26 @@ const LAWSUIT_ADS = /class action|on behalf of (investors|shareholders)|sharehol
 const PRICE_WORDS = /\b(plunges?|plummets?|tumbles?|sinks?|slides?|craters?|tanks?|falls?|drops?|slumps?|sell-?off|trading lower|shares (are )?(down|lower)|52-week low|new low)\b/i;
 const NOT_BAD = /\bupgrade|raises? (its |full.year )?(guidance|outlook|forecast)|\bbeats?\b[^.]{0,30}(estimates|expectations)|approv(es|ed|al)\b(?![^.]{0,20}(denied|delay))/i;
 
+/** Brokers whose downgrades the research finds move prices most (large, well-followed firms). */
+export const TOP_BROKERS = /\b(goldman|morgan stanley|jpmorgan|j\.p\. morgan|bank of america|bofa|citi(group)?|wells fargo|ubs|barclays|deutsche bank|jefferies|bernstein|evercore|raymond james|rbc)\b/i;
+
+export interface Downgrade { broker: string | null; from: string | null; to: string | null; strength: "strong" | "mild" | "unknown"; topBroker: boolean }
+
+/**
+ * Pure: what a downgrade headline says. "Goldman Sachs Downgrades Acceleration Holdings to Neutral" -> Goldman Sachs,
+ * to Neutral, mild. Strong = to Sell / Underperform / Underweight / Reduce; mild = to
+ * Neutral / Hold / Market Perform / Equal Weight / Sector Perform.
+ */
+export function downgradeInfo(h: string): Downgrade | null {
+  if (!/\bdowngrade|\bcuts? (to|rating to)\b/i.test(h)) return null;
+  const broker = h.match(/^([A-Z][\w.&' -]{1,40}?)\s+(downgrades?|cuts?|lowers?)\b/i)?.[1]?.trim() ?? null;
+  const to = h.match(/\bto\s+(strong sell|sell|underperform|underweight|reduce|neutral|hold|market perform|sector perform|equal[- ]weight|in[- ]line|peer perform|mixed)\b/i)?.[1] ?? null;
+  const from = h.match(/\bfrom\s+(strong buy|buy|outperform|overweight|accumulate|positive|neutral|hold|market perform|equal[- ]weight)\b/i)?.[1] ?? null;
+  const strong = !!to && /sell|underperform|underweight|reduce/i.test(to);
+  const strength: Downgrade["strength"] = !to ? "unknown" : strong ? "strong" : "mild";
+  return { broker, from, to, strength, topBroker: TOP_BROKERS.test(h) };
+}
+
 /** Pure: what kind of bad news a headline is. event = a reason the business is worse; pileOn = more bad press (price words, lawsuit ads). */
 export function classifyHeadline(h: string): { event: string | null; pileOn: boolean; lawsuitAd: boolean } {
   const lawsuitAd = LAWSUIT_ADS.test(h);

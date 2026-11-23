@@ -9,7 +9,7 @@
 import type { IdeaResult } from "./scoring";
 
 export const STAKE = 1000;
-export const PLAYERS = ["scout_trend", "scout_story", "scout_options", "scout_filings", "scout_truth", "scout_sites", "scout_drift", "scout_rumors", "scout_investigations", "scout_themes", "scout_filing_changes", "scout_readthrough", "you", "stream_host", "stream_agent", "inbox_bot"] as const;
+export const PLAYERS = ["scout_trend", "scout_story", "scout_options", "scout_filings", "scout_truth", "scout_sites", "scout_drift", "scout_downgrade", "scout_rumors", "scout_investigations", "scout_themes", "scout_filing_changes", "scout_readthrough", "you", "stream_host", "stream_agent", "inbox_bot"] as const;
 export type Player = (typeof PLAYERS)[number];
 export const PLAYER_LABEL: Record<Player, string> = {
   scout_trend: "Scout · trend desk",
@@ -19,6 +19,7 @@ export const PLAYER_LABEL: Record<Player, string> = {
   scout_truth: "Scout · Trump posts",
   scout_sites: "Scout · your websites",
   scout_drift: "Scout · down drift",
+  scout_downgrade: "Scout · downgrade drift",
   scout_rumors: "Scout · rumors (checked)",
   scout_themes: "Scout · themes (consensus)",
   scout_investigations: "Scout · investigations",
@@ -35,7 +36,7 @@ export function playerOf(origin: "scout" | "human", term: string | undefined): P
   const t = (term ?? "").toLowerCase();
   if (origin === "scout" && t.startsWith("filing change:")) return "scout_filing_changes";
   if (origin === "scout" && t.startsWith("readthrough:")) return "scout_readthrough";
-  if (origin === "scout") return t.startsWith("story:") ? "scout_story" : t.startsWith("options:") ? "scout_options" : /^(filing|insider|congress|insider\+congress): /.test(t) ? "scout_filings" : t.startsWith("truth:") ? "scout_truth" : t.startsWith("site:") ? "scout_sites" : t.startsWith("drift:") ? "scout_drift" : t.startsWith("rumor:") ? "scout_rumors" : t.startsWith("investigate:") ? "scout_investigations" : t.startsWith("theme:") ? "scout_themes" : "scout_trend";
+  if (origin === "scout") return t.startsWith("story:") ? "scout_story" : t.startsWith("options:") ? "scout_options" : /^(filing|insider|congress|insider\+congress): /.test(t) ? "scout_filings" : t.startsWith("truth:") ? "scout_truth" : t.startsWith("site:") ? "scout_sites" : t.startsWith("drift:") ? (/\bdowngrade\b/.test(t) ? "scout_downgrade" : "scout_drift") : t.startsWith("rumor:") ? "scout_rumors" : t.startsWith("investigate:") ? "scout_investigations" : t.startsWith("theme:") ? "scout_themes" : "scout_trend";
   if (t.startsWith("stream host:")) return "stream_host";
   if (t.startsWith("stream agent:")) return "stream_agent";
   if (t.startsWith("inbox:")) return "inbox_bot";

@@ -27,7 +27,7 @@ export function bookStats(rows: Array<{ ret: number; spy: number | null }>): { n
 }
 
 /** The down-drift desk's paper shorts: open positions at the latest price, and a scoreboard of the closed ones. */
-export default async function DriftBook({ cards, tracks, data }: { cards: StoredCard[]; tracks: Track[]; data: MarketData | null }) {
+export default async function DriftBook({ cards, tracks, data, downgradeIds = [] }: { cards: StoredCard[]; tracks: Track[]; data: MarketData | null; downgradeIds?: number[] }) {
   const byId = new Map(cards.map((c) => [c.id, c]));
   const mine = tracks.filter((t) => byId.has(t.cardId) && !t.excluded);
   const open = mine.filter((t) => !t.exitDate).sort((a, b) => (b.entryDate ?? "9").localeCompare(a.entryDate ?? "9"));
@@ -40,7 +40,9 @@ export default async function DriftBook({ cards, tracks, data }: { cards: Stored
   const results = closed.map((t) => paperResult(t, null, null)).filter((r): r is NonNullable<typeof r> => !!r);
   const all = bookStats(results);
   const byStatus = (s: string) => bookStats(closed.filter((t) => byId.get(t.cardId)?.status === s).map((t) => paperResult(t, null, null)).filter((r): r is NonNullable<typeof r> => !!r));
-  const rowsByStatus = [["all", all], ["promoted", byStatus("promoted")], ["late", byStatus("late")]] as const;
+  const dg = new Set(downgradeIds);
+  const byKind = (down: boolean) => bookStats(closed.filter((t) => dg.has(t.cardId) === down).map((t) => paperResult(t, null, null)).filter((r): r is NonNullable<typeof r> => !!r));
+  const rowsByStatus = [["all", all], ["downgrades", byKind(true)], ["other bad news", byKind(false)], ["promoted", byStatus("promoted")], ["late", byStatus("late")]] as const;
 
   return (
     <>
