@@ -40,3 +40,31 @@ describe("card financials (Financial Modeling Prep)", () => {
     expect(ticks(-5, 8)).toEqual([-5, 0, 5, 10]);
   });
 });
+
+import { finnhubEps, secIncome } from "@/lib/sources/fmp";
+describe("free fallbacks when FMP's plan does not cover a stock", () => {
+  it("reads revenue and net income from the SEC's XBRL facts, IFRS and other currencies included", () => {
+    const fy = (end: string, val: number, filed = end) => ({ start: `${Number(end.slice(0, 4)) - 1}${end.slice(4)}`, end, val, form: "40-F", fp: "FY", filed });
+    const facts = { "ifrs-full": {
+      Revenue: { units: { CAD: [fy("2024-12-31", 54e9), fy("2025-12-31", 50e9)] } },
+      ProfitLoss: { units: { CAD: [fy("2024-12-31", 6e9), fy("2025-12-31", 5.5e9)] } },
+    } };
+    const r = secIncome(facts, "annual");
+    expect(r.currency).toBe("CAD");
+    expect(r.rows).toEqual([
+      { label: "'24", date: "2024-12-31", revenue: 54e9, netIncome: 6e9, margin: 11.1 },
+      { label: "'25", date: "2025-12-31", revenue: 50e9, netIncome: 5.5e9, margin: 11 },
+    ]);
+    expect(secIncome({}, "annual")).toEqual({ rows: [], currency: null });
+  });
+
+  it("reads Finnhub's EPS history and the next estimate", () => {
+    const hist = [{ period: "2026-09-30", actual: 1.2, estimate: 1.1 }, { period: "2026-06-30", actual: 1.0, estimate: 1.05 }];
+    const next = { earningsCalendar: [{ date: "2027-02-04", epsEstimate: 1.3 }] };
+    expect(finnhubEps(hist, next, "2026-11-23")).toEqual([
+      { label: "Q2 '26", date: "2026-06-30", actual: 1.0, estimate: 1.05 },
+      { label: "Q3 '26", date: "2026-09-30", actual: 1.2, estimate: 1.1 },
+      { label: "next", date: "2027-02-04", actual: null, estimate: 1.3 },
+    ]);
+  });
+});

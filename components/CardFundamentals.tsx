@@ -135,13 +135,13 @@ export default function CardFundamentals({ symbol }: { symbol: string }) {
   return (
     <div ref={box} className="card-fund">
       <div className="card-fund-head">
-        <h3>Financials <span className="small muted">{symbol} · Financial Modeling Prep</span></h3>
+        <h3>Financials <span className="small muted">{symbol}{data && !data.error ? ` · ${[...new Set([data.income.length ? data.incomeSource : null, data.eps.length ? data.epsSource : null].filter(Boolean))].join(" and ")}` : ""}{data?.currency && data.currency !== "USD" && data.income.length ? ` · amounts in ${data.currency}` : ""}</span></h3>
         <span className="filter-links small">
           <button type="button" className={`chip ${period === "annual" ? "active" : ""}`} onClick={() => setPeriod("annual")}>Annual</button>
           <button type="button" className={`chip ${period === "quarter" ? "active" : ""}`} onClick={() => setPeriod("quarter")}>Quarterly</button>
         </span>
       </div>
-      {!data ? <p className="small muted">Loading financials…</p> : data.error && !data.income.length && !data.eps.length ? <p className="small muted">Financials not available: {data.error}</p> : (
+      {!data ? <p className="small muted">Loading financials…</p> : data.error && !data.income.length && !data.eps.length ? <p className="small muted">{/fund or ETF/.test(data.error) ? `${symbol} is ${data.error.replace(/^a /, "a ")}.` : `Financials not available: ${data.error}`}</p> : (
         <div className="fund-grid">
           {data.income.length > 0 && <div><div className="small"><b>Revenue and net income</b></div><IncomeBars rows={data.income} /><div className="viz-legend small"><span><i className="sw viz-s1" />Revenue</span><span><i className="sw viz-s2" />Net income</span></div></div>}
           {data.income.length > 0 && <div><div className="small"><b>Net margin</b> <span className="muted">(net income ÷ revenue)</span></div><MarginLine rows={data.income} /></div>}
