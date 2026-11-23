@@ -73,3 +73,12 @@ describe("cardForApi", () => {
     expect(j.url).toBe("https://s/cards/7");
   });
 });
+
+import { isoDay } from "@/lib/scout/card-api";
+describe("reading dates", () => {
+  it("gives YYYY-MM-DD or nothing", () => {
+    expect(isoDay("2026-11-23")).toBe("2026-11-23");
+    expect(isoDay("Mon Nov 23 2026 00:00:00 GMT+0000")).toBe("2026-11-23");
+    expect(isoDay("Mon Nov 23")).toBeNull(); // no year: left out rather than guessed
+  });
+});

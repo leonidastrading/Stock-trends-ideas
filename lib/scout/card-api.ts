@@ -25,8 +25,16 @@ export function compact<T>(v: T): T {
 }
 const empty = (x: unknown) => x === undefined || x === null || x === "" || (Array.isArray(x) && !x.length) || (typeof x === "object" && x !== null && !Array.isArray(x) && !Object.keys(x).length);
 
+/** Pure: a reading's day as YYYY-MM-DD ("Mon Nov 23 2026 …" from the database driver, or already a date). */
+export function isoDay(v: string): string | null {
+  if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
+  const m = /^[A-Z][a-z]{2} ([A-Z][a-z]{2}) (\d{1,2}) (\d{4})/.exec(v);
+  const mo = m ? ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].indexOf(m[1]) : -1;
+  return m && mo >= 0 ? `${m[3]}-${String(mo + 1).padStart(2, "0")}-${m[2].padStart(2, "0")}` : null;
+}
+
 const reading = (r: CrowdingRow | null) => r && compact({
-  measured_on: r.measuredOn, score: r.score, stage: r.stage, stage_label: r.stage !== null ? STAGE_LABEL[r.stage] : null,
+  measured_on: isoDay(r.measuredOn), score: r.score, stage: r.stage, stage_label: r.stage !== null ? STAGE_LABEL[r.stage] : null,
   stocktwits_bullish_share: r.parts?.attention?.bullishShare ?? null, stocktwits_posts_per_hour: r.parts?.attention?.perHour ?? null,
   news_stories_30d: r.parts?.news?.stories30d ?? null, move_30d_pct: r.parts?.run?.move30 ?? null, pct_vs_200d_average: r.parts?.extension?.pctAbove ?? null,
 });

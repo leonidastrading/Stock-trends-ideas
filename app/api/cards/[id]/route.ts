@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { hasDatabase } from "@/lib/db";
+import { hasDatabase, query } from "@/lib/db";
 import { bearerOk, cardForApi } from "@/lib/scout/card-api";
 import { crowdingFor } from "@/lib/scout/crowding";
 import * as store from "@/lib/scout/store";
@@ -20,5 +20,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const card = Number.isInteger(id) && id > 0 ? await store.getCard(id) : null;
   if (!card) return NextResponse.json({ error: "no such card" }, { status: 404, headers: { "Cache-Control": "no-store" } });
   const [track, crowd] = await Promise.all([store.getTrack(id).catch(() => null), crowdingFor([id]).then((m) => m.get(id) ?? null).catch(() => null)]);
+  // The readings' days in full (the shared reader keeps only the first ten characters of the driver's date).
+  const days = await query(`SELECT kind, measured_on::text AS day FROM card_crowding WHERE card_id = $1 ORDER BY measured_on`, [id]).catch(() => []);
+  for (const d of days) { const r = d.kind === "entry" ? crowd?.entry : crowd?.latest; if (r) r.measuredOn = String(d.day); }
   return NextResponse.json(cardForApi(card, track, crowd, new URL(request.url).origin), { headers: { "Cache-Control": "no-store" } });
 }
