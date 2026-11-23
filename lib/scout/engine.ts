@@ -88,11 +88,11 @@ async function driftResearch(deps: ResearchDeps): Promise<unknown> {
 }
 
 /** Import ideas from the daily stream file; recorded in Recent runs. */
-export async function runImportJob(items: import("./importer").ImportItem[], label: string, deps = defaultDeps()) {
+export async function runImportJob(items: import("./importer").ImportItem[], label: string, deps = defaultDeps(), from?: { label: string; url?: string | null }) {
   const { runImport } = await import("./importer");
   const run = await store.startRun("import");
   try {
-    const results = await runImport(items, deps, label);
+    const results = await runImport(items, deps, label, 3, from);
     await store.finishRun(run, "ok", { label, results });
     return { status: "ok" as const, results };
   } catch (err) {

@@ -40,7 +40,7 @@ export default async function ResearchPage() {
   return (
     <>
       <h1>Research</h1>
-      <p className="small secondary">Ask the scout about a stock or an idea. It measures it on every source, writes a thesis card and runs the gates, in the background (a minute or two). Everything you send to research from any tab (the &quot;Research it&quot; buttons on News, Filings, Pharma, Court, Dots, Themes, Rumors and Investigate) is listed here too, and the red badge on this tab counts results that came back since you last looked. Your cards are scored as yours. Long articles, pasted pages and screenshots go on <a href="/notice">I noticed something</a>; open-ended digging on <a href="/investigate">Investigate</a>.</p>
+      <p className="small secondary">Ask the scout about a stock or an idea. It measures it on every source, writes a thesis card and runs the gates, in the background (a minute or two). Everything you send to research from any tab (the &quot;Research it&quot; buttons on News, Filings, Pharma, Court, Dots, Themes, Rumors and Investigate) is listed here too, and the red badge on this tab counts results that came back since you last looked. Your cards are scored as yours. You can upload a document here too. Long pasted pages and screenshots go on <a href="/notice">I noticed something</a>; open-ended digging on <a href="/investigate">Investigate</a>.</p>
       <section className="card"><ResearchForm /></section>
       <RefreshWhileRunning running={running} />
       <section className="card">

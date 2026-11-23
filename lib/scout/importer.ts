@@ -94,7 +94,7 @@ export function importObservation(it: ImportItem, label: string): string {
 export interface ImportResult { term: string; outcome: string; cardId?: number; reason?: string }
 
 /** Research the items, a few at a time. */
-export async function runImport(all: ImportItem[], deps: ResearchDeps, label: string, concurrency = 3): Promise<ImportResult[]> {
+export async function runImport(all: ImportItem[], deps: ResearchDeps, label: string, concurrency = 3, from?: { label: string; url?: string | null }): Promise<ImportResult[]> {
   // Two angles on the same stock and direction from one document are one call, researched once.
   const items = mergeSameStock(all);
   const out: ImportResult[] = [];
@@ -105,7 +105,14 @@ export async function runImport(all: ImportItem[], deps: ResearchDeps, label: st
       const tickers = it.tickers.map(normalizeTicker).filter((t): t is string => !!t).slice(0, 5);
       let r: ResearchOutcome;
       try {
-        r = await researchCandidate({ origin: it.source === "site" ? "scout" : "human", term: importTerm(it), kindHint: it.kind as Kind, tickersHint: tickers, observation: importObservation(it, label) }, deps);
+        const go = () => researchCandidate({ origin: it.source === "site" ? "scout" : "human", term: importTerm(it), kindHint: it.kind as Kind, tickersHint: tickers, observation: importObservation(it, label) }, deps);
+        if (from) {
+          // Asked for on the Research tab (an uploaded document): each idea is listed there with its result.
+          const { tracked } = await import("./research-requests");
+          let got: ResearchOutcome | undefined;
+          await tracked({ term: importTerm(it), tickers, from }, async () => { got = await go(); return got.outcome === "card" ? { outcome: "card", cardId: got.card.id, status: got.card.status } : { outcome: got.outcome, reason: got.reason }; });
+          r = got!;
+        } else r = await go();
       } catch (err) {
         out.push({ term: importTerm(it), outcome: "error", reason: err instanceof Error ? err.message : String(err) });
         continue;

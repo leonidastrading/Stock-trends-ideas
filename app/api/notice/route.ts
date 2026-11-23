@@ -12,6 +12,8 @@ export const maxDuration = 300;
 
 /** Longer than this, the text is treated as a pasted page or article: the ideas are pulled out of it first. */
 const PASTE_CHARS = 1500;
+/** The most ideas researched from one uploaded document. */
+const UPLOAD_IDEAS = 6;
 
 const schema = z.object({
   observation: z.string().trim().min(5).max(200_000),
@@ -23,6 +25,8 @@ const schema = z.object({
   from: z.object({ label: z.string().trim().min(1).max(40), url: z.string().trim().max(400).nullable().optional() }).optional(),
   /** Sent by the Research tab: start the research and answer at once; the result shows on the tab when it is done. */
   background: z.boolean().optional(),
+  /** Sent by the Research tab's upload: the observation is this document's text (the file name, for the record). */
+  doc: z.string().trim().min(1).max(200).optional(),
 });
 
 /**
@@ -35,19 +39,20 @@ export async function POST(request: Request) {
   if (!hasDatabase()) return NextResponse.json({ ok: false, errors: ["database not connected"] }, { status: 503 });
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ ok: false, errors: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) }, { status: 422 });
-  const { observation, term, kind, tickers, direct, from, background } = parsed.data;
+  const { observation, term, kind, tickers, direct, from, background, doc } = parsed.data;
   try {
     if (observation.length > PASTE_CHARS && !direct) {
       const deps = defaultDeps();
       const { ideasFrom } = await import("@/lib/scout/inbox");
-      const { items } = await ideasFrom(observation, "text pasted into I noticed something", deps);
-      if (!items.length) return NextResponse.json({ ok: false, errors: ["No tradeable ideas found in the pasted text. Add a sentence saying what you noticed, or name the tickers."] }, { status: 422 });
-      const mine = items.slice(0, 12).map((it) => ({ ...it, source: "you" as const, kind: kind ?? it.kind, tickers: tickers?.length ? [...new Set([...tickers, ...it.tickers])].slice(0, 8) : it.tickers }));
-      const label = `pasted ${new Date().toISOString().slice(0, 10)}`;
+      const { items } = await ideasFrom(observation, doc ? `document Vadim uploaded: ${doc}` : "text pasted into I noticed something", deps);
+      if (!items.length) return NextResponse.json({ ok: false, errors: [`No tradeable ideas found in the ${doc ? "document" : "pasted text"}. Add a sentence saying what you noticed, or name the tickers.`] }, { status: 422 });
+      // An upload is researched inside this call's 5 minutes, three at a time: six ideas at most.
+      const mine = items.slice(0, doc ? UPLOAD_IDEAS : 12).map((it) => ({ ...it, source: "you" as const, kind: kind ?? it.kind, tickers: tickers?.length ? [...new Set([...tickers, ...it.tickers])].slice(0, 8) : it.tickers }));
+      const label = `${doc ? `uploaded ${doc.slice(0, 60)}` : "pasted"} ${new Date().toISOString().slice(0, 10)}`;
       after(async () => {
-        await runImportJob(mine, label).catch((err) => console.error(`pasted import failed: ${err instanceof Error ? err.message : String(err)}`));
+        await runImportJob(mine, label, deps, doc ? { label: "Uploaded document", url: "/research" } : undefined).catch((err) => console.error(`pasted import failed: ${err instanceof Error ? err.message : String(err)}`));
       });
-      return NextResponse.json({ ok: true, extracted: mine.map((m) => ({ term: m.term, tickers: m.tickers, direction: m.direction ?? null })) }, { status: 202 });
+      return NextResponse.json({ ok: true, extracted: mine.map((m) => ({ term: m.term, tickers: m.tickers, direction: m.direction ?? null })), found: items.length, cut: observation.length > 60_000 }, { status: 202 });
     }
     const { tracked } = await import("@/lib/scout/research-requests");
     const label = term || observation.split(/[.!?\n]/)[0].slice(0, 80);
