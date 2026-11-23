@@ -1,12 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { isCardApiRequest } from "@/lib/scout/card-api-path";
 import { basicHeader, checkBasicAuth, checkSession, makeSession, SESSION_COOKIE, SESSION_DAYS } from "@/lib/auth";
 
 /**
- * Basic auth on everything except the cron endpoints (own secret) and /api/health. After one successful sign-in the
+ * Basic auth on everything except the cron endpoints (own secret), /api/health and the read-only card API (GET
+ * /api/cards/<id>, own bearer token). After one successful sign-in the
  * browser gets a signed cookie, so new tabs and phone browsers do not ask again; with a valid cookie the request is
  * passed on with the login header added, so every route's own check keeps working.
  */
 export async function proxy(request: NextRequest) {
+  // The read-only card API (GET /api/cards/<id>) takes only its own bearer token, never the site login.
+  if (isCardApiRequest(request.nextUrl.pathname, request.method)) return NextResponse.next();
   if (checkBasicAuth(request.headers.get("authorization"))) {
     const res = NextResponse.next();
     if (!(await checkSession(request.cookies.get(SESSION_COOKIE)?.value))) {
