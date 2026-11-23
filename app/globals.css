@@ -514,7 +514,17 @@ a.source-tag:hover { background: color-mix(in srgb, var(--accent) 14%, transpare
 .viz-tick { fill: var(--text-muted); font-size: 9px; font-variant-numeric: tabular-nums; }
 .viz-label { fill: var(--text-secondary); font-size: 9px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .viz-hit { fill: transparent; }
-.viz g:hover .viz-hit { fill: color-mix(in srgb, var(--text-primary) 5%, transparent); }
+.viz-hit { cursor: crosshair; }
+.viz-hover { fill: color-mix(in srgb, var(--text-primary) 6%, transparent); }
+.viz-box { position: relative; touch-action: pan-y; }
+.viz-tip { position: absolute; bottom: calc(100% - 6px); background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px; pointer-events: none; box-shadow: 0 6px 20px rgba(0,0,0,.3); z-index: 5; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.viz-tip-title { font-weight: 600; margin-bottom: 2px; }
+.viz-tip-row .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.viz-tip-row .sw.round { border-radius: 50%; }
+.viz-tip-row .sw.viz-s1, .viz-tip-row .sw.viz-dot1 { background: var(--series-1); }
+.viz-tip-row .sw.viz-s2 { background: var(--series-2); }
+.viz-tip-row .sw.viz-s3 { background: var(--series-3); }
+.viz-tip-row .sw.viz-ring { border: 2px solid var(--text-muted); width: 7px; height: 7px; }
 .viz-s1 { fill: var(--series-1); }
 .viz-s2 { fill: var(--series-2); }
 .viz-line { fill: none; stroke: var(--series-3); stroke-width: 2; stroke-linejoin: round; }

@@ -40,28 +40,70 @@ function Axis({ vals, y, fmt }: { vals: number[]; y: (v: number) => number; fmt:
   return <>{vals.map((v) => <g key={v}><line x1={L} x2={W - R} y1={y(v)} y2={y(v)} className={v === 0 ? "viz-base" : "viz-grid"} /><text x={L - 6} y={y(v) + 3} textAnchor="end" className="viz-tick">{fmt(v)}</text></g>)}</>;
 }
 
+type TipLine = { sw?: "s1" | "s2" | "s3" | "dot1" | "ring"; label: string; value: string; note?: string };
+
+/** Change from the previous period, as "+12%" (null when either is missing or the earlier one is not positive). */
+const change = (now: number | null, before: number | null | undefined) =>
+  now === null || before === null || before === undefined || before <= 0 ? null : `${now >= before ? "+" : "−"}${Math.abs((now / before - 1) * 100).toFixed(0)}%`;
+
+/** A chart with a hover (or tap) readout: the column under the pointer is shaded and its values shown above the chart. */
+function ChartBox({ n, x, tip, label, children }: { n: number; x: (i: number) => number; tip: (i: number) => { title: string; lines: TipLine[] }; label: string; children: React.ReactNode }) {
+  const [at, setAt] = useState<number | null>(null);
+  const gw = PW / n;
+  const t = at !== null ? tip(at) : null;
+  const left = at !== null ? (x(at) / W) * 100 : 0;
+  return (
+    <div className="viz-box" onPointerLeave={(e) => { if (e.pointerType === "mouse") setAt(null); }}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="viz" role="img" aria-label={label}>
+        {at !== null && <rect x={x(at) - gw / 2} y={T} width={gw} height={PH} className="viz-hover" />}
+        {children}
+        {Array.from({ length: n }, (_, i) => (
+          <rect key={i} x={x(i) - gw / 2} y={0} width={gw} height={H} className="viz-hit" onPointerEnter={() => setAt(i)} onPointerDown={() => setAt(i)} />
+        ))}
+      </svg>
+      {t && (
+        <div className="viz-tip small" style={{ left: `${left}%`, transform: `translateX(${left < 25 ? -15 : left > 75 ? -85 : -50}%)` }}>
+          <div className="viz-tip-title">{t.title}</div>
+          {t.lines.map((l, k) => (
+            <div key={k} className="viz-tip-row">
+              {l.sw ? <i className={`sw viz-${l.sw}${l.sw === "dot1" || l.sw === "ring" || l.sw === "s3" ? " round" : ""}`} /> : null}
+              <span className="muted">{l.label}</span> <b>{l.value}</b>{l.note ? <span className="muted"> {l.note}</span> : null}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const fyNote = (r: IncomeRow) => `period ended ${new Date(`${r.date}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}`;
+
 function IncomeBars({ rows }: { rows: IncomeRow[] }) {
   const vals = rows.flatMap((r) => [r.revenue ?? 0, r.netIncome ?? 0]);
   const tk = ticks(Math.min(0, ...vals), Math.max(0, ...vals));
   const lo = tk[0], hi = tk[tk.length - 1];
   const y = (v: number) => T + PH - ((v - lo) / (hi - lo || 1)) * PH;
-  const gw = PW / rows.length, bw = Math.min(16, (gw - 12) / 2);
+  const gw = PW / rows.length, bw = Math.min(16, (gw - 12) / 2), x = (i: number) => L + gw * i + gw / 2;
+  const tip = (i: number) => {
+    const r = rows[i], p = rows[i - 1];
+    const g = change(r.revenue, p?.revenue);
+    return { title: `${r.label} · ${fyNote(r)}`, lines: [
+      { sw: "s1" as const, label: "Revenue", value: money(r.revenue), note: g ? `(${g} vs ${p!.label})` : undefined },
+      { sw: "s2" as const, label: "Net income", value: money(r.netIncome) },
+      ...(r.margin !== null ? [{ label: "Net margin", value: `${r.margin}%` }] : []),
+    ] };
+  };
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="viz" role="img" aria-label="Revenue and net income by period">
+    <ChartBox n={rows.length} x={x} tip={tip} label="Revenue and net income by period">
       <Axis vals={tk} y={y} fmt={money} />
-      {rows.map((r, i) => {
-        const cx = L + gw * i + gw / 2;
-        return (
-          <g key={r.label}>
-            <title>{`${r.label}: revenue ${money(r.revenue)}, net income ${money(r.netIncome)}${r.margin !== null ? `, margin ${r.margin}%` : ""}`}</title>
-            <rect x={L + gw * i} y={T} width={gw} height={PH} className="viz-hit" />
-            {r.revenue !== null && <path d={bar(cx - bw - 1, bw, y(0), y(r.revenue))} className="viz-s1" />}
-            {r.netIncome !== null && <path d={bar(cx + 1, bw, y(0), y(r.netIncome))} className="viz-s2" />}
-            <text x={cx} y={H - 6} textAnchor="middle" className="viz-tick">{r.label}</text>
-          </g>
-        );
-      })}
-    </svg>
+      {rows.map((r, i) => (
+        <g key={r.label}>
+          {r.revenue !== null && <path d={bar(x(i) - bw - 1, bw, y(0), y(r.revenue))} className="viz-s1" />}
+          {r.netIncome !== null && <path d={bar(x(i) + 1, bw, y(0), y(r.netIncome))} className="viz-s2" />}
+          <text x={x(i)} y={H - 6} textAnchor="middle" className="viz-tick">{r.label}</text>
+        </g>
+      ))}
+    </ChartBox>
   );
 }
 
@@ -74,16 +116,23 @@ function MarginLine({ rows }: { rows: IncomeRow[] }) {
   const y = (v: number) => T + PH - ((v - lo) / (hi - lo || 1)) * PH;
   const gw = PW / rows.length, x = (i: number) => L + gw * i + gw / 2;
   const first = pts[0], last = pts[pts.length - 1];
+  const tip = (i: number) => {
+    const r = rows[i], p = rows[i - 1];
+    const d = r.margin !== null && p?.margin !== null && p?.margin !== undefined ? r.margin - p.margin : null;
+    return { title: `${r.label} · ${fyNote(r)}`, lines: [
+      { sw: "s3" as const, label: "Net margin", value: r.margin !== null ? `${r.margin}%` : "—", note: d !== null ? `(${d >= 0 ? "+" : "−"}${Math.abs(d).toFixed(1)} pts vs ${p!.label})` : undefined },
+      { label: "Net income", value: money(r.netIncome) },
+      { label: "Revenue", value: money(r.revenue) },
+    ] };
+  };
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="viz" role="img" aria-label="Net margin by period">
+    <ChartBox n={rows.length} x={x} tip={tip} label="Net margin by period">
       <Axis vals={tk} y={y} fmt={(v) => `${v}%`} />
       <polyline points={pts.map((p) => `${x(p.i)},${y(p.r.margin!)}`).join(" ")} className="viz-line" />
-      {pts.map((p) => (
-        <g key={p.r.label}><title>{`${p.r.label}: net margin ${p.r.margin}%`}</title><rect x={x(p.i) - gw / 2} y={T} width={gw} height={PH} className="viz-hit" /><circle cx={x(p.i)} cy={y(p.r.margin!)} r={4} className="viz-dot3" /></g>
-      ))}
+      {pts.map((p) => <circle key={p.r.label} cx={x(p.i)} cy={y(p.r.margin!)} r={4} className="viz-dot3" />)}
       {[first, last].map((p, k) => <text key={k} x={x(p.i)} y={y(p.r.margin!) - 9} textAnchor="middle" className="viz-label">{p.r.margin}%</text>)}
       {rows.map((r, i) => <text key={r.label} x={x(i)} y={H - 6} textAnchor="middle" className="viz-tick">{r.label}</text>)}
-    </svg>
+    </ChartBox>
   );
 }
 
@@ -93,19 +142,28 @@ function EpsDots({ rows }: { rows: EpsRow[] }) {
   const lo = tk[0], hi = tk[tk.length - 1];
   const y = (v: number) => T + PH - ((v - lo) / (hi - lo || 1)) * PH;
   const gw = PW / rows.length, x = (i: number) => L + gw * i + gw / 2;
+  const day = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  const tip = (i: number) => {
+    const r = rows[i];
+    const diff = r.actual !== null && r.estimate !== null ? r.actual - r.estimate : null;
+    const pct = diff !== null && r.estimate ? ` (${diff >= 0 ? "+" : "−"}${Math.abs((diff / Math.abs(r.estimate)) * 100).toFixed(0)}%)` : "";
+    return { title: `${r.label === "next" ? "Next report" : r.label} · ${r.actual !== null ? "reported" : "expected"} ${day(r.date)}`, lines: [
+      { sw: "dot1" as const, label: "Actual", value: r.actual !== null ? r.actual.toFixed(2) : "not reported yet" },
+      { sw: "ring" as const, label: "Estimate", value: r.estimate !== null ? r.estimate.toFixed(2) : "—" },
+      ...(diff !== null ? [{ label: diff >= 0 ? "Beat by" : "Missed by", value: `${Math.abs(diff).toFixed(2)}${pct}` }] : []),
+    ] };
+  };
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="viz" role="img" aria-label="Earnings per share, actual and estimate">
+    <ChartBox n={rows.length} x={x} tip={tip} label="Earnings per share, actual and estimate">
       <Axis vals={tk} y={y} fmt={(v) => v.toFixed(2)} />
       {rows.map((r, i) => (
         <g key={r.date}>
-          <title>{`${r.label} (${r.date}): ${r.actual !== null ? `actual ${r.actual.toFixed(2)}, ` : "not reported yet, "}estimate ${r.estimate?.toFixed(2) ?? "—"}${r.actual !== null && r.estimate !== null ? ` (${r.actual >= r.estimate ? "beat" : "missed"})` : ""}`}</title>
-          <rect x={x(i) - gw / 2} y={T} width={gw} height={PH} className="viz-hit" />
           {r.estimate !== null && <circle cx={x(i)} cy={y(r.estimate)} r={5} className="viz-ring" />}
           {r.actual !== null && <circle cx={x(i)} cy={y(r.actual)} r={6} className="viz-dot1" />}
           <text x={x(i)} y={H - 6} textAnchor="middle" className="viz-tick">{r.label}</text>
         </g>
       ))}
-    </svg>
+    </ChartBox>
   );
 }
 
