@@ -254,10 +254,19 @@ export interface Track {
   invalidatedNote?: string | null;
   /** When the card was written (decides whether it enters the same day's open or the next one). */
   cardAt?: string | null;
+  /** The entry as recorded (entryPrice is this times splitFactor: on today's split-adjusted prices). */
+  entryPriceRaw?: number | null;
+  /** Splits since the entry (2-for-1 = 0.5); 1 when none. */
+  splitFactor?: number;
+  /** Set when the prices disagree for a reason that is not a split: left out of the points until checked. */
+  priceCheck?: string | null;
 }
 
 const toTrack = (r: Row): Track => ({
-  cardId: Number(r.card_id), symbol: r.symbol, sectorEtf: r.sector_etf, direction: r.direction, cardDate: dstr(r.card_date)!, entryDate: dstr(r.entry_date), entryPrice: num(r.entry_price), spyEntry: num(r.spy_entry), sectorEntry: num(r.sector_entry),
+  cardId: Number(r.card_id), symbol: r.symbol, sectorEtf: r.sector_etf, direction: r.direction, cardDate: dstr(r.card_date)!, entryDate: dstr(r.entry_date),
+  // On today's split-adjusted prices, so returns, drawdowns and live marks compare like with like after a split.
+  entryPrice: num(r.entry_price) === null ? null : Math.round(num(r.entry_price)! * Number(r.split_factor ?? 1) * 1e6) / 1e6, entryPriceRaw: num(r.entry_price), splitFactor: Number(r.split_factor ?? 1), priceCheck: r.price_check ?? null,
+  spyEntry: num(r.spy_entry), sectorEntry: num(r.sector_entry),
   deadlineDate: dstr(r.deadline_date)!, exitDate: dstr(r.exit_date), exitPrice: num(r.exit_price), spyExit: num(r.spy_exit), sectorExit: num(r.sector_exit), exitReason: r.exit_reason, maxDrawdownPct: num(r.max_drawdown_pct), tappedAt: iso(r.tapped_at), swingResponse: r.swing_response,
   excluded: r.excluded ?? null,
   invalidatedAt: iso(r.invalidated_at) ?? null, invalidatedNote: r.invalidated_detail ?? null,
@@ -290,6 +299,15 @@ export async function setExit(cardId: number, x: { exitDate: string; exitPrice: 
   await q(`UPDATE tracks SET exit_date = $2, exit_price = $3, spy_exit = $4, sector_exit = $5, exit_reason = $6, max_drawdown_pct = $7 WHERE card_id = $1 AND exit_date IS NULL`, [cardId, x.exitDate, x.exitPrice, x.spyExit, x.sectorExit, x.reason, x.maxDrawdownPct]);
 }
 
+/** A split since the entry: multiply the track's factor (the raw entry is kept) and clear any price check. */
+export async function applySplit(cardId: number, ratio: number): Promise<void> {
+  await q(`UPDATE tracks SET split_factor = split_factor * $2, price_check = NULL WHERE card_id = $1`, [cardId, ratio]);
+}
+
+export async function setPriceCheck(cardId: number, note: string | null): Promise<void> {
+  await q(`UPDATE tracks SET price_check = $2 WHERE card_id = $1`, [cardId, note]);
+}
+
 export async function setDrawdown(cardId: number, dd: number): Promise<void> {
   await q(`UPDATE tracks SET max_drawdown_pct = $2 WHERE card_id = $1`, [cardId, dd]);
 }
@@ -298,7 +316,7 @@ export async function setTapped(cardId: number, response: unknown): Promise<void
   await q(`UPDATE tracks SET tapped_at = coalesce(tapped_at, now()), swing_response = $2 WHERE card_id = $1`, [cardId, JSON.stringify(response)]);
 }
 
-export async function addTrackEvent(cardId: number, kind: "invalidated" | "sent_to_swing" | "send_failed" | "excluded" | "tracked_from_listing" | "listing_not_followed", detail: string | null): Promise<void> {
+export async function addTrackEvent(cardId: number, kind: "invalidated" | "sent_to_swing" | "send_failed" | "excluded" | "tracked_from_listing" | "listing_not_followed" | "split", detail: string | null): Promise<void> {
   await q(`INSERT INTO track_events (card_id, kind, detail) VALUES ($1, $2, $3)`, [cardId, kind, detail]);
 }
 

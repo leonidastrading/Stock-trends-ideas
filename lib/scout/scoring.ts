@@ -46,6 +46,8 @@ const r4 = (x: number) => Math.round(x * 10000) / 10000;
 /** One idea's result from its track; open ideas are marked at the latest close. */
 export function ideaResult(card: StoredCard, t: Track, bars: BarsBySymbol): IdeaResult | null {
   if (!t.entryDate || !t.entryPrice || card.status === "not_promoted") return null;
+  // Prices that disagree for a reason other than a split: out of the points until checked (see reconcileSplits).
+  if (t.priceCheck) return null;
   const sym = bars.get(t.symbol) ?? [];
   const closed = !!t.exitDate && t.exitPrice !== null;
   const last = sym[sym.length - 1];

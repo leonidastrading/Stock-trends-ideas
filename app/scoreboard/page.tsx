@@ -70,6 +70,15 @@ export default async function ScoreboardPage() {
         Every call ever tracked counts here, across versions; the formal pass/fail per version stays on <a href="/scoring">Scoring</a>. Paper only.
       </section>
 
+      {tracks.some((t) => t.priceCheck) && (
+        <section className="card small warn">
+          <b>Left out of the points until the prices are checked:</b> {tracks.filter((t) => t.priceCheck).map((t, i) => <span key={t.cardId}>{i ? "; " : ""}<a href={`/cards/${t.cardId}`}>card #{t.cardId}</a> ({t.priceCheck})</span>)}. The stored prices and a fresh download disagree for a reason that is not a stock split.
+        </section>
+      )}
+      {tracks.some((t) => (t.splitFactor ?? 1) !== 1) && (
+        <p className="small muted">Adjusted for stock splits since entry: {tracks.filter((t) => (t.splitFactor ?? 1) !== 1).map((t) => `${t.symbol} (card #${t.cardId}, ×${t.splitFactor})`).join(", ")}. The recorded entry is kept; returns use split-adjusted prices.</p>
+      )}
+
       <section className="card">
         <h2>Leaderboard</h2>
         <div className="table-wrap">

@@ -31,6 +31,57 @@ export const firstBarAfter = (bars: DailyBarRow[] | undefined, date: string) => 
 export const firstBarFrom = (bars: DailyBarRow[] | undefined, date: string) => bars?.find((b) => b.date >= date);
 export const barOn = (bars: DailyBarRow[] | undefined, date: string) => bars?.find((b) => b.date === date);
 
+/** Common split ratios (forward and reverse), as fresh price / stored price. */
+export const SPLIT_RATIOS = [2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30, 40, 50, 100, 1.5, 2.5].flatMap((r) => [1 / r, r]);
+
+/**
+ * Pure: comparing a fresh split-adjusted close with the stored close for the same day. "same" within 2%; "split"
+ * with the ratio when it is a standard split ratio within 3%; otherwise "mismatch" (bad or changed data).
+ */
+export function splitCheck(fresh: number, stored: number): { kind: "same" } | { kind: "split"; ratio: number } | { kind: "mismatch"; ratio: number } {
+  const r = fresh / stored;
+  if (Math.abs(r - 1) <= 0.02) return { kind: "same" };
+  const near = SPLIT_RATIOS.find((s) => Math.abs(r / s - 1) <= 0.03);
+  return near ? { kind: "split", ratio: near } : { kind: "mismatch", ratio: Math.round(r * 1000) / 1000 };
+}
+
+/**
+ * Stored prices are fetched once and only the last few days are re-fetched, so a split leaves the stored history
+ * with old prices before it and new ones after, and an entry recorded before it no longer compares (a 5-for-1 split
+ * looked like an 80% crash). For each open track, the fresh split-adjusted close on its entry day is compared with
+ * the stored one: a split rewrites the stock's stored history and scales the track's entry; any other disagreement
+ * marks the track for a price check (left out of the points).
+ */
+export async function reconcileSplits(data: MarketData, open: Track[], today: string): Promise<string[]> {
+  const notes: string[] = [];
+  const entered = open.filter((t) => t.entryDate);
+  if (!entered.length) return notes;
+  const syms = [...new Set(entered.map((t) => t.symbol))];
+  const earliest = entered.map((t) => t.entryDate!).sort()[0];
+  const fresh = await data.getDailyBars(syms, earliest, today).catch(() => null);
+  if (!fresh) return notes;
+  const stored = groupBars(await store.loadBars(syms, earliest, today));
+  const rewritten = new Set<string>();
+  for (const t of entered) {
+    const f = fresh.find((b) => b.symbol === t.symbol && b.date === t.entryDate);
+    const s = barOn(stored.get(t.symbol), t.entryDate!);
+    if (!f || !s) continue;
+    const c = splitCheck(f.c, s.c);
+    if (c.kind === "same") { if (t.priceCheck) await store.setPriceCheck(t.cardId, null); continue; }
+    if (c.kind === "split") {
+      if (!rewritten.has(t.symbol)) { await store.upsertBars(fresh.filter((b) => b.symbol === t.symbol)); rewritten.add(t.symbol); }
+      await store.applySplit(t.cardId, c.ratio);
+      await store.addTrackEvent(t.cardId, "split", `${t.symbol}: prices now ${c.ratio > 1 ? `${c.ratio}x` : `1/${Math.round(1 / c.ratio)}`} of the stored ones on ${t.entryDate} (a split); entry put on the adjusted prices, raw entry kept`);
+      notes.push(`card #${t.cardId} ${t.symbol}: split ${c.ratio}`);
+    } else if (!t.priceCheck) {
+      const note = `${t.symbol} on ${t.entryDate}: fresh close ${f.c} vs stored ${s.c} (x${c.ratio}), not a standard split`;
+      await store.setPriceCheck(t.cardId, note);
+      notes.push(`card #${t.cardId} price check: ${note}`);
+    }
+  }
+  return notes;
+}
+
 /** Pure: is the card written before that day's 9:30 AM ET open? */
 export function beforeOpen(cardDate: string, cardAt: string | null | undefined): boolean {
   if (!cardAt) return false;
@@ -122,8 +173,15 @@ export async function updateTracks(data: MarketData, now: Date): Promise<TrackRe
     }
   }
 
-  const open = tracks.filter((t) => !t.exitDate);
+  let open = tracks.filter((t) => !t.exitDate);
   if (!open.length) return report;
+  // Splits since entry (or prices that no longer agree) before anything is measured.
+  const splitNotes = await reconcileSplits(data, open, et.date).catch((e) => [`split check failed: ${e instanceof Error ? e.message : e}`]);
+  if (splitNotes.length) {
+    report.notes.push(...splitNotes);
+    const fresh = new Map((await store.allTracks()).map((t) => [t.cardId, t]));
+    open = open.map((t) => fresh.get(t.cardId) ?? t);
+  }
   const need = [...new Set(open.flatMap((t) => [t.symbol, "SPY", t.sectorEtf]))];
   const bars = groupBars(await store.loadBars(need, addDays(earliest, -7), et.date));
   const events = await store.trackEvents();

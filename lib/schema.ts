@@ -671,6 +671,10 @@ CREATE TABLE IF NOT EXISTS st_snapshots (
   items jsonb NOT NULL,
   UNIQUE (et_date, slot)
 );
+-- Splits after a paper entry: the factor that puts the entry on today's split-adjusted prices (the raw entry is kept),
+-- and a note when the prices disagree for another reason (the track is then left out of the points until checked).
+ALTER TABLE tracks ADD COLUMN IF NOT EXISTS split_factor numeric NOT NULL DEFAULT 1;
+ALTER TABLE tracks ADD COLUMN IF NOT EXISTS price_check text;
 -- Market cap and short interest per card, frozen once, for splitting results by size and by short interest.
 CREATE TABLE IF NOT EXISTS card_profiles (
   card_id integer PRIMARY KEY,
