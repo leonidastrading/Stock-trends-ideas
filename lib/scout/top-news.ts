@@ -97,9 +97,9 @@ export function oneStoryEach<T extends { headline: string; symbols?: string[] }>
 const pick = (i: FeedItem, why: string): TopPick => ({ id: i.id, at: i.at, headline: i.headline, url: i.url, source: i.source, symbols: i.symbols.slice(0, 4), why, kind: i.kind });
 
 /** Pure: the rule-based ten: strongest first, at most one story per stock. */
-export function ruleTop(items: FeedItem[], now: Date, n = TOP_NEWS.picks): TopPick[] {
+export function ruleTop(items: FeedItem[], now: Date, n = TOP_NEWS.picks, names: Record<string, string> = {}): TopPick[] {
   const used = new Set<string>(); const out: TopPick[] = [];
-  for (const i of oneStoryEach(candidates(items, now))) {
+  for (const i of oneStoryEach(candidates(items, now), names)) {
     if (i.symbols.length && i.symbols.every((s) => used.has(s))) continue;
     i.symbols.forEach((s) => used.add(s));
     out.push(pick(i, topReason(i)));
@@ -148,6 +148,14 @@ export function aiCandidates(items: FeedItem[], general: FeedItem[], now: Date):
   return out;
 }
 
+/** Company names for these tickers (from the stock list; empty when it is not loaded). */
+async function namesFor(symbols: string[]): Promise<Record<string, string>> {
+  const inPlay = new Set(symbols.filter((s) => !BROAD_FUNDS.has(s)));
+  if (!inPlay.size) return {};
+  const list = await import("./symbol-search").then(({ listings }) => listings()).catch(() => []);
+  return Object.fromEntries(list.filter((l) => inPlay.has(l.s)).map((l) => [l.s, l.n]));
+}
+
 /** Pure: the model's picks mapped onto the candidates: unknown ids, repeats, repeated events and same-story headlines dropped. */
 export function applyPicks(cands: FeedItem[], picks: Array<{ id: string; why: string; event?: string }>, n = TOP_NEWS.picks, names: Record<string, string> = {}): TopPick[] {
   const by = new Map(cands.map((c) => [c.id, c])); const seen = new Set<string>(), events = new Set<string>();
@@ -185,8 +193,7 @@ export async function runTopNews(deps: ResearchDeps): Promise<string> {
   const r = await deps.callModel({ model: LIGHT_MODEL, effort: "low", purpose: "top_news", user: `Now: ${deps.now.toISOString()}\n\n${promptList(cands)}\n\nReply with the JSON object.` });
   await store.logLlmCall({ etDate: today, model: LIGHT_MODEL, purpose: "top_news", usage: r.usage, costUsd: r.costUsd, ok: true });
   // Company names for the tickers in play, so "Nvidia reinstates its CEO" and "NVDA up 30%" count as one story.
-  const inPlay = new Set(cands.flatMap((c) => c.symbols));
-  const names = Object.fromEntries((await import("./symbol-search").then(({ listings }) => listings()).catch(() => [])).filter((l) => inPlay.has(l.s)).map((l) => [l.s, l.n]));
+  const names = await namesFor(cands.flatMap((c) => c.symbols));
   const picks = applyPicks(cands, reply.parse(JSON.parse(r.text)).picks, TOP_NEWS.picks, names);
   if (!picks.length) return "top news: the model picked nothing usable";
   await store.cachePut("topnews", { at: deps.now.toISOString(), by: "ai", picks } satisfies TopNews);
@@ -196,6 +203,6 @@ export async function runTopNews(deps: ResearchDeps): Promise<string> {
 /** The latest pick when fresh enough, else the rules' ten from the live feed. */
 export async function topNews(items: FeedItem[], now = new Date()): Promise<TopNews> {
   const hit = await store.cacheGet<TopNews>("topnews").catch(() => null);
-  if (hit?.data?.picks?.length && now.getTime() - Date.parse(hit.data.at) < TOP_NEWS.maxAgeH * 3600_000) return { ...hit.data, picks: oneStoryEach(hit.data.picks) };
-  return { at: now.toISOString(), by: "rules", picks: ruleTop(items, now) };
+  if (hit?.data?.picks?.length && now.getTime() - Date.parse(hit.data.at) < TOP_NEWS.maxAgeH * 3600_000) return { ...hit.data, picks: oneStoryEach(hit.data.picks, await namesFor(hit.data.picks.flatMap((p) => p.symbols))) };
+  return { at: now.toISOString(), by: "rules", picks: ruleTop(items, now, TOP_NEWS.picks, await namesFor(items.flatMap((i) => i.symbols))) };
 }
