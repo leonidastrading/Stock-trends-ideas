@@ -1,4 +1,6 @@
+import CardChips from "@/components/CardChips";
 import Ticker from "@/components/Ticker";
+import type { CardBrief } from "@/lib/scout/store";
 import type { TopNews as Top } from "@/lib/scout/top-news";
 import { ago, toEt } from "@/lib/time";
 
@@ -9,8 +11,10 @@ const clock = (iso: string) => {
 };
 
 /** The top of the News tab: the ten most important stories of the last 24 hours. */
-export default function TopNews({ top }: { top: Top }) {
+export default function TopNews({ top, cards }: { top: Top; cards: CardBrief[] }) {
   if (!top.picks.length) return null;
+  // The scout's cards on any of a story's stocks.
+  const cardsOn = (syms: string[]) => cards.filter((c) => syms.includes(c.primaryTicker) || c.tickers.some((t) => syms.includes(t)));
   return (
     <section className="card top-news">
       <h2>Top news · last 24 hours</h2>
@@ -26,6 +30,7 @@ export default function TopNews({ top }: { top: Top }) {
               <span className="muted"> · {clock(p.at)} · {p.source}</span>
               {p.symbols.length > 0 && <> · {p.symbols.map((s, i) => <span key={s}>{i ? " " : ""}<Ticker symbol={s} /></span>)}</>}
             </div>
+            {cardsOn(p.symbols).length > 0 && <div className="small top-news-cards"><span className="muted">Scout cards: </span><CardChips cards={cardsOn(p.symbols)} max={4} /></div>}
           </li>
         ))}
       </ol>

@@ -612,3 +612,4 @@ a.source-tag:hover { background: color-mix(in srgb, var(--accent) 14%, transpare
 .top-news-list li::marker { font-weight: 700; color: var(--text-muted); }
 .top-news-head { font-weight: 600; font-size: 15px; color: var(--text-primary); text-decoration: none; }
 .top-news-head:hover { text-decoration: underline; }
+.top-news-cards { margin-top: 3px; }
