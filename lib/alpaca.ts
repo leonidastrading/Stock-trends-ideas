@@ -53,7 +53,28 @@ export function assertReadOnlyEndpoint(host: string, path: string): void {
  * price: the latest trade (IEX); dailyClose: the last price of the daily bar (today's close once the session is over);
  * prevClose: the session before the daily bar's; mid: the IEX quote midpoint, when the quote is sane.
  */
-export interface Snapshot { price: number; at: string | null; prevClose: number | null; sessionDate: string | null; volume?: number | null; dailyClose?: number | null; mid?: number | null }
+export interface Snapshot { price: number; at: string | null; prevClose: number | null; sessionDate: string | null; volume?: number | null; dailyClose?: number | null; mid?: number | null; /** priced from the whole market's 15-minute-delayed bars (no recent IEX trade) */ delayed?: boolean }
+/**
+ * Pure: symbols whose latest IEX trade is more than 20 minutes old during the regular session (9:46 AM to 4:15 PM ET,
+ * weekdays), so their price is better taken from the whole market's delayed bars.
+ */
+export function staleSymbols(snaps: Record<string, Snapshot>, now: Date): string[] {
+  const et = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const mins = et.getHours() * 60 + et.getMinutes(), dow = et.getDay();
+  if (dow === 0 || dow === 6 || mins < 9 * 60 + 46 || mins > 16 * 60 + 15) return [];
+  return Object.entries(snaps).filter(([, s]) => !s.at || now.getTime() - Date.parse(s.at) > 20 * 60000).map(([sym]) => sym);
+}
+
+/** Pure: take each symbol's last whole-market bar when it is newer than its IEX trade. */
+export function applyLatestBars(snaps: Record<string, Snapshot>, bars: Record<string, Array<{ t: string; c: number }>>): void {
+  for (const [sym, rows] of Object.entries(bars)) {
+    const last = rows?.reduce<{ t: string; c: number } | null>((m, r) => (!m || r.t > m.t ? r : m), null);
+    const s = snaps[sym];
+    if (!s || !last || !(last.c > 0) || (s.at && Date.parse(last.t) <= Date.parse(s.at))) continue;
+    snaps[sym] = { ...s, price: last.c, at: last.t, delayed: true };
+  }
+}
+
 export interface Mover { symbol: string; price: number; changePct: number }
 
 export interface Asset { symbol: string; name: string; exchange: string; active: boolean; tradable: boolean }
@@ -249,6 +270,23 @@ export class AlpacaClient {
         const ap = s.latestQuote?.ap ?? 0, bp = s.latestQuote?.bp ?? 0;
         const mid = ap > 0 && bp > 0 && ap >= bp && ap / bp <= 1.03 ? (ap + bp) / 2 : null;
         out[sym] = { price, at: s.latestTrade?.t ?? s.dailyBar?.t ?? null, prevClose: s.prevDailyBar?.c ?? null, sessionDate: s.dailyBar?.t ? s.dailyBar.t.slice(0, 10) : null, volume: s.dailyBar?.v ?? null, dailyClose: s.dailyBar?.c ?? null, mid };
+      }
+    }
+    // A thinly traded stock can go hours without an IEX trade: its "latest" price is then hours (or days) old. During
+    // the session, those are priced from the whole market's 1-minute bars instead (free up to 15 minutes ago).
+    const stale = staleSymbols(out, new Date());
+    if (stale.length) {
+      const end = new Date(Date.now() - 16 * 60000), start = new Date(Date.now() - 4 * 3600_000);
+      for (let i = 0; i < stale.length; i += 100) {
+        let pageToken: string | undefined, pages = 0;
+        do {
+          const resp = await this.get<{ bars: Record<string, Array<{ t: string; c: number }>> | null; next_page_token?: string | null }>(
+            DATA_HOST, "/v2/stocks/bars",
+            { symbols: stale.slice(i, i + 100).join(","), timeframe: "1Min", start: start.toISOString(), end: end.toISOString(), adjustment: "raw", feed: "sip", sort: "asc", limit: 10000, page_token: pageToken },
+          ).catch(() => null);
+          applyLatestBars(out, resp?.bars ?? {});
+          pageToken = resp?.next_page_token ?? undefined;
+        } while (pageToken && ++pages < 10);
       }
     }
     return out;

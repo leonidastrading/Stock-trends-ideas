@@ -33,7 +33,7 @@ export default async function DriftBook({ cards, tracks, data, downgradeIds = []
   const open = mine.filter((t) => !t.exitDate).sort((a, b) => (b.entryDate ?? "9").localeCompare(a.entryDate ?? "9"));
   const closed = mine.filter((t) => t.exitDate);
   const syms = [...new Set([...open.map((t) => t.symbol), "SPY"])];
-  const snaps = (open.length && data?.getSnapshots ? await data.getSnapshots(syms).catch(() => ({})) : {}) as Record<string, { price: number }>;
+  const snaps = (open.length && data?.getSnapshots ? await data.getSnapshots(syms).catch(() => ({})) : {}) as Record<string, { price: number; delayed?: boolean }>;
   const spyNow = snaps.SPY?.price ?? null;
   const et = toEt(new Date());
   const today = et.date, beforeOpen = et.minutes < 9 * 60 + 30;
@@ -61,7 +61,7 @@ export default async function DriftBook({ cards, tracks, data, downgradeIds = []
                   <td className="small"><a href={`/cards/${c.id}`}>#{c.id}</a> <span className={`tag ${c.status}`}>{c.status.replace("_", " ")}</span>{t.invalidatedAt ? <span className="tag neg">invalidated</span> : null}</td>
                   <td className="small">{t.entryDate ? `${t.entryDate} @ $${t.entryPrice?.toFixed(2)}` : <span className="muted">enters {dayLabel(entryDay(t.cardDate, today, beforeOpen))} open</span>}</td>
                   <td className="num">{r ? `${r.days}d` : "—"}</td>
-                  <td className={`num ${r ? (r.ret >= 0 ? "pos" : "neg") : "muted"}`}>{r ? pct(r.ret) : t.entryDate ? "no price" : "not entered yet"}</td>
+                  <td className={`num ${r ? (r.ret >= 0 ? "pos" : "neg") : "muted"}`}>{r ? pct(r.ret) : t.entryDate ? "no price" : "not entered yet"}{r && snaps[t.symbol]?.delayed ? <span className="muted small" title="No recent IEX trade: priced from the whole market, 15 minutes delayed"> ·15m</span> : null}</td>
                   <td className={`num ${r && r.spy !== null ? (vsSpy(t.direction, r)! >= 0 ? "pos" : "neg") : "muted"}`}>{r && r.spy !== null ? pct(vsSpy(t.direction, r)) : "—"}</td>
                   <td className="small">{t.invalidatedAt ? <span className="warn">exits at the next open (invalidated)</span> : t.deadlineDate}{t.maxDrawdownPct !== null ? <span className="muted"> · worst {t.maxDrawdownPct}%</span> : null}</td>
                 </tr>
