@@ -79,7 +79,7 @@ export function eventReturns(bars: DailyBar[], spy: Map<string, DailyBar>, day0:
 
 export interface StudyState { batch: number; token: string | null; done: boolean; pages: number; headlines: number; events: number; at: string | null; startedAt: string; updatedAt: string; error: string | null; /** Set when the news history came back empty: what a probe of it found (the study waits; it is not done). */ probe?: string | null; probeVersion?: number }
 /** Bump to probe the news history again after a change. */
-const PROBE_VERSION = 1;
+const PROBE_VERSION = 2;
 const STATE = "rating-study:state", SPY = "rating-study:spy";
 
 export async function studyState(): Promise<StudyState | null> {
@@ -110,6 +110,50 @@ export async function probeHistory(data: MarketData, now = new Date()): Promise<
   return out.join(" · ");
 }
 
+/**
+ * Where else rating changes might be read from, with the keys already set: Financial Modeling Prep's grades and
+ * Finnhub's upgrades and downgrades, for three stocks, and whether daily prices reach back to 2018. A line for the
+ * log: per endpoint the HTTP status, how many rows, the earliest and latest date, and the fields of a row. Keys are
+ * never logged.
+ */
+export async function probeSources(data: MarketData, env: NodeJS.ProcessEnv = process.env, fetchImpl: typeof fetch = fetch): Promise<string> {
+  const out: string[] = [];
+  const describe = (label: string, status: number, body: unknown) => {
+    const rows = Array.isArray(body) ? body as Array<Record<string, unknown>> : [];
+    if (!rows.length) { out.push(`${label}: HTTP ${status}, ${Array.isArray(body) ? "0 rows" : String(typeof body === "object" && body ? JSON.stringify(body).slice(0, 90) : body).slice(0, 90)}`); return; }
+    const dates = rows.map((r) => String(r.date ?? r.publishedDate ?? r.gradeTime ?? "").slice(0, 10)).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+    const downs = rows.filter((r) => /down/i.test(String(r.action ?? ""))).length;
+    out.push(`${label}: HTTP ${status}, ${rows.length} rows, ${dates[0] ?? "?"} to ${dates.at(-1) ?? "?"}, ${downs} downgrades, fields ${Object.keys(rows[0]).slice(0, 8).join(",")}`);
+  };
+  const fmp = env.FMP_API_KEY?.trim(), fh = env.FINNHUB_API_KEY?.trim();
+  for (const sym of ["AAPL", "NKE", "ETSY"]) {
+    if (fmp) for (const path of [`/stable/grades?symbol=${sym}`, `/api/v3/grade/${sym}?limit=1000`, `/api/v4/upgrades-downgrades?symbol=${sym}`]) {
+      try {
+        const res = await fetchImpl(`https://financialmodelingprep.com${path}${path.includes("?") ? "&" : "?"}apikey=${encodeURIComponent(fmp)}`, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(15_000) });
+        describe(`FMP ${path.replace(/\?.*$/, "")} ${sym}`, res.status, await res.json().catch(() => null));
+      } catch (err) { out.push(`FMP ${path.replace(/\?.*$/, "")} ${sym}: ${(err instanceof Error ? err.message : String(err)).slice(0, 60)}`); }
+    }
+    if (fh) {
+      try {
+        const res = await fetchImpl(`https://finnhub.io/api/v1/stock/upgrade-downgrade?symbol=${sym}`, { headers: { "X-Finnhub-Token": fh, accept: "application/json" }, signal: AbortSignal.timeout(15_000) });
+        describe(`Finnhub upgrade-downgrade ${sym}`, res.status, await res.json().catch(() => null));
+      } catch (err) { out.push(`Finnhub ${sym}: ${(err instanceof Error ? err.message : String(err)).slice(0, 60)}`); }
+    }
+  }
+  if (!fmp) out.push("FMP_API_KEY not set");
+  if (!fh) out.push("FINNHUB_API_KEY not set");
+  try {
+    const bars = await data.getDailyBars(["SPY", "NKE"], RATING_STUDY.barsStart, RATING_STUDY.barsEnd, { feed: "sip", adjustment: "all" });
+    const d = (s: string) => bars.filter((b) => b.symbol === s).map((b) => b.date).sort();
+    out.push(`prices: SPY ${d("SPY").length} days ${d("SPY")[0] ?? "?"} to ${d("SPY").at(-1) ?? "?"}; NKE ${d("NKE").length} days`);
+  } catch (err) { out.push(`prices: ${(err instanceof Error ? err.message : String(err)).slice(0, 80)}`); }
+  // How far back the current news stream goes, month by month.
+  if (data.getNewsPage) for (const from of ["2026-05-04", "2026-07-06", "2026-09-07", "2026-10-05", "2026-11-02"]) {
+    try { const p = await data.getNewsPage(["AAPL"], new Date(`${from}T00:00:00Z`), new Date(Date.parse(`${from}T00:00:00Z`) + 7 * 86400_000), null); out.push(`news AAPL week of ${from}: ${p.items.length}${p.next ? "+" : ""}`); } catch { out.push(`news ${from}: error`); }
+  }
+  return out.join(" · ");
+}
+
 /** One pass: read headlines from where the last pass stopped until the time is up. Returns a line for the log, and whether there is more. */
 export async function runRatingStudy(data: MarketData | null, deadline = Date.now() + RATING_STUDY.passMs): Promise<{ line: string; more: boolean }> {
   if (!data?.getNewsPage) return { line: "rating study: news stream not configured (Alpaca keys)", more: false };
@@ -119,6 +163,12 @@ export async function runRatingStudy(data: MarketData | null, deadline = Date.no
   if (st.done && st.headlines === 0) { st.done = false; st.batch = 0; st.token = null; st.pages = 0; }
   if (st.done) return { line: "rating study: done", more: false };
   if (st.probe && st.probeVersion === PROBE_VERSION) return { line: "rating study: waiting (the news history came back empty)", more: false };
+  // The news history is known to be empty: look once at what the other sources hold instead of reading it again.
+  if (st.probe && st.probeVersion !== PROBE_VERSION) {
+    const found = await probeSources(data);
+    await store.cachePut(STATE, { ...st, probe: `${st.probe} || other sources: ${found}`.slice(0, 6000), probeVersion: PROBE_VERSION, updatedAt: now() } satisfies StudyState).catch(() => undefined);
+    return { line: `rating study: other sources. ${found}`, more: false };
+  }
   if (!(await store.tryLock("lock:rating-study:run", 5))) return { line: "rating study: another pass is running", more: false };
   const all = studySymbols(), batches = Math.ceil(all.length / RATING_STUDY.batch);
   const save = () => store.cachePut(STATE, { ...st, updatedAt: now() } satisfies StudyState).catch(() => undefined);
@@ -171,7 +221,7 @@ export async function runRatingStudy(data: MarketData | null, deadline = Date.no
     st.error = null;
     if (st.batch >= batches && st.headlines === 0) {
       st.probe = await probeHistory(data);
-      st.probeVersion = PROBE_VERSION;
+      st.probeVersion = 1;
       st.batch = 0;
       await save();
       return { line: `rating study: the news history returned no headlines for ${RATING_STUDY.start} to ${RATING_STUDY.end}. Probe: ${st.probe}`, more: false };

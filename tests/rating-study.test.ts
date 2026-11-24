@@ -114,6 +114,10 @@ describe("the paced job (PGlite)", () => {
       expect(r.more).toBe(false);
       expect(r.line).toMatch(/returned no headlines .* Probe: AAPL 2019-03: 0 · /);
       expect((await studyState())).toMatchObject({ done: false, probeVersion: 1 });
+      // The next pass looks once at the other sources (none have keys here), then waits without calling anything.
+      const next = await runRatingStudy(empty);
+      expect(next.line).toMatch(/^rating study: other sources\. FMP_API_KEY not set · FINNHUB_API_KEY not set · prices: SPY 80 days/);
+      expect((await studyState())).toMatchObject({ done: false, probeVersion: 2 });
       const after = probes;
       expect((await runRatingStudy(empty)).line).toBe("rating study: waiting (the news history came back empty)");
       expect(probes).toBe(after);
