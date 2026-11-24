@@ -206,13 +206,16 @@ export class AlpacaClient {
   }
 
   /** One stock's 1-minute bars (extended hours included) in [start, end]; free data is the IEX feed. */
-  async getMinuteBars(symbol: string, start: Date, end: Date): Promise<MinuteBar[]> {
+  async getMinuteBars(symbol: string, start: Date, end: Date, feed: "iex" | "sip" = "iex"): Promise<MinuteBar[]> {
     const out: MinuteBar[] = [];
     let pageToken: string | undefined;
+    // The whole market's bars are free only up to 15 minutes ago.
+    if (feed === "sip") end = new Date(Math.min(end.getTime(), Date.now() - 16 * 60000));
+    if (end <= start) return out;
     do {
       const resp = await this.get<{ bars: Record<string, Array<{ t: string; o: number; h: number; l: number; c: number; v: number }>> | null; next_page_token?: string | null }>(
         DATA_HOST, "/v2/stocks/bars",
-        { symbols: symbol, timeframe: "1Min", start: start.toISOString(), end: end.toISOString(), adjustment: "raw", feed: "iex", sort: "asc", limit: 10000, page_token: pageToken },
+        { symbols: symbol, timeframe: "1Min", start: start.toISOString(), end: end.toISOString(), adjustment: "raw", feed, sort: "asc", limit: 10000, page_token: pageToken },
       );
       for (const r of resp.bars?.[symbol] ?? []) out.push({ t: r.t, o: r.o, h: r.h, l: r.l, c: r.c, v: r.v });
       pageToken = resp.next_page_token ?? undefined;
@@ -340,7 +343,7 @@ export interface MarketData {
   /** Optional: one page of news, oldest first, with the next page's token (long historical reads). */
   getNewsPage?(symbols: string[], start: Date, end: Date, pageToken?: string | null): Promise<{ items: NewsItem[]; next: string | null }>;
   /** Optional: one stock's 1-minute bars (market data only). */
-  getMinuteBars?(symbol: string, start: Date, end: Date): Promise<MinuteBar[]>;
+  getMinuteBars?(symbol: string, start: Date, end: Date, feed?: "iex" | "sip"): Promise<MinuteBar[]>;
   getCalendar(start: string, end: string): Promise<Session[]>;
   /** Optional: what a symbol currently is (asset metadata). */
   getAsset?(symbol: string): Promise<Asset | null>;

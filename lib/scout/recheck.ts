@@ -63,10 +63,17 @@ export async function latestRechecks(cardIds: number[]): Promise<Map<number, Rec
   return new Map(rows.map((r) => [Number(r.card_id), toRecheck(r)]));
 }
 
-/** Pure: the close on or after a day, and the last close. */
-export function priceThenNow(bars: DailyBar[], symbol: string, day: string): { then: number | null; now: number | null; nowDate: string | null } {
+/**
+ * Pure: the last close before the card was written, and the last close now. A card written after 4 PM ET is priced
+ * from that day's close; one written earlier, from the session before (a card from 10 PM used to be "priced" from the
+ * next day's bar, which already held the whole move since: "$5.60 when written, $5.60 now").
+ */
+export function priceThenNow(bars: DailyBar[], symbol: string, writtenAt: string): { then: number | null; now: number | null; nowDate: string | null } {
   const mine = bars.filter((b) => b.symbol === symbol).sort((a, b) => a.date.localeCompare(b.date));
-  const then = mine.find((b) => b.date >= day) ?? null;
+  const et = toEt(new Date(writtenAt.length <= 10 ? `${writtenAt}T12:00:00Z` : writtenAt));
+  const before = mine.filter((b) => (et.minutes >= 16 * 60 ? b.date <= et.date : b.date < et.date)).at(-1) ?? null;
+  // No bar from before the card (a new listing): the first one after it.
+  const then = before ?? mine.find((b) => b.date >= et.date) ?? null;
   const last = mine[mine.length - 1] ?? null;
   return { then: then?.c ?? null, now: last?.c ?? null, nowDate: last?.date ?? null };
 }
@@ -76,7 +83,7 @@ const signed = (x: number | null) => (x === null ? "?" : `${x > 0 ? "+" : ""}${x
 
 /** Pure: the user message for the model. */
 export function recheckPrompt(c: store.StoredCard, track: store.Track | null, today: string, px: { stock: ReturnType<typeof priceThenNow>; spy: ReturnType<typeof priceThenNow> }, news: NewsItem[], extra: string[]): string {
-  const day = c.createdAt.slice(0, 10);
+  const day = toEt(new Date(c.createdAt)).date; // the day it was written in New York, not in UTC
   const deadline = addDays(day, c.timeLimitDays);
   const moveStock = pct(px.stock.then, px.stock.now), moveSpy = pct(px.spy.then, px.spy.now);
   const lines = [
@@ -90,7 +97,7 @@ export function recheckPrompt(c: store.StoredCard, track: store.Track | null, to
     `Invalidation (the card's own words): ${c.card.invalidation}`,
     `Time limit: ${c.timeLimitDays} days, so until about ${deadline}${deadline < today ? " (PASSED)" : ""}.`,
     c.card.expression ? `How it was to be expressed: ${c.card.expression}` : "",
-    `PRICE: ${c.primaryTicker} closed ${px.stock.then?.toFixed(2) ?? "?"} around ${day} and ${px.stock.now?.toFixed(2) ?? "?"} on ${px.stock.nowDate ?? "?"} (${signed(moveStock)}); SPY ${signed(moveSpy)} over the same time${moveStock !== null && moveSpy !== null ? `, so ${signed(Math.round((moveStock - moveSpy) * 10) / 10)} against the market` : ""}. For a short, a fall is the card working.`,
+    `PRICE: ${c.primaryTicker} last closed ${px.stock.then?.toFixed(2) ?? "?"} before the card was written and ${px.stock.now?.toFixed(2) ?? "?"} on ${px.stock.nowDate ?? "?"} (${signed(moveStock)}); SPY ${signed(moveSpy)} over the same time${moveStock !== null && moveSpy !== null ? `, so ${signed(Math.round((moveStock - moveSpy) * 10) / 10)} against the market` : ""}. For a short, a fall is the card working.`,
     track ? `PAPER TRACK: ${track.entryPrice ? `entered ${track.entryDate} at $${track.entryPrice.toFixed(2)}` : "not entered"}${track.exitDate ? `, exited ${track.exitDate} at $${track.exitPrice?.toFixed(2) ?? "?"} (${track.exitReason ?? "exit"})` : ", still open"}${track.invalidatedAt ? `; invalidation marked ${track.invalidatedAt.slice(0, 10)}${track.invalidatedNote ? `: ${track.invalidatedNote}` : ""}` : ""}.` : "PAPER TRACK: none.",
     `NEWS SINCE THE CARD (${news.length} headlines, newest first):`,
     ...(news.length ? news.map((n) => `- ${n.ts.slice(0, 10)} ${n.headline}${n.summary ? `: ${n.summary.slice(0, 220)}` : ""}`) : ["- none found"]),
@@ -112,7 +119,7 @@ export async function recheckCard(cardId: number, deps: { data: MarketData | nul
   const settings = await store.loadSettings();
   const today = toEt(deps.now).date;
   if ((await store.spendOn(today)).cost >= settings.dailyCapUsd) throw new Error("capped");
-  const day = c.createdAt.slice(0, 10);
+  const day = toEt(new Date(c.createdAt)).date;
   const sym = c.primaryTicker;
   const data = deps.data;
   const [track, bars, news, live, diffs, digests, briefs, inval] = await Promise.all([
@@ -125,7 +132,7 @@ export async function recheckCard(cardId: number, deps: { data: MarketData | nul
     store.cardBriefsSince(365).catch(() => [] as store.CardBrief[]),
     import("./invalidation").then(({ latestInvalidationChecks }) => latestInvalidationChecks().then((m) => m.get(cardId) ?? null)).catch(() => null),
   ]);
-  const px = { stock: priceThenNow(bars, sym, day), spy: priceThenNow(bars, "SPY", day) };
+  const px = { stock: priceThenNow(bars, sym, c.createdAt), spy: priceThenNow(bars, "SPY", c.createdAt) };
   const newer = briefs.filter((b) => b.id !== cardId && b.createdAt > c.createdAt && (b.primaryTicker === sym || b.tickers.includes(sym))).slice(0, 6);
   const extra = [
     diffs.length ? `FILING CHANGES SINCE THE CARD:\n${diffs.join("\n")}` : "",

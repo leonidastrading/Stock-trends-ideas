@@ -6,10 +6,20 @@ import type * as store from "@/lib/scout/store";
 const bar = (symbol: string, date: string, c: number): DailyBar => ({ symbol, date, o: c, h: c, l: c, c, v: 1000 }) as DailyBar;
 
 describe("still valid? re-check", () => {
-  it("prices the card from the first close on or after the day it was written, to the last close", () => {
-    const bars = [bar("AVAV", "2026-09-30", 90), bar("AVAV", "2026-10-02", 100), bar("AVAV", "2026-11-20", 80), bar("SPY", "2026-10-02", 600), bar("SPY", "2026-11-20", 612)];
-    expect(priceThenNow(bars, "AVAV", "2026-10-01")).toEqual({ then: 100, now: 80, nowDate: "2026-11-20" });
-    expect(priceThenNow([], "AVAV", "2026-10-01")).toEqual({ then: null, now: null, nowDate: null });
+  it("prices the card from the last close before it was written, to the last close", () => {
+    const bars = [bar("AVAV", "2026-09-30", 90), bar("AVAV", "2026-10-01", 95), bar("AVAV", "2026-10-02", 100), bar("AVAV", "2026-11-20", 80), bar("SPY", "2026-10-02", 600), bar("SPY", "2026-11-20", 612)];
+    // Written at 10 AM ET on Oct 1 (during the session): the close before it is Sep 30's.
+    expect(priceThenNow(bars, "AVAV", "2026-10-01T14:00:00Z")).toEqual({ then: 90, now: 80, nowDate: "2026-11-20" });
+    // Written at 10:15 PM ET on Oct 1 (03:15 UTC on Oct 2): that day's close, not the next day's bar.
+    expect(priceThenNow(bars, "AVAV", "2026-10-02T02:15:00Z").then).toBe(95);
+    // No bar from before the card (a new listing): the first one after.
+    expect(priceThenNow(bars, "SPY", "2026-10-01T14:00:00Z").then).toBe(600);
+    expect(priceThenNow([], "AVAV", "2026-10-01T14:00:00Z")).toEqual({ then: null, now: null, nowDate: null });
+  });
+
+  it("ALTG, Nov 23 2026: a card from 10:15 PM is priced from that day's close, so the next morning's jump shows", () => {
+    const bars = [bar("ALTG", "2026-11-20", 4.65), bar("ALTG", "2026-11-23", 4.59), bar("ALTG", "2026-11-24", 5.6)];
+    expect(priceThenNow(bars, "ALTG", "2026-11-24T03:15:00Z")).toEqual({ then: 4.59, now: 5.6, nowDate: "2026-11-24" });
   });
 
   it("gives the model the card as written, the move against the market, the news since and a passed time limit", () => {
