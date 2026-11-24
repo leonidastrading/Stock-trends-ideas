@@ -1,34 +1,26 @@
 import { describe, expect, it } from "vitest";
 import type { DailyBar } from "@/lib/alpaca";
-import { eventReturns, ratingAction, reactionDay, stat, studyTable, type StudyEvent } from "@/lib/scout/rating-study";
+import { eventReturns, gradeAction, reactionDay, stat, studyTable, type StudyEvent } from "@/lib/scout/rating-study";
 
-describe("rating headlines", () => {
-  it("reads the wires' usual wording, and how strong the change is", () => {
-    expect(ratingAction("Morgan Stanley Downgrades Nike to Equal-Weight, Lowers Price Target to $79")).toEqual({ kind: "downgrade", broker: "Morgan Stanley", to: "Equal-Weight", strength: "mild", topBroker: true });
-    expect(ratingAction("JP Morgan Downgrades Snap to Underweight, Announces $7 Price Target")).toMatchObject({ kind: "downgrade", to: "Underweight", strength: "strong" });
-    expect(ratingAction("Keybanc Downgrades Tesla to Sector Weight")).toMatchObject({ kind: "downgrade", broker: "Keybanc", strength: "mild", topBroker: false });
-    expect(ratingAction("B of A Securities Upgrades Apple to Buy, Raises Price Target to $225")).toMatchObject({ kind: "upgrade", to: "Buy", strength: "strong" });
-    expect(ratingAction("Wells Fargo Upgrades Ford Motor to Equal-Weight")).toMatchObject({ kind: "upgrade", strength: "mild" });
+describe("rating changes from the grades history", () => {
+  it("reads upgrades and downgrades, and how strong the change is", () => {
+    expect(gradeAction({ gradingCompany: "Morgan Stanley", previousGrade: "Overweight", newGrade: "Equal-Weight", action: "downgrade" })).toEqual({ kind: "downgrade", broker: "Morgan Stanley", to: "Equal-Weight", strength: "mild", topBroker: true });
+    expect(gradeAction({ gradingCompany: "JP Morgan", newGrade: "Underweight", action: "downgrade" })).toMatchObject({ kind: "downgrade", strength: "strong" });
+    expect(gradeAction({ gradingCompany: "Keybanc", newGrade: "Sector Weight", action: "Downgrade" })).toMatchObject({ kind: "downgrade", strength: "mild", topBroker: false });
+    expect(gradeAction({ gradingCompany: "B of A Securities", newGrade: "Buy", action: "upgrade" })).toMatchObject({ kind: "upgrade", strength: "strong" });
+    expect(gradeAction({ gradingCompany: "Wells Fargo", newGrade: "Equal-Weight", action: "upgrade" })).toMatchObject({ kind: "upgrade", strength: "mild" });
   });
-  it("ignores round-ups, commentary and price-target changes", () => {
-    for (const h of [
-      "Benzinga's Top Upgrades, Downgrades For November 20, 2026",
-      "Why Nike Shares Are Falling After Analyst Downgrades",
-      "Morgan Stanley Maintains Overweight on Nike, Lowers Price Target to $79",
-      "Top 5 Downgrades For Thursday",
-      "Nike shares fall as analysts downgrade the stock to hold",
-    ]) expect(ratingAction(h)).toBeNull();
+  it("ignores ratings kept, first ratings and rows with no broker", () => {
+    for (const row of [{ gradingCompany: "Citigroup", newGrade: "Buy", action: "maintain" }, { gradingCompany: "UBS", newGrade: "Neutral", action: "initiate" }, { gradingCompany: "", newGrade: "Sell", action: "downgrade" }, { gradingCompany: "UBS", newGrade: "Sell" }]) expect(gradeAction(row)).toBeNull();
   });
 });
 
 describe("the reaction day and what followed", () => {
   const sessions = ["2024-03-01", "2024-03-04", "2024-03-05", "2024-03-06"];
-  it("is the first session whose close came after the headline", () => {
-    expect(reactionDay("2024-03-04T11:30:00Z", sessions)).toBe("2024-03-04"); // 6:30 AM ET, before the open
-    expect(reactionDay("2024-03-04T19:00:00Z", sessions)).toBe("2024-03-04"); // 2 PM ET, during the session
-    expect(reactionDay("2024-03-04T21:30:00Z", sessions)).toBe("2024-03-05"); // 4:30 PM ET, after the close
-    expect(reactionDay("2024-03-02T15:00:00Z", sessions)).toBe("2024-03-04"); // a Saturday
-    expect(reactionDay("2024-03-06T21:30:00Z", sessions)).toBeNull();
+  it("is the day the change is dated, or the next session", () => {
+    expect(reactionDay("2024-03-04", sessions)).toBe("2024-03-04");
+    expect(reactionDay("2024-03-02", sessions)).toBe("2024-03-04"); // a Saturday
+    expect(reactionDay("2024-03-07", sessions)).toBeNull();
   });
   it("measures the stock against SPY from the reaction close and from the next open", () => {
     const bar = (symbol: string, date: string, o: number, c: number): DailyBar => ({ symbol, date, o, h: Math.max(o, c), l: Math.min(o, c), c, v: 1 });
@@ -51,76 +43,73 @@ describe("the results table", () => {
     expect(stat([])).toEqual({ n: 0, mean: null, median: null, negShare: null, t: null });
   });
   it("splits downgrades by strength, broker, reaction and period, with upgrades as the comparison", () => {
-    const e = (over: Partial<StudyEvent>): StudyEvent => ({ symbol: "X", day: "2020-05-01", kind: "downgrade", strong: false, topBroker: false, brokers: 1, reaction: -1, x: { 5: -1, 10: -1, 20: -2, 60: -3 }, o: { 20: -1.5, 60: -2.5 }, ...over });
+    const e = (over: Partial<StudyEvent>): StudyEvent => ({ symbol: "X", day: "2020-05-01", kind: "downgrade", strong: false, topBroker: false, brokers: 1, reaction: -1, x: { 5: -1, 10: -1, 20: -2, 60: -3 }, o: { 5: -0.5, 10: -1, 20: -1.5, 60: -2.5 }, ...over });
     const t = studyTable([e({}), e({ strong: true, reaction: -8, day: "2023-02-01", brokers: 2 }), e({ kind: "upgrade", strong: true, x: { 5: 1, 10: 1, 20: 2, 60: 3 } })]);
     const n = Object.fromEntries(t.map((r) => [r.label, r.n]));
-    expect(n).toMatchObject({ "All downgrades": 2, "To Sell / Underperform / Underweight": 1, "To Neutral / Hold / Equal-Weight": 1, "Two or more brokers the same day": 1, "Stock fell 5%+ on the day (vs SPY)": 1, "2019-2021": 1, "2022-2025": 1, "All upgrades (comparison)": 1 });
+    expect(n).toMatchObject({ "All downgrades": 2, "To Sell / Underperform / Underweight": 1, "To Neutral / Hold / Equal-Weight": 1, "Two or more brokers the same day": 1, "Stock fell 5%+ on the day (vs SPY)": 1, "2019-2021": 1, "2022-2023": 1, "2024-2026": 0, "All upgrades (comparison)": 1 });
     expect(t[0].x20.mean).toBe(-2);
     expect(t.find((r) => r.label === "All upgrades (comparison)")!.x20.mean).toBe(2);
   });
 });
 
 describe("the paced job (PGlite)", () => {
-  it("reads the history page by page, resumes where a pass stopped, and counts several brokers on a day once", async () => {
+  it("reads one stock per request, resumes where a pass stopped, keeps to the day's allowance, and counts several brokers on a day once", async () => {
     const { PGlite } = await import("@electric-sql/pglite");
     const { setQuerierForTests } = await import("@/lib/db");
-    const { runRatingStudy, studyEvents, studyState, studySymbols } = await import("@/lib/scout/rating-study");
+    const { RATING_STUDY, runRatingStudy, studyEvents, studyState, studySymbols } = await import("@/lib/scout/rating-study");
     const pg = new PGlite();
     setQuerierForTests({ query: async (text, params) => (await pg.query(text, params as unknown[])).rows as Record<string, unknown>[] });
     try {
-      const first = studySymbols()[0];
-      // 80 sessions of flat SPY; the stock falls 4% on the reaction day and 0.1% a day after.
+      const all = studySymbols(), first = all[0];
+      // 80 sessions of flat SPY from 2019; the stock falls 4% on the reaction day and 0.1% a day after.
       const days: string[] = [];
       for (let d = new Date("2019-01-02T00:00:00Z"); days.length < 80; d = new Date(d.getTime() + 86400_000)) if (![0, 6].includes(d.getUTCDay())) days.push(d.toISOString().slice(0, 10));
       const bar = (symbol: string, date: string, c: number): DailyBar => ({ symbol, date, o: c, h: c, l: c, c, v: 1 });
       const price = (i: number) => (i < 5 ? 100 : 96 * Math.pow(0.999, i - 5));
-      let pages = 0;
-      const news = [
-        { id: 1, ts: `${days[5]}T11:00:00Z`, headline: "Morgan Stanley Downgrades Acme to Underweight, Lowers Price Target to $80", summary: "", symbols: [first], source: "benzinga", url: "" },
-        { id: 2, ts: `${days[5]}T12:00:00Z`, headline: "Keybanc Downgrades Acme to Sector Weight", summary: "", symbols: [first], source: "benzinga", url: "" },
-        { id: 3, ts: `${days[6]}T12:00:00Z`, headline: "Acme shares fall after downgrades", summary: "", symbols: [first], source: "benzinga", url: "" },
-      ];
       const data = {
         getDailyBars: async (symbols: readonly string[]) => symbols.flatMap((s) => (s === "SPY" ? days.map((d) => bar("SPY", d, 400)) : s === first ? days.map((d, i) => bar(s, d, price(i))) : [])),
         getNews: async () => [], getCalendar: async () => [],
-        // Two pages for the first batch (a token in between), nothing for the others.
-        getNewsPage: async (symbols: string[], _a: Date, _b: Date, token?: string | null) => {
-          pages++;
-          if (!symbols.includes(first)) return { items: [], next: null };
-          return token === "p2" ? { items: news.slice(2), next: null } : { items: news.slice(0, 2), next: "p2" };
-        },
       } as never;
+      const asked: string[] = [];
+      const fmp: typeof fetch = async (url) => {
+        const sym = new URL(String(url)).searchParams.get("symbol")!;
+        asked.push(sym);
+        if (sym === all[1]) return new Response("{}", { status: 402 }); // not covered by the plan
+        if (sym !== first) return new Response("[]", { status: 200 });
+        return new Response(JSON.stringify([
+          { symbol: sym, date: days[5], gradingCompany: "Morgan Stanley", previousGrade: "Equal-Weight", newGrade: "Underweight", action: "downgrade" },
+          { symbol: sym, date: days[5], gradingCompany: "Keybanc", previousGrade: "Overweight", newGrade: "Sector Weight", action: "downgrade" },
+          { symbol: sym, date: days[6], gradingCompany: "Citigroup", previousGrade: "Buy", newGrade: "Buy", action: "maintain" },
+          { symbol: sym, date: "2015-03-02", gradingCompany: "UBS", previousGrade: "Buy", newGrade: "Sell", action: "downgrade" }, // before the study starts
+        ]), { status: 200 });
+      };
+      const env = { FMP_API_KEY: "k" } as unknown as NodeJS.ProcessEnv;
+      const at = new Date("2026-11-24T15:00:00Z");
       // A pass with no time left reads nothing and keeps its place.
-      expect((await runRatingStudy(data, Date.now() - 1)).more).toBe(true);
-      expect(pages).toBe(0);
-      const done = await runRatingStudy(data, Date.now() + 60_000);
-      expect(done).toMatchObject({ more: false });
-      expect(done.line).toMatch(/^rating study: done · .* 3 headlines, 2 rating changes$/);
-      expect((await studyState())!.done).toBe(true);
+      expect((await runRatingStudy(data, Date.now() - 1, env, fmp, at)).more).toBe(true);
+      expect(asked).toEqual([]);
+      // The day's allowance stops it part-way; it goes on the next day and finishes.
+      const one = await runRatingStudy(data, Date.now() + 120_000, env, fmp, at);
+      expect(asked.length).toBe(RATING_STUDY.perDay);
+      expect(one).toMatchObject({ more: false });
+      expect(one.line).toMatch(new RegExp(`^rating study: ${RATING_STUDY.perDay} of ${all.length} stocks \\(today's allowance used`));
+      expect((await runRatingStudy(data, Date.now() + 120_000, env, fmp, at)).line).toMatch(/waiting \(today's allowance/);
+      expect(asked.length).toBe(RATING_STUDY.perDay);
+      const two = await runRatingStudy(data, Date.now() + 120_000, env, fmp, new Date("2026-11-25T15:00:00Z"));
+      expect(two.line).toMatch(/^rating study: done · 2 rating changes read, 2 measured, \d+ stocks with no history$/);
+      expect(asked).toEqual(all); // every stock asked exactly once, in order
+      expect((await studyState())!).toMatchObject({ done: true, events: 2 });
       const events = await studyEvents();
       expect(events).toHaveLength(1); // two brokers, one stock, one day
       expect(events[0]).toMatchObject({ symbol: first, day: days[5], kind: "downgrade", strong: true, topBroker: true, brokers: 2, reaction: -4 });
-      expect(events[0].x[20]).toBeCloseTo((Math.pow(0.999, 20) - 1) * 100, 1);
+      expect(events[0].o[20]).toBeCloseTo((Math.pow(0.999, 19) - 1) * 100, 1); // from the next session's open: one day's fall fewer
+      expect(events[0].x[20]).toBeCloseTo((Math.pow(0.999, 20) - 1) * 100, 1); // from the reaction close
+      expect(events[0].o[5]).not.toBeNull();
       expect(events[0].x[60]).not.toBeNull();
       // Once done, another pass does nothing.
-      const before = pages;
-      expect(await runRatingStudy(data)).toEqual({ line: "rating study: done", more: false });
-      expect(pages).toBe(before);
-      // A history that comes back empty is never "done": the study probes what the history holds, once, and waits.
-      await pg.query(`DELETE FROM dashboard_cache WHERE key LIKE 'rating-study:%'`);
-      let probes = 0;
-      const empty = { ...(data as object), getNewsPage: async () => { probes++; return { items: [], next: null }; } } as never;
-      const r = await runRatingStudy(empty, Date.now() + 60_000);
-      expect(r.more).toBe(false);
-      expect(r.line).toMatch(/returned no headlines .* Probe: AAPL 2019-03: 0 · /);
-      expect((await studyState())).toMatchObject({ done: false, probeVersion: 1 });
-      // The next pass looks once at the other sources (none have keys here), then waits without calling anything.
-      const next = await runRatingStudy(empty);
-      expect(next.line).toMatch(/^rating study: other sources\. FMP_API_KEY not set · FINNHUB_API_KEY not set · prices: SPY 80 days/);
-      expect((await studyState())).toMatchObject({ done: false, probeVersion: 2 });
-      const after = probes;
-      expect((await runRatingStudy(empty)).line).toBe("rating study: waiting (the news history came back empty)");
-      expect(probes).toBe(after);
+      expect(await runRatingStudy(data, Date.now() + 1000, env, fmp, at)).toEqual({ line: "rating study: done", more: false });
+      expect(asked.length).toBe(all.length);
+      expect(await runRatingStudy(data, undefined, {} as NodeJS.ProcessEnv)).toMatchObject({ more: false });
     } finally {
       setQuerierForTests(null);
     }

@@ -723,6 +723,8 @@ CREATE TABLE IF NOT EXISTS rating_study_events (
   o20 double precision, o60 double precision,
   PRIMARY KEY (symbol, day, kind, broker)
 );
+ALTER TABLE rating_study_events ADD COLUMN IF NOT EXISTS o5 double precision;
+ALTER TABLE rating_study_events ADD COLUMN IF NOT EXISTS o10 double precision;
 -- Market cap and short interest per card, frozen once, for splitting results by size and by short interest.
 CREATE TABLE IF NOT EXISTS card_profiles (
   card_id integer PRIMARY KEY,
