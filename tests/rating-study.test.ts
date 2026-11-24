@@ -94,7 +94,13 @@ describe("the paced job (PGlite)", () => {
       expect(one).toMatchObject({ more: false });
       expect(one.line).toMatch(new RegExp(`^rating study: ${RATING_STUDY.perDay} of ${all.length} stocks \\(today's allowance used`));
       expect((await runRatingStudy(data, Date.now() + 120_000, env, fmp, at)).line).toMatch(/waiting \(today's allowance/);
-      expect(asked.length).toBe(RATING_STUDY.perDay);
+      // While waiting it asks once why a stock came back empty (the provider's own answer, for the page), and only once.
+      expect(asked.length).toBe(RATING_STUDY.perDay + 1);
+      expect(asked.at(-1)).toBe(all[1]);
+      expect((await studyState())!.refusal).toMatch(new RegExp(`^${all[1]}: HTTP 402`));
+      await runRatingStudy(data, Date.now() + 120_000, env, fmp, at);
+      expect(asked.length).toBe(RATING_STUDY.perDay + 1);
+      asked.splice(RATING_STUDY.perDay, 1);
       const two = await runRatingStudy(data, Date.now() + 120_000, env, fmp, new Date("2026-11-25T15:00:00Z"));
       expect(two.line).toMatch(/^rating study: done · 2 rating changes read, 2 measured, \d+ stocks with no history$/);
       expect(asked).toEqual(all); // every stock asked exactly once, in order

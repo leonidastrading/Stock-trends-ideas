@@ -18,8 +18,8 @@ export default function RatingStudy({ state, events }: { state: StudyState | nul
     <details className="card section" open={!!state?.done}>
       <summary><b>Downgrade study, {RATING_STUDY.start.slice(0, 4)} to {state?.end ? new Date(`${state.end}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }) : "now"}</b> <span className="small muted">
         {!state ? "not started yet: it starts by itself"
-          : state.done ? `${downs.toLocaleString("en-US")} downgrades and ${ups.toLocaleString("en-US")} upgrades on ${total - state.empty.length} stocks`
-          : `reading rating histories: ${state.next} of ${total} stocks · ${state.events.toLocaleString("en-US")} rating changes measured · last pass ${etLabelAgo(state.updatedAt)}${waiting ? " · today's allowance of requests is used; it goes on tomorrow" : ""}${state.error ? ` · stopped: ${state.error}` : ""}`}
+          : state.done ? `${downs.toLocaleString("en-US")} downgrades and ${ups.toLocaleString("en-US")} upgrades on ${total - state.empty.length} of ${total} stocks`
+          : `reading rating histories: ${state.next} of ${total} stocks (${state.next - state.empty.length} with data) · ${state.events.toLocaleString("en-US")} rating changes measured · last pass ${etLabelAgo(state.updatedAt)}${waiting ? " · today's allowance of requests is used; it goes on tomorrow" : ""}${state.error ? ` · stopped: ${state.error}` : ""}`}
       </span></summary>
       <div className="small secondary">
         <p>Does a stock keep falling after an analyst downgrade? Every rating change on file at Financial Modeling Prep for the scout&apos;s {total} large and mid caps, and what the stock did next against SPY (Alpaca&apos;s daily prices). No AI is involved.</p>
@@ -44,7 +44,7 @@ export default function RatingStudy({ state, events }: { state: StudyState | nul
         )}
         <p>How to read it: each number is the average return against SPY, in percent. Green is the direction a trade would want: down after a downgrade, up after an upgrade. A star marks an average unlikely to be chance alone. Hover a number for the median, the share below zero and the count.</p>
         <p><b>Trust the &quot;from the next open&quot; columns.</b> The rating history gives a date but no time. A downgrade published after the close shows its fall the next day, which the &quot;from the reaction close&quot; columns would wrongly count as drift. Entering at the next session&apos;s open is after the news either way, and it is what could actually be traded.</p>
-        <p className="muted">Limits: the stock list is today&apos;s, so companies that have since fallen out of it are missing, which hides some of the worst outcomes after downgrades. The history is what the provider has on file now{state?.empty.length ? `; it had none for ${state.empty.length} of the stocks (${state.empty.slice(0, 12).join(", ")}${state.empty.length > 12 ? "…" : ""})` : ""}. Several brokers on one stock on one day count once. Stocks under ${RATING_STUDY.minPrice} are left out. This is a look-back on prices, not a forward test: the Drift desk&apos;s own paper shorts are the forward test.</p>
+        <p className="muted">Limits: the stock list is today&apos;s, so companies that have since fallen out of it are missing, which hides some of the worst outcomes after downgrades. The history is what the provider has on file now{state?.empty.length ? `; it gave nothing for ${state.empty.length} of the ${state.next} stocks asked so far (${state.empty.slice(0, 12).join(", ")}${state.empty.length > 12 ? "…" : ""})${state.refusal ? `, answering "${state.refusal.replace(/^[A-Z.]+: /, "").slice(0, 160)}"` : ""}` : ""}. Several brokers on one stock on one day count once. Stocks under ${RATING_STUDY.minPrice} are left out. This is a look-back on prices, not a forward test: the Drift desk&apos;s own paper shorts are the forward test.</p>
       </div>
     </details>
   );

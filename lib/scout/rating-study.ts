@@ -95,6 +95,8 @@ export interface StudyState {
   day: string; calls: number;
   /** The last event date the prices can follow for 60 sessions. */
   end: string; startedAt: string; updatedAt: string; error: string | null;
+  /** Why the provider gave nothing for a stock, in its own words (asked once, for the first such stock). */
+  refusal?: string | null;
 }
 const STATE = "rating-study:fmp", SPY = "rating-study:spy2";
 
@@ -123,6 +125,13 @@ export async function runRatingStudy(data: MarketData | null, deadline = Date.no
   const st: StudyState = (await studyState()) ?? { next: 0, done: false, events: 0, rows: 0, empty: [], day: today, calls: 0, end: addDays(today, -RATING_STUDY.tailDays), startedAt: now(), updatedAt: now(), error: null };
   if (st.done) return { line: "rating study: done", more: false };
   if (st.day !== today) { st.day = today; st.calls = 0; }
+  // Stocks came back empty: ask once why (one request), so the page can say whether it is the plan or the data.
+  if (st.empty.length && st.refusal === undefined) {
+    st.refusal = await fetchImpl(`https://financialmodelingprep.com/stable/grades?symbol=${encodeURIComponent(st.empty[0])}&apikey=${encodeURIComponent(key)}`, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(20_000) })
+      .then(async (res) => `${st.empty[0]}: HTTP ${res.status} ${(await res.text()).replace(/\s+/g, " ").slice(0, 220)}`).catch((err) => `${st.empty[0]}: ${err instanceof Error ? err.message : String(err)}`);
+    await store.cachePut(STATE, { ...st, updatedAt: now() } satisfies StudyState).catch(() => undefined);
+    console.log(`rating study: why stocks come back empty. ${st.refusal}`);
+  }
   if (st.calls >= RATING_STUDY.perDay) return { line: "rating study: waiting (today's allowance of requests is used; it goes on tomorrow)", more: false };
   if (!(await store.tryLock("lock:rating-study:run", 5))) return { line: "rating study: another pass is running", more: false };
   const all = studySymbols();
