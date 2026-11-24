@@ -49,10 +49,13 @@ export function bigMoves(snaps: Record<string, Snap>, today: string, levels = PR
     if (!s.price) continue;
     const at = s.at ? new Date(s.at) : now;
     if (toEt(at).date !== today) continue; // no trade today yet: yesterday's move is not news
-    const phase = phaseOf(at);
+    let phase = phaseOf(at);
     const barToday = s.sessionDate === today;
     let base: number | null | undefined, vs: string;
     if (phase === "post" && barToday && s.dailyClose && Math.abs(s.price / s.dailyClose - 1) > 0.0005) { base = s.dailyClose; vs = "today's close"; }
+    // After the close with the price still at the close: nothing has happened after hours. It is the day's move
+    // (ORCL, Nov 23 2026: up 12.5% in the session, announced again at the close as "up 12.5% after hours").
+    else if (phase === "post" && barToday && s.dailyClose) { phase = "regular"; base = s.prevClose; vs = "the last close"; }
     else if (barToday || !s.sessionDate) { base = s.prevClose; vs = phase === "post" ? "yesterday's close" : "the last close"; }
     else { base = s.dailyClose ?? s.prevClose; vs = "the last close"; } // before today's first trade in the bar: the bar is the last session
     if (!base || base < PRICE_WATCH.minPrice || s.price < PRICE_WATCH.minPrice) continue; // under $5: not market news

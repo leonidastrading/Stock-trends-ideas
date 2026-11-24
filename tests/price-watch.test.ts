@@ -31,6 +31,19 @@ describe("price watch", () => {
     expect(bigMoves({ ROST: { ...rost, price: 213.6 } }, today, [5, 10], post)).toEqual([]);
   });
 
+  it("a day's gain is not announced again as an after-hours move at the close (ORCL, Nov 23 2026)", () => {
+    const day = "2026-11-23";
+    const post = new Date("2026-11-23T21:15:00Z"); // 4:15 PM ET
+    // Up 12.5% in the session; the last trade is the closing print, so nothing has moved after hours.
+    const orcl = { price: 113.9, prevClose: 101.24, sessionDate: day, at: "2026-11-23T21:00:02Z", dailyClose: 113.9 };
+    const [m] = bigMoves({ ORCL: orcl }, day, [5, 10], post);
+    expect(m).toMatchObject({ phase: "regular", pct: 12.5, vs: "the last close", key: "move:ORCL:2026-11-23:regular:10" });
+    expect(moveItem({ ...m, firstSeen: post.toISOString() }, null).headline).toBe("ORCL up 12.5% today, no headline in the scout's feeds yet");
+    // A real after-hours move on top of it is still measured from the close and labelled after hours.
+    const [later] = bigMoves({ ORCL: { ...orcl, price: 120.8, at: "2026-11-23T21:40:00Z" } }, day, [5, 10], new Date("2026-11-23T21:41:00Z"));
+    expect(later).toMatchObject({ phase: "post", pct: 6.1, vs: "today's close" });
+  });
+
   it("pre-market is measured from the last close, and one odd trade the quote does not back is ignored", () => {
     const pre = new Date("2026-11-19T12:30:00Z"); // 7:30 AM ET
     const [m] = bigMoves({ X: { price: 90, prevClose: 101, sessionDate: "2026-11-18", dailyClose: 100, at: "2026-11-19T12:29:00Z" } }, today, [5, 10], pre);
