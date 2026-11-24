@@ -72,6 +72,32 @@ describe("finding the earlier version across outlets", () => {
   });
 });
 
+describe("a company's own release after the news was already out (HII's UK order, Nov 24)", () => {
+  const pr = "HII Awarded Largest International Unmanned Systems Contract in Company History by UK Ministry of Defence";
+  const at = "2026-11-24T23:05:00Z";
+  const data = { getNews: async () => [] } as never;
+
+  it("searches for the company by name and by ticker too, and finds the first report by a word match", async () => {
+    const asked: string[] = [];
+    const rss = `<rss><channel><item><title>Royal Navy picks HII for unmanned systems contract, Ministry of Defence says - Naval News</title><link>https://i/1</link><pubDate>Tue, 24 Nov 2026 12:10:00 GMT</pubDate><source>Naval News</source></item></channel></rss>`;
+    const fetchImpl = (async (url: string) => { asked.push(new URL(String(url)).searchParams.get("q") ?? ""); return new Response(asked.length === 3 ? rss : "<rss><channel></channel></rss>", { status: 200 }); }) as unknown as typeof fetch;
+    const hit = await priorVersion(data, "HII", pr, at, { fetchImpl, company: "Huntington Ingalls Industries, Inc.", judge: false });
+    expect(asked).toHaveLength(3);
+    expect(asked[1]).toBe('"Huntington Ingalls Industries" when:30d');
+    expect(asked[2]).toMatch(/^HII /);
+    expect(hit).toMatchObject({ ts: "2026-11-24T12:10:00.000Z", source: "Naval News" });
+  });
+
+  it("counts the scout's own card on the stock as an earlier telling", async () => {
+    const fetchImpl = (async () => new Response("<rss><channel></channel></rss>", { status: 200 })) as unknown as typeof fetch;
+    const known = [{ ts: "2026-11-24T14:30:00Z", headline: "UK awards HII its largest unmanned systems contract; a lift for its drone unit", source: "scout card #357" }];
+    expect(await priorVersion(data, "HII", pr, at, { fetchImpl, company: "Huntington Ingalls Industries, Inc.", judge: false, known })).toMatchObject({ source: "scout card #357" });
+    // A card written after the release, or on something else, does not make it old.
+    expect(await priorVersion(data, "HII", pr, at, { fetchImpl, judge: false, known: [{ ...known[0], ts: "2026-11-24T23:30:00Z" }] })).toBeNull();
+    expect(await priorVersion(data, "HII", pr, at, { fetchImpl, judge: false, known: [{ ts: "2026-11-23T14:30:00Z", headline: "Shipyard strike vote could delay carrier work", source: "scout card #300" }] })).toBeNull();
+  });
+});
+
 import { webReason } from "@/lib/scout/price-watch";
 describe("why a stock moved, from the web when the feeds have nothing", () => {
   it("takes the newest headline about the company in the last day, with its outlet and time", async () => {

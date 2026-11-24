@@ -63,18 +63,32 @@ export function keyWords(h: string, n = 3): string[] {
 
 /**
  * The earlier version of a headline, if there is one. Earlier headlines: the stock's own Alpaca headlines over the
- * 3 days before, plus a Google News search for the company and the headline's key words (it indexes outlets Alpaca
- * does not carry, such as Reuters and MT Newswires, with their real publish times). A word match first; when none,
- * the light model judges whether any earlier headline reports the same event (re-writes often share few words).
+ * 3 days before, Google News searches for the company (it indexes outlets Alpaca does not carry, such as Reuters and
+ * MT Newswires, with their real publish times), and whatever the caller already knows (`known`: the scout's own
+ * recent cards on the stock). A word match first; when none, the light model judges whether any earlier headline
+ * reports the same event (re-writes often share few words).
  */
-export async function priorVersion(data: MarketData, symbol: string, headline: string, publishedAt: string, opts: { fetchImpl?: typeof fetch; company?: string | null; judge?: boolean } = {}): Promise<{ ts: string; headline: string; source: string } | null> {
+export async function priorVersion(data: MarketData, symbol: string, headline: string, publishedAt: string, opts: { fetchImpl?: typeof fetch; company?: string | null; judge?: boolean; known?: Array<{ ts: string; headline: string; source: string }> } = {}): Promise<{ ts: string; headline: string; source: string } | null> {
   const t = Date.parse(publishedAt);
   const own = (await data.getNews([symbol], new Date(t - 3 * 86400_000), new Date(t - 60_000), 50).catch(() => [] as NewsItem[])).map((n) => ({ ts: n.ts, headline: n.headline, source: n.source || "news" }));
   const name = (opts.company ?? "").replace(/,?\s+(inc|corp|corporation|co|ltd|plc|holdings|group|class a|common stock)\b.*$/i, "").trim() || symbol;
   const { googleNews } = await import("./rumor-check");
-  const g = (await googleNews(`${name} ${keyWords(headline).join(" ")}`, opts.fetchImpl).catch(() => []))
-    .filter((x) => Date.parse(x.at) < t - 30 * 60_000 && Date.parse(x.at) > t - 3 * 86400_000).map((x) => ({ ts: x.at, headline: x.headline, source: x.source || "news" }));
-  const earlier = [...own, ...g].filter((e) => Date.parse(e.ts) < t - 30 * 60_000).sort((a, b) => a.ts.localeCompare(b.ts)).slice(0, 30);
+  // Three searches: the headline's own words, then the company by name and by ticker with the two strongest words.
+  // A company's release rarely shares words with the first report ("HII Awarded Largest International Unmanned
+  // Systems Contract" was "UK invests £142m in underwater drones" hours earlier), so the headline's words alone miss it.
+  const queries = [...new Set([`${name} ${keyWords(headline).join(" ")}`, name === symbol ? "" : `"${name}"`, symbol.length >= 3 ? `${symbol} ${keyWords(headline, 2).join(" ")}` : ""].filter(Boolean))];
+  const g: Array<{ ts: string; headline: string; source: string }> = [];
+  for (const query of queries) {
+    for (const x of await googleNews(query, opts.fetchImpl).catch(() => [])) if (Date.parse(x.at) < t - 30 * 60_000 && Date.parse(x.at) > t - 3 * 86400_000) g.push({ ts: x.at, headline: x.headline, source: x.source || "news" });
+  }
+  // What the scout itself already wrote about the stock counts as an earlier telling (a card from this morning on the same contract).
+  const all = [...(opts.known ?? []), ...own, ...g].filter((e) => Date.parse(e.ts) < t - 30 * 60_000);
+  const seen = new Set<string>();
+  const want = stems(headline);
+  const shared = (h: string) => [...stems(h)].filter((w) => want.has(w)).length;
+  // The 30 most alike (then the newest) are kept, and shown oldest first.
+  const earlier = all.filter((e) => { const k = `${e.ts}|${e.headline}`; return seen.has(k) ? false : (seen.add(k), true); })
+    .sort((a, b) => shared(b.headline) - shared(a.headline) || b.ts.localeCompare(a.ts)).slice(0, 30).sort((a, b) => a.ts.localeCompare(b.ts));
   const hit = earlierVersion(headline, publishedAt, earlier);
   if (hit || !earlier.length || opts.judge === false) return hit;
   try {

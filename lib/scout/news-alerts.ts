@@ -78,12 +78,15 @@ export async function runNewsAlerts(deps: { data: MarketData | null; now: Date; 
     const sym = p.symbol;
     const card = cardBy.get(sym);
     // Old news told again: aggregators (fiscal.ai) re-write stories hours later and the feed dates the re-write (MT
-    // Newswires had Nvidia's congressional probe at 6:31 AM on Nov 20; the alert went out at 2:01 PM). Halts and
-    // filings are always fresh; headlines with an earlier version on the same stock in the 3 days before are skipped.
+    // Newswires had Nvidia's congressional probe at 6:31 AM on Nov 20; the alert went out at 2:01 PM), and a company's
+    // own release often follows the first report by hours (HII's UK order, Nov 24). Halts and filings are always
+    // fresh; headlines with an earlier version on the same stock in the 3 days before are skipped.
     if (p.why !== "halt" && p.why !== "filing" && deps.data) {
       const { priorVersion } = await import("./pr-desk");
       const company = (await store.symbolInfo([sym]).catch(() => new Map<string, store.SymbolInfo>())).get(sym)?.name ?? null;
-      if (await priorVersion(deps.data, sym, p.headline, p.ts, { fetchImpl: deps.fetchImpl, company }).catch(() => null)) { stale++; continue; }
+      // The scout's own cards on the stock from the last week count as earlier tellings: a release confirming what a card was written about is not news to you.
+      const known = cards.filter((c) => deps.now.getTime() - Date.parse(c.createdAt) < 7 * 86400_000 && c.card.tickers.some((t) => t.symbol === sym)).map((c) => ({ ts: c.createdAt, headline: c.title, source: `scout card #${c.id}` }));
+      if (await priorVersion(deps.data, sym, p.headline, p.ts, { fetchImpl: deps.fetchImpl, company, known }).catch(() => null)) { stale++; continue; }
     }
     await sendPush({ title: `${p.why === "halt" ? "⛔ HALT" : p.why === "filing" ? "📄 8-K" : p.bigStory ? "🔥" : "📰"} ${sym}${card ? ` · card #${card}` : p.bigStory ? ` · big story (${p.why})` : ""}`, message: `${p.headline}\n${p.source} · ${new Date(p.ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })} ET`, click: p.url.startsWith("http") ? p.url : `${base}/news`, tags: [p.why === "halt" ? "no_entry" : "newspaper"], priority: p.why === "halt" || p.why === "filing" ? 5 : 4 }, env).catch(() => undefined);
   }
