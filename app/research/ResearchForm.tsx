@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { ACCEPT, readFiles, type Step } from "@/lib/files/read-files";
 import { joinParts } from "@/lib/files/unpack";
 import { RESEARCH_DOC, docLabel, withDocument } from "@/lib/scout/research-doc";
+import { typedTickers, type OnFile } from "@/lib/scout/cards-on-file";
 
 /** Research a stock, an idea or an uploaded document. It runs in the background; results appear in the list below. */
 export default function ResearchForm() {
@@ -17,12 +18,24 @@ export default function ResearchForm() {
   const input = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const working = state === "reading" || state === "busy";
+  // The scout's existing cards on what is typed, a beat after the last key: so you see them before researching again.
+  const [onFile, setOnFile] = useState<{ for: string; cards: Record<string, OnFile[]> } | null>(null);
+  const typed = typedTickers(tickers).join(",");
+  useEffect(() => {
+    if (!typed) { setOnFile(null); return; }
+    const timer = setTimeout(async () => {
+      const res = await fetch(`/api/lookup?cards=${encodeURIComponent(typed)}`).catch(() => null);
+      const j = res?.ok ? await res.json().catch(() => null) : null;
+      if (j?.ok) setOnFile({ for: typed, cards: j.cards ?? {} });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [typed]);
 
   const add = (list: FileList | File[] | null) => { if (list?.length) setFiles((old) => [...old, ...Array.from(list)]); };
 
   async function go(e: React.FormEvent) {
     e.preventDefault();
-    const syms = tickers.toUpperCase().split(/[\s,]+/).map((s) => s.replace(/^\$/, "")).filter((s) => /^[A-Z]{1,5}(\.[A-Z])?$/.test(s)).slice(0, 5);
+    const syms = typedTickers(tickers);
     const asked = idea.trim() || (syms.length ? `Research ${syms.join(", ")}: is there a trade here now? What is moving it, what is already priced in, and what is the next catalyst?` : "");
     if (asked.length < 5 && !files.length) return setState({ ok: false, msg: "Type a ticker or an idea, or add a document." });
 
@@ -75,6 +88,30 @@ export default function ResearchForm() {
       <div className="toolbar">
         <input value={tickers} onChange={(e) => setTickers(e.target.value)} placeholder="Ticker(s), e.g. ORCL or ORCL CRWV" aria-label="Tickers" style={{ width: 240, textTransform: "uppercase" }} disabled={working} />
       </div>
+      {onFile && onFile.for === typed && (
+        <div className="small" style={{ marginTop: 8 }}>
+          {typed.split(",").map((sym) => {
+            const cards = onFile.cards[sym] ?? [];
+            return (
+              <div key={sym} style={{ marginBottom: 4 }}>
+                {cards.length === 0 ? <span className="muted">No cards on <b>{sym}</b> yet.</span> : (
+                  <>
+                    <span className="secondary">Already on file for <b>{sym}</b> ({cards.length}):</span>
+                    <ul style={{ margin: "2px 0 0", paddingLeft: 18 }}>
+                      {cards.slice(0, 6).map((c) => (
+                        <li key={c.id}>
+                          <a href={`/cards/${c.id}`}>card #{c.id}</a> <span className={c.direction === "long" ? "pos" : "neg"}>{c.direction === "long" ? "▲ long" : "▼ short"}</span> <span className={`tag ${c.status}`}>{c.status.replace("_", " ")}</span> {c.title} <span className="muted">· {new Date(c.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" })}{c.primary ? "" : ` · ${sym} is one of its other tickers`}</span>
+                        </li>
+                      ))}
+                      {cards.length > 6 && <li className="muted">and {cards.length - 6} older</li>}
+                    </ul>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
       <textarea value={idea} onChange={(e) => setIdea(e.target.value)} onPaste={(e) => { const pasted = [...e.clipboardData.files]; if (pasted.length) { e.preventDefault(); add(pasted); } }} rows={3} placeholder="The idea, in a sentence or two (optional with a ticker or a document): what you noticed, and what you think it means." aria-label="Idea" style={{ width: "100%", marginTop: 8 }} disabled={working} />
       {files.length > 0 && (
         <div className="small" style={{ margin: "6px 0" }}>

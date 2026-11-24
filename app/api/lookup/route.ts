@@ -12,6 +12,14 @@ export async function GET(request: Request) {
   if (!checkBasicAuth(request.headers.get("authorization"))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!hasDatabase()) return NextResponse.json({ ok: false, errors: ["database not connected"] }, { status: 503 });
   const sp = new URL(request.url).searchParams;
+  // ?cards=A,B → the scout's existing cards on those stocks (shown while a ticker is typed on the Research tab).
+  if (sp.has("cards")) {
+    const { cardsBySymbol, typedTickers } = await import("@/lib/scout/cards-on-file");
+    const symbols = typedTickers(sp.get("cards") ?? "");
+    const { cardsOnSymbols } = await import("@/lib/scout/store");
+    const found = await cardsOnSymbols(symbols).catch(() => []);
+    return NextResponse.json({ ok: true, cards: cardsBySymbol(found, symbols) });
+  }
   // ?card=<number> → whether that card exists (the search box goes straight to it).
   if (sp.has("card")) {
     const { cardNumber } = await import("@/lib/scout/card-number");
