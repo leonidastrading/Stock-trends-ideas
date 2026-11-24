@@ -14,8 +14,8 @@ export async function GET(request: Request) {
   const sp = new URL(request.url).searchParams;
   // ?cards=A,B → the scout's existing cards on those stocks (shown while a ticker is typed on the Research tab).
   if (sp.has("cards")) {
-    const { cardsBySymbol, typedTickers } = await import("@/lib/scout/cards-on-file");
-    const symbols = typedTickers(sp.get("cards") ?? "");
+    const { cardsBySymbol, LIST_MAX, typedTickers } = await import("@/lib/scout/cards-on-file");
+    const symbols = typedTickers(sp.get("cards") ?? "", LIST_MAX);
     const { cardsOnSymbols } = await import("@/lib/scout/store");
     const found = await cardsOnSymbols(symbols).catch(() => []);
     return NextResponse.json({ ok: true, cards: cardsBySymbol(found, symbols) });

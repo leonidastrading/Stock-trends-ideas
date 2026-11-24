@@ -5,6 +5,7 @@ import LinkedText from "@/components/LinkedText";
 import { useEffect, useRef, useState } from "react";
 import { chartUrl } from "@/config/links";
 import { cardNumber } from "@/lib/scout/card-number";
+import { tickerList, type OnFile } from "@/lib/scout/cards-on-file";
 import type { Lookup } from "@/lib/scout/lookup";
 
 const cardLink = (id: number) => `/cards/${id}`;
@@ -22,6 +23,8 @@ export default function TickerSearch() {
   const [hi, setHi] = useState(-1);
   const [open, setOpen] = useState(false);
   const typed = useRef("");
+  // A pasted list of tickers: each one's cards, in the order typed.
+  const [list, setList] = useState<{ symbols: string[]; cards: Record<string, OnFile[]> } | null>(null);
 
   // Suggestions as you type (ticker or company name), a beat after the last key.
   useEffect(() => {
@@ -42,7 +45,16 @@ export default function TickerSearch() {
     if (!what) return;
     if (pick || hi >= 0) setQ(what);
     setOpen(false);
-    setBusy(true); setError(null); setResearch("idle"); setNoMatch(null); setTheme("idle");
+    setBusy(true); setError(null); setResearch("idle"); setNoMatch(null); setTheme("idle"); setList(null);
+    // A list of tickers ("AFRM, CAKE, FXI"): every card on each, in one table.
+    const many = pick || hi >= 0 ? null : tickerList(what);
+    if (many) {
+      const found = await fetch(`/api/lookup?cards=${encodeURIComponent(many.join(","))}`).catch(() => null);
+      const j = found?.ok ? await found.json().catch(() => null) : null;
+      setBusy(false); setR(null);
+      if (!j?.ok) return setError("Could not look up that list; try again.");
+      return setList({ symbols: many, cards: j.cards ?? {} });
+    }
     // A card number ("102", "#102") opens that card.
     const card = pick || hi >= 0 ? null : cardNumber(what);
     if (card) {
@@ -92,7 +104,7 @@ export default function TickerSearch() {
               else if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => Math.max(h - 1, -1)); }
               else if (e.key === "Escape") setOpen(false);
             }}
-            placeholder="Ticker, company or card number: NVDA, nvidia, #102…" aria-label="Ticker, company or card number" autoComplete="off" role="combobox" aria-expanded={open && sugs.length > 0} style={{ width: 330 }} />
+            placeholder="Ticker, company, card number or a list: NVDA, nvidia, #102, AFRM, CAKE, FXI…" aria-label="Ticker, company, card number or a list of tickers" autoComplete="off" role="combobox" aria-expanded={open && sugs.length > 0} style={{ width: 440, maxWidth: "100%" }} />
           {open && sugs.length > 0 && (
             <ul className="suggest" role="listbox">
               {sugs.map((s, i) => (
@@ -106,6 +118,24 @@ export default function TickerSearch() {
         <button className="primary" type="submit" disabled={busy || !q.trim()}>{busy ? "…" : "Search"}</button>
         {error && <span className="small neg"><LinkedText text={error} /></span>}
       </form>
+      {list && (
+        <div className="table-wrap" style={{ marginTop: 10 }}><table>
+          <thead><tr><th>Stock</th><th>Cards</th></tr></thead>
+          <tbody>{list.symbols.map((sym) => {
+            const cards = list.cards[sym] ?? [];
+            return (
+              <tr key={sym}>
+                <td><b className="ticker">{sym}</b></td>
+                <td className="small">{cards.length === 0 ? <span className="muted">no cards</span> : cards.slice(0, 8).map((c) => (
+                  <div key={c.id}>
+                    <a href={cardLink(c.id)}>#{c.id}</a> <span className={c.direction === "long" ? "pos" : "neg"}>{c.direction === "long" ? "▲ long" : "▼ short"}</span> <span className={`tag ${c.status}`}>{c.status.replace("_", " ")}</span> {c.title} <span className="muted">· {new Date(c.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" })}{c.primary ? "" : ` · ${sym} is one of its other tickers`}</span>
+                  </div>
+                ))}{cards.length > 8 && <div className="muted">and {cards.length - 8} older</div>}</td>
+              </tr>
+            );
+          })}</tbody>
+        </table></div>
+      )}
       {noMatch && (
         <div className="small" style={{ marginTop: 8 }}>
           <span className="muted">No US-listed stock matches &ldquo;{noMatch}&rdquo; (it may be private or not listed yet). </span>

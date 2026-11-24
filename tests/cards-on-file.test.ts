@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cardsBySymbol, typedTickers, type CardOnFile } from "../lib/scout/cards-on-file";
+import { cardsBySymbol, tickerList, typedTickers, type CardOnFile } from "../lib/scout/cards-on-file";
 
 describe("existing cards shown while a ticker is typed", () => {
   it("reads the tickers out of what was typed", () => {
@@ -8,6 +8,15 @@ describe("existing cards shown while a ticker is typed", () => {
     expect(typedTickers("a b c d e f g")).toHaveLength(5);
     expect(typedTickers("  ")).toEqual([]);
   });
+  it("knows a pasted list of tickers from a single search", () => {
+    expect(tickerList("AFRM, RMIX, APC, CAKE, FXI")).toEqual(["AFRM", "RMIX", "APC", "CAKE", "FXI"]);
+    expect(tickerList("afrm, cake")).toEqual(["AFRM", "CAKE"]); // commas make it a list in any case
+    expect(tickerList("AFRM CAKE FXI HII")).toEqual(["AFRM", "CAKE", "FXI", "HII"]); // three or more, in capitals
+    expect(tickerList("AFRM, $CAKE; fxi")).toEqual(["AFRM", "CAKE", "FXI"]);
+    for (const one of ["NVDA", "nvidia", "#102", "bank of america", "home depot inc", "AFRM CAKE", "Goldman Sachs, the bank", ""]) expect(tickerList(one)).toBeNull();
+    expect(tickerList(Array.from({ length: 60 }, (_, i) => `A${String.fromCharCode(65 + (i % 26))}${String.fromCharCode(65 + Math.floor(i / 26))}`).join(","))).toHaveLength(40);
+  });
+
   it("lists each stock's cards: its own first, newest first; none when there are none", () => {
     const c = (id: number, primaryTicker: string, tickers: string[], createdAt: string): CardOnFile => ({ id, createdAt, status: "promoted", direction: "long", primaryTicker, tickers, title: `card ${id}` });
     const cards = [c(3, "ORCL", ["ORCL", "KGS"], "2026-11-20T00:00:00Z"), c(2, "KGS", ["KGS"], "2026-11-10T00:00:00Z"), c(1, "KGS", ["KGS"], "2026-10-01T00:00:00Z")];

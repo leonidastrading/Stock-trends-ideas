@@ -238,7 +238,7 @@ export async function cardsOnSymbols(symbols: string[], days = 730): Promise<imp
   if (!symbols.length) return [];
   return (await q(`SELECT id, created_at, status, direction, primary_ticker, card->>'title' AS title, ARRAY(SELECT jsonb_array_elements(card->'tickers')->>'symbol') AS tickers FROM cards
     WHERE created_at >= now() - ($2::int * interval '1 day') AND (upper(primary_ticker) = ANY($1) OR EXISTS (SELECT 1 FROM jsonb_array_elements(card->'tickers') t WHERE upper(t->>'symbol') = ANY($1)))
-    ORDER BY created_at DESC LIMIT 60`, [symbols, days]))
+    ORDER BY created_at DESC LIMIT 400`, [symbols, days]))
     .map((r) => ({ id: Number(r.id), createdAt: iso(r.created_at)!, status: String(r.status), direction: r.direction as "long" | "short", primaryTicker: String(r.primary_ticker ?? "").toUpperCase(), tickers: ((r.tickers as string[]) ?? []).map((x) => x.toUpperCase()), title: String(r.title ?? "") }));
 }
 
