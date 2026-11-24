@@ -11,12 +11,20 @@ type Run = { action: string; startedAt: string; detail: unknown };
 
 const cardLink = (id: number) => `/cards/${id}`;
 
+/** A story scan's report (not the note a daily pass leaves when it had no time for the scan). */
+export const isStoriesDetail = (x: unknown): x is StoriesDetail => !!x && typeof x === "object" && Array.isArray((x as { detected?: unknown }).detected) && Array.isArray((x as { triage?: unknown }).triage);
+/** A follow-up pass's report (not a note). */
+export const isFollowupDetail = (x: unknown): x is FollowupDetail => !!x && typeof x === "object" && Array.isArray((x as { checked?: unknown }).checked);
+
 /** The story desk's reports: reaction gaps (follow-ups) and the last story scan. Both folded by default. */
 export default function StoryDesk({ runs, fb, params, spage }: { runs: Run[]; fb: Map<string, FeedbackRow>; params: Record<string, string | undefined>; spage: number }) {
-  const last = runs.find((r) => r.action === "stories" || (r.action === "daily" && (r.detail as { stories?: unknown } | null)?.stories));
-  const d = last ? ((last.action === "stories" ? last.detail : (last.detail as { stories?: StoriesDetail }).stories) as StoriesDetail | null) : null;
-  const daily = runs.find((r) => r.action === "daily" && (r.detail as { followups?: unknown } | null)?.followups);
-  const fu = daily ? ((daily.detail as { followups?: FollowupDetail }).followups ?? null) : null;
+  // A daily pass that had no time for a step records a note ("later: no time left in this pass") in its place: only a real report counts.
+  const scanOf = (r: Run): StoriesDetail | null => { const x = r.action === "stories" ? r.detail : (r.detail as { stories?: unknown } | null)?.stories; return isStoriesDetail(x) ? x : null; };
+  const last = runs.find((r) => (r.action === "stories" || r.action === "daily") && scanOf(r));
+  const d = last ? scanOf(last) : null;
+  const followOf = (r: Run): FollowupDetail | null => { const x = (r.detail as { followups?: unknown } | null)?.followups; return isFollowupDetail(x) ? x : null; };
+  const daily = runs.find((r) => r.action === "daily" && followOf(r));
+  const fu = daily ? followOf(daily) : null;
   const detected = d ? d.detected.slice().sort((a, b) => (b.latest ?? "").localeCompare(a.latest ?? "")) : [];
   const scanPage = paginate(detected, spage, 15);
   return (
