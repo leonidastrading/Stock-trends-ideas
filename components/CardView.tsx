@@ -25,6 +25,7 @@ import * as store from "@/lib/scout/store";
 import type { Feedback as FeedbackRow, StoredCard, StoredReview, Track } from "@/lib/scout/store";
 import { addDays, daysBetween, fmtEtAgo, toEt, dayAgo } from "@/lib/time";
 import { paperResult, vsSpy } from "@/lib/scout/paper-result";
+import { scoreTone } from "@/lib/scout/score-tone";
 import { thesisFor } from "@/lib/scout/thesis";
 
 // One read per page render, shared by every card on it.
@@ -155,8 +156,8 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
         {/* Every score as a percentage (the 0-10 ratings x 10); tap the row for what they mean. "lateness" is shown as "early" (100% = nobody is talking about it yet). */}
         <details className="scores-details">
           <summary className="scores">
-            <span title="How far ahead of consensus">novelty <b>{Math.round(k.scores.novelty * 10)}%</b></span><span title="How much it moves the company's numbers">materiality <b>{Math.round(k.scores.materiality * 10)}%</b></span><span title="How many independent sources back it">evidence <b>{Math.round(k.scores.breadth_of_evidence * 10)}%</b></span>
-            <span title="How early: 100% = nobody is talking about it yet, 0% = everyone is">early <b>{Math.round(k.scores.lateness * 10)}%</b></span><span title="The AI's stated chance the trade beats the S&P 500 over the time limit">confidence <b>{k.confidence}%</b></span><span title="novelty x materiality, used to order cards">rank <b>{Math.round(c.rankScore)}%</b></span>
+            <span title="How far ahead of consensus">novelty <b className={scoreTone(Math.round(k.scores.novelty * 10))}>{Math.round(k.scores.novelty * 10)}%</b></span><span title="How much it moves the company's numbers">materiality <b className={scoreTone(Math.round(k.scores.materiality * 10))}>{Math.round(k.scores.materiality * 10)}%</b></span><span title="How many independent sources back it">evidence <b className={scoreTone(Math.round(k.scores.breadth_of_evidence * 10))}>{Math.round(k.scores.breadth_of_evidence * 10)}%</b></span>
+            <span title="How early: 100% = nobody is talking about it yet, 0% = everyone is">early <b className={scoreTone(Math.round(k.scores.lateness * 10))}>{Math.round(k.scores.lateness * 10)}%</b></span><span title="The AI's stated chance the trade beats the S&P 500 over the time limit">confidence <b className={scoreTone(k.confidence)}>{k.confidence}%</b></span><span title="novelty x materiality, used to order cards">rank <b className={scoreTone(Math.round(c.rankScore), "rank")}>{Math.round(c.rankScore)}%</b></span>
           </summary>
           <ul className="small secondary" style={{ margin: "4px 0 8px", paddingLeft: 18 }}>
             <li><b>Novelty</b>: how far ahead of what most people already think (100% = hardly anyone has this idea).</li>
@@ -166,6 +167,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
             <li><b>Confidence</b>: the AI&apos;s stated chance that the trade beats the S&amp;P 500 within the card&apos;s time limit. The Scoreboard checks whether these chances come true (calibration).</li>
             <li><b>Rank</b>: novelty × materiality, used to sort cards. It ignores confidence and evidence.</li>
             <li>Novelty, materiality, evidence and early are the AI&apos;s own ratings when it writes the card, not measurements.</li>
+            <li>Colours: <b className="pos">green</b> 70% and up, <b className="warn">amber</b> 50 to 69%, <b className="neg">red</b> under 50% (for rank: 50% and up, 30 to 49%, under 30%). Higher is better for every score; these are the same bands as the Ideas page&apos;s filters.</li>
           </ul>
         </details>
       </div>
