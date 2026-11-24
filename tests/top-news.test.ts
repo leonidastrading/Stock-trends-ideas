@@ -122,3 +122,23 @@ describe("one company's news is one story", () => {
     expect([...companiesIn({ headline: "Citigroup Adjusts Price Target on Salesforce", symbols: ["CRM"] }, { TGT: "Target Corporation", CRM: "Salesforce, Inc." })]).toEqual(["CRM"]);
   });
 });
+
+describe("yesterday's news on a company and today's are two stories", () => {
+  it("Nov 24 2026: Monday's Huang piece does not swallow Tuesday's Nvidia fall", async () => {
+    const { oneStoryEach } = await import("@/lib/scout/top-news");
+    const names = { NVDA: "NVIDIA Corporation Common Stock" };
+    const picks = [
+      { headline: "Nvidia stock cools after Huang’s return-driven surge as AI selloff resumes", symbols: ["NVDA"], at: "2026-11-24T15:47:00Z" },
+      { headline: "NVDA down 9.1% today: chip stocks slide", symbols: ["NVDA"], at: "2026-11-24T14:35:00Z" },
+      { headline: "Jensen Huang cheered by Nvidia employees after return, pledges to be a better CEO", symbols: [] as string[], at: "2026-11-23T20:57:00Z" },
+      { headline: "Consumer confidence jumps to 103.3, the highest since January 2025", symbols: [], at: "2026-11-24T15:00:00Z" },
+    ];
+    // Today's two Nvidia items are one story, and Monday's colour piece on the same saga folds into it; the data release stands alone.
+    expect(oneStoryEach(picks, names).map((p) => p.headline.slice(0, 14))).toEqual(["Nvidia stock c", "Consumer confi"]);
+    // Even when Monday's piece is ranked first, the newer headline is the one shown, in its place.
+    expect(oneStoryEach([picks[2], picks[3], picks[0], picks[1]], names).map((p) => p.headline.slice(0, 14))).toEqual(["Nvidia stock c", "Consumer confi"]);
+    // A different event on the same company a day later (no shared wording) stays separate.
+    const later = [{ headline: "Nvidia reinstates Jensen Huang as CEO", symbols: ["NVDA"], at: "2026-11-23T13:56:00Z" }, { headline: "NVDA down 9.1% today: chip stocks slide", symbols: ["NVDA"], at: "2026-11-24T14:35:00Z" }];
+    expect(oneStoryEach(later, names)).toHaveLength(2);
+  });
+});

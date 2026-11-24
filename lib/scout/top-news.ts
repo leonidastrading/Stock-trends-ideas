@@ -16,7 +16,7 @@ import { toEt } from "../time";
 import { getText } from "../http";
 export { TOP_NEWS_PROMPT, TOP_NEWS_SCHEMA } from "./top-news-prompt";
 
-export const TOP_NEWS = { candidates: 70, fromFeed: 50, general: 45, picks: 10, everyMin: 30, maxAgeH: 3 };
+export const TOP_NEWS = { candidates: 70, fromFeed: 50, general: 90, picks: 10, everyMin: 30, maxAgeH: 3, /** Two items on one company this many hours apart are different stories (yesterday's rally, today's fall). */ sameCompanyH: 12 };
 
 /** Law firms' class-action ads ("investors have opportunity to lead… lawsuit"): never top news. */
 export const CLASS_ACTION_AD = /\b(securities fraud lawsuit|class action (lawsuit )?(has been )?filed (on behalf|against)|announces .{0,30}class action|encourages .{0,30}investors|investors? (have|has|who) .{0,40}(opportunity|lead|contact)|shareholder alert|investor alert|investor notice|discuss your rights|law group|contact the .{0,40}(law|attorney|firm)|sued for securities law violations|rosen law|pomerantz|levi & korsinsky|bragar|bronstein|faruqi|glancy|kessler topaz|schall law|sbs law|robbins geller|reminds investors|deadline alert)\b/i;
@@ -81,15 +81,21 @@ export function companiesIn(i: { headline: string; symbols?: string[] }, names: 
 /**
  * Pure: one item per story, keeping the first. A later item is the same story when its headline matches any headline
  * already folded into a kept one (so the market-reaction piece is caught through the reaction it shares words with),
- * or when it is about a company a kept one is about: the report, the filing, the price move and the market's reaction
- * to one company's news are one story. `names` (ticker → company name) lets a headline that only names the company count.
+ * or when it is about a company a kept one is about and was published within half a day of it: the report, the
+ * filing, the price move and the market's reaction to one company's news are one story, but yesterday's rally and
+ * today's fall are two. When headlines do match across that gap (a saga), the newer one is the one kept. `names` (ticker → company name) lets a headline that only names the company count.
  */
-export function oneStoryEach<T extends { headline: string; symbols?: string[] }>(items: T[], names: Record<string, string> = {}): T[] {
+export function oneStoryEach<T extends { headline: string; symbols?: string[]; at?: string }>(items: T[], names: Record<string, string> = {}): T[] {
   const groups: Array<{ keep: T; heads: string[]; cos: Set<string> }> = [];
+  const near = (a: T, b: T) => !a.at || !b.at || Math.abs(Date.parse(a.at) - Date.parse(b.at)) <= TOP_NEWS.sameCompanyH * 3600_000;
   for (const i of items) {
     const cos = companiesIn(i, names);
-    const g = groups.find((x) => x.heads.some((h) => sameStory(h, i.headline)) || [...cos].some((c) => x.cos.has(c)));
-    if (g) { g.heads.push(i.headline); for (const c of cos) g.cos.add(c); } else groups.push({ keep: i, heads: [i.headline], cos });
+    const g = groups.find((x) => x.heads.some((h) => sameStory(h, i.headline)) || (near(x.keep, i) && [...cos].some((c) => x.cos.has(c))));
+    if (g) {
+      g.heads.push(i.headline); for (const c of cos) g.cos.add(c);
+      // The same story, but much newer: it has moved on, so the newer headline takes the older one's place.
+      if (i.at && g.keep.at && Date.parse(i.at) - Date.parse(g.keep.at) > TOP_NEWS.sameCompanyH * 3600_000) g.keep = i;
+    } else groups.push({ keep: i, heads: [i.headline], cos });
   }
   return groups.map((g) => g.keep);
 }
@@ -190,7 +196,7 @@ export async function runTopNews(deps: ResearchDeps): Promise<string> {
   if (cands.length < 3) return "top news: too few stories";
   const today = toEt(deps.now).date;
   if ((await store.spendOn(today)).cost >= (await store.loadSettings()).dailyCapUsd) return "top news: daily AI cap reached (rules ranking shown)";
-  const r = await deps.callModel({ model: LIGHT_MODEL, effort: "low", purpose: "top_news", user: `Now: ${deps.now.toISOString()}\n\n${promptList(cands)}\n\nReply with the JSON object.` });
+  const r = await deps.callModel({ model: LIGHT_MODEL, effort: "medium", purpose: "top_news", user: `Now: ${deps.now.toISOString()}\n\n${promptList(cands)}\n\nReply with the JSON object.` });
   await store.logLlmCall({ etDate: today, model: LIGHT_MODEL, purpose: "top_news", usage: r.usage, costUsd: r.costUsd, ok: true });
   // Company names for the tickers in play, so "Nvidia reinstates its CEO" and "NVDA up 30%" count as one story.
   const names = await namesFor(cands.flatMap((c) => c.symbols));
