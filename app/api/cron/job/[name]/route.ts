@@ -29,8 +29,16 @@ export async function GET(request: Request, ctx: { params: Promise<{ name: strin
       case "sttrending": result = await import("@/lib/scout/st-trending").then(({ runStTrending }) => runStTrending({ data: deps.data ?? null, now: deps.now })); break;
       case "listings": result = await import("@/lib/scout/listing-wait").then(({ runListingWatch }) => runListingWatch(deps.data ?? null, deps.now)); break;
       case "petitions": result = await import("@/lib/scout/petitions").then(({ runPetitionWatch }) => runPetitionWatch(deps.env, deps.now)); break;
+      case "ratingstudy": {
+        const r = await import("@/lib/scout/rating-study").then(({ runRatingStudy }) => runRatingStudy(deps.data ?? null));
+        result = r.line;
+        // Not finished: the next pass starts at once, in its own 5 minutes (day or night), until the history is read.
+        if (r.more) await import("@/lib/scout/jobs").then(({ startJob }) => startJob(new URL(request.url).origin, "/api/cron/job/ratingstudy", "lock:job:ratingstudy:next", 1)).catch(() => undefined);
+        break;
+      }
     }
-    console.log(result!);
+    // The finished study answers every 5 minutes: not worth a log line each time.
+    if (result! !== "rating study: done") console.log(result!);
     return NextResponse.json({ status: "ok", result: result! });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

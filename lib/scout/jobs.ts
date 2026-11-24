@@ -15,6 +15,7 @@ export const JOBS = {
   sttrending: { everyMin: 10, about: "Stocktwits' trending ten at 9 AM and 3 PM ET" },
   listings: { everyMin: 180, about: "cards written before their stock listed (IPOs): start the paper track once it trades" },
   petitions: { everyMin: 360, about: "FDA citizen petitions on regulations.gov (short sellers' weekly)" },
+  ratingstudy: { everyMin: 5, about: "the downgrade study (2019 to mid-2025): reads the news history in 4-minute passes until done, then does nothing" },
 } as const;
 export type JobName = keyof typeof JOBS;
 

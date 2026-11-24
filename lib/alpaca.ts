@@ -241,6 +241,16 @@ export class AlpacaClient {
     return out;
   }
 
+  /** One page (50) of news for these symbols in [start, end], oldest first, with the token for the next page: for long historical reads that are paced and resumed. */
+  async getNewsPage(symbols: string[], start: Date, end: Date, pageToken?: string | null): Promise<{ items: NewsItem[]; next: string | null }> {
+    const resp = await this.get<{ news: Array<{ id: number; headline: string; summary?: string; created_at: string; symbols?: string[]; source?: string; url?: string }> | null; next_page_token?: string | null }>(
+      DATA_HOST, "/v1beta1/news",
+      { start: start.toISOString(), end: end.toISOString(), symbols: symbols.join(","), sort: "asc", include_content: false, exclude_contentless: false, limit: 50, page_token: pageToken ?? undefined },
+    );
+    const items = (resp.news ?? []).map((n) => ({ id: n.id, ts: new Date(n.created_at).toISOString(), headline: decodeEntities(n.headline ?? ""), summary: "", symbols: n.symbols ?? [], source: n.source ?? "", url: n.url ?? "" }));
+    return { items, next: resp.next_page_token ?? null };
+  }
+
   /** Option contract snapshots (market data only) for one underlying: contract symbol → implied volatility. Free accounts get the 15-minute-delayed indicative feed. */
   async getOptionSnapshots(underlying: string, q: { type?: "call" | "put"; strikeGte?: number; strikeLte?: number; expiryGte?: string; expiryLte?: string }): Promise<Record<string, { impliedVolatility?: number | null }>> {
     const out: Record<string, { impliedVolatility?: number | null }> = {};
@@ -321,12 +331,14 @@ export class AlpacaClient {
   }
 }
 
-export interface BarOptions { feed?: "iex" | "sip"; adjustment?: "split" | "raw" }
+export interface BarOptions { feed?: "iex" | "sip"; adjustment?: "split" | "raw" | "all" }
 
 /** Market-data interface the scout depends on; tests supply a fake. */
 export interface MarketData {
   getDailyBars(symbols: readonly string[], start: string, end: string, opts?: BarOptions): Promise<DailyBar[]>;
   getNews(symbols: string[], start: Date, end: Date, max?: number): Promise<NewsItem[]>;
+  /** Optional: one page of news, oldest first, with the next page's token (long historical reads). */
+  getNewsPage?(symbols: string[], start: Date, end: Date, pageToken?: string | null): Promise<{ items: NewsItem[]; next: string | null }>;
   /** Optional: one stock's 1-minute bars (market data only). */
   getMinuteBars?(symbol: string, start: Date, end: Date): Promise<MinuteBar[]>;
   getCalendar(start: string, end: string): Promise<Session[]>;

@@ -8,6 +8,10 @@ import * as store from "@/lib/scout/store";
 import { etLabelAgo, dayAgo } from "@/lib/time";
 import DriftResearch from "./DriftResearch";
 import DriftBook from "./DriftBook";
+import RatingStudy from "./RatingStudy";
+import { studyEvents, studyState, type StudyEvent } from "@/lib/scout/rating-study";
+import { after } from "next/server";
+import { headers } from "next/headers";
 import StockChart from "@/components/StockChart";
 import { tvSymbol } from "@/config/links";
 
@@ -28,6 +32,12 @@ export default async function DriftPage({ searchParams }: { searchParams: Promis
     store.candidatesSince(365), store.cardsSince(365),
   ]);
   const tracks = await store.allTracks().catch(() => [] as store.Track[]);
+  // The downgrade look-back: its progress and results; a visit starts (or restarts) it when no pass ran in the last 7 minutes.
+  const [study, studyRows] = await Promise.all([studyState(), studyEvents().catch(() => [] as StudyEvent[])]);
+  const host = (await headers()).get("host");
+  if (host && data && !study?.done && (!study || Date.now() - Date.parse(study.updatedAt) > 7 * 60_000)) {
+    after(() => import("@/lib/scout/jobs").then(({ startJob }) => startJob(`https://${host}`, "/api/cron/job/ratingstudy", "lock:job:ratingstudy:next", 1)).catch(() => undefined));
+  }
   const cardById = new Map(cards.map((c) => [c.id, c]));
   // The desk's cards, by stock (newest first).
   const bySym = new Map<string, Array<{ id: number; status: string }>>();
@@ -98,6 +108,7 @@ export default async function DriftPage({ searchParams }: { searchParams: Promis
           </section>
         );
       })}
+      <RatingStudy state={study} events={studyRows} />
       <DriftBook cards={cards.filter((c) => cands.some((x) => x.cardId === c.id && x.term.startsWith("drift: ")))} tracks={tracks} data={data} downgradeIds={cands.filter((x) => x.cardId && x.term.startsWith("drift: ") && /\bdowngrade\b/.test(x.term)).map((x) => x.cardId!)} />
     </>
   );

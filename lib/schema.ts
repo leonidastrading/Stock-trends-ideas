@@ -708,6 +708,21 @@ CREATE TABLE IF NOT EXISTS evidence_archive (
   saved_at timestamptz,
   attempts integer NOT NULL DEFAULT 0
 );
+-- The analyst rating-change study (2019 to mid-2025): one row per headline, with what the stock did after against SPY.
+CREATE TABLE IF NOT EXISTS rating_study_events (
+  symbol text NOT NULL,
+  day date NOT NULL,
+  kind text NOT NULL,
+  broker text NOT NULL,
+  strength text NOT NULL,
+  top_broker boolean NOT NULL DEFAULT false,
+  headline text NOT NULL,
+  news_at timestamptz NOT NULL,
+  reaction double precision,
+  x5 double precision, x10 double precision, x20 double precision, x60 double precision,
+  o20 double precision, o60 double precision,
+  PRIMARY KEY (symbol, day, kind, broker)
+);
 -- Market cap and short interest per card, frozen once, for splitting results by size and by short interest.
 CREATE TABLE IF NOT EXISTS card_profiles (
   card_id integer PRIMARY KEY,
