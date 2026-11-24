@@ -8,6 +8,10 @@ import * as store from "@/lib/scout/store";
 import { daysBetween, fmtEtAgo, toEt } from "@/lib/time";
 import ResearchButton from "@/components/ResearchButton";
 import CardChips from "@/components/CardChips";
+import { panelVoteLabel } from "@/lib/sources/panel-vote";
+import { panelStudy } from "@/lib/scout/panel-study";
+import { mismatch, panelNoteText, panelWatch, type PanelNote } from "@/lib/scout/panel-watch";
+import PanelStudy from "./PanelStudy";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -21,6 +25,20 @@ const fmtMonth = (m: string) => new Date(`${m}-15T12:00:00Z`).toLocaleDateString
 const HISTORY_FDA = "No edge from the stock alone: in our test of 675 FDA decisions (2016-2026, against the biotech ETF XBI), buying when the date became public and selling the day before averaged −0.3% (small caps −4.2%), and holding through the decision was a coin flip (about 80% approvals at +2% against rejections at −7%). The whole reaction happens on the day, mostly in the opening gap, and approvals in small caps tended to fade about 11% over the next three months.";
 const HISTORY_TRIALS = "Holding a small biotech through a trial readout lost money in our test: only about 44% of small-cap readouts were positive (+17% on the day) against failures at −30%, about −9% per trade. Buying after a positive readout did not pay either: the move is done on day one and tended to fade.";
 const BRIEF_RULES = `What our own tests found, to weigh before proposing anything: ${HISTORY_FDA} The one edge left is in options, which are usually overpriced before a binary FDA date; say so where it applies, but cards are tracked in shares. So do not promote buying the stock just because a decision is coming, and do not promote holding a small cap through the event; promote only when there is a reason beyond the event itself (a mispriced business either way, a forced seller, the market ignoring a known outcome), and say plainly when the right answer is no trade.`;
+
+/** The advisory panel's vote on a pending decision, from the company's latest 10-Q or 10-K, with the crowd beside it. */
+function PanelChip({ n }: { n: PanelNote | undefined }) {
+  if (!n?.vote) return null;
+  const m = mismatch(n);
+  return (
+    <div style={{ marginTop: 3 }}>
+      <span className={`tag ${n.vote.side === "negative" ? "error" : n.vote.side === "positive" ? "ok" : "late"}`} title={n.vote.sentence}>Panel voted {panelVoteLabel(n.vote)}{n.vote.said ? `, ${new Date(`${n.vote.said}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}` : ""}</span>
+      {n.bullishPct !== null ? <span className="muted"> · crowd {n.bullishPct}% bullish</span> : null}
+      {n.filing ? <> · <a href={n.filing.url} target="_blank" rel="noreferrer">{n.filing.form} {n.filing.filed}</a></> : null}
+      {m ? <div className="warn"><b>⚠ Mismatch:</b> {m}.</div> : null}
+    </div>
+  );
+}
 
 const decided = (e: FdaEvent) => !/^pending$/i.test(e.outcome.trim());
 
@@ -62,6 +80,8 @@ export default async function PharmaPage() {
     ua ? panel<TrialReadout[]>("pharma:trials", 24 * 60, async () => fetchTrialReadouts(today, await secTickerList(ua)), 25_000) : Promise.resolve({ data: null, updatedAt: null, error: "SEC_USER_AGENT is not set" }),
     store.cardBriefsSince(180).catch(() => [] as store.CardBrief[]),
   ]);
+  const [study, watch] = await Promise.all([panelStudy(), panelWatch()]);
+  const panelOn = (sym: string | null) => (sym ? watch.notes[sym] : undefined);
   const cardsOn = (sym: string | null) => (sym ? briefs.filter((c) => c.primaryTicker === sym || c.tickers.includes(sym)) : []);
 
   // Upcoming: an exact date from today on, or a month-only date from this month on; decided ones from the last week too.
@@ -84,7 +104,7 @@ export default async function PharmaPage() {
       <section className="card section">
         <h2>FDA decisions</h2>
         <div className="history-note small"><b>What history says:</b> {HISTORY_FDA} The one edge left is in options, which tend to be overpriced before decision dates.</div>
-        <p className="small muted">{upcoming.length} upcoming{withCards ? `, ${withCards} on stocks with a scout card` : ""}. From RTTNews&apos; FDA calendar{fda.updatedAt ? `, read ${fmtEtAgo(fda.updatedAt)}` : ""}; some dates are given only as a month or quarter.{fda.error && !fda.data ? <span className="warn"> Could not read the calendar: {fda.error}</span> : null}</p>
+        <p className="small muted">{upcoming.length} upcoming{withCards ? `, ${withCards} on stocks with a scout card` : ""}{(() => { const v = upcoming.filter((e) => !decided(e) && panelOn(e.symbol)?.vote).length; const read = upcoming.filter((e) => !decided(e) && panelOn(e.symbol)).length; return read ? `, ${v} with an advisory panel vote on file (${read} companies' latest reports read${watch.at ? `, ${fmtEtAgo(watch.at)}` : ""})` : ""; })()}. From RTTNews&apos; FDA calendar{fda.updatedAt ? `, read ${fmtEtAgo(fda.updatedAt)}` : ""}; some dates are given only as a month or quarter.{fda.error && !fda.data ? <span className="warn"> Could not read the calendar: {fda.error}</span> : null}</p>
         {[...byMonth.entries()].map(([m, evs]) => (
           <div key={m} style={{ marginTop: 10 }}>
             <h3 style={{ margin: "6px 0" }}>{fmtMonth(m)}</h3>
@@ -97,8 +117,8 @@ export default async function PharmaPage() {
                   <tr key={`${e.company}-${e.drug}-${i}`} className={cards.length ? "pharma-has-card" : ""}>
                     <td className="small" style={{ whiteSpace: "nowrap" }}>{e.date ? <><b>{fmtDay(e.date)}</b><div className="muted">{days === 0 ? "today" : days! > 0 ? `in ${days} days` : `${-days!} days ago`}</div></> : <><b>{e.when}</b><div className="muted">date not exact</div></>}</td>
                     <td>{e.symbol ? <Ticker symbol={e.symbol} /> : null} <span className="small">{e.company}</span>{e.otherSymbols.length ? <div className="small muted">{e.otherSymbols.join(", ")}</div> : null}</td>
-                    <td className="small"><b>{e.drug}</b> · {e.event}{e.status ? <> <span className="tag">{e.status}</span></> : null}{decided(e) ? <div className={/declin|reject|complete response|\bCRL\b|not approv/i.test(e.outcome) ? "neg" : /approv/i.test(e.outcome) ? "pos" : "warn"}>{e.outcome}</div> : null}{e.note ? <details><summary className="muted">review history</summary>{e.note}</details> : null}{e.detailUrl ? <> <a href={e.detailUrl} target="_blank" rel="noreferrer">details</a></> : null}</td>
-                    <td className="small">{cards.length ? <CardChips cards={cards} /> : e.symbol && !decided(e) ? <ResearchButton from={{ label: "Pharma", url: e.detailUrl ?? "/pharma" }} symbol={e.symbol} term={`${e.symbol} FDA ${e.when}: ${e.drug}`.slice(0, 80)} observation={`Upcoming FDA catalyst: ${e.company} (${e.symbol}), ${e.drug}. ${e.event}. Expected ${e.when}${e.status ? `; ${e.status.trim()}` : ""}. Research whether there is a trade into or around this decision: what the market already prices (the stock's move, options-implied move), the approval odds from the data and the FDA's history in this indication, the size of the drug for this company, and what happens on approval versus a rejection or delay. ${BRIEF_RULES}`} /> : <span className="muted">—</span>}</td>
+                    <td className="small"><b>{e.drug}</b> · {e.event}{e.status ? <> <span className="tag">{e.status}</span></> : null}{decided(e) ? <div className={/declin|reject|complete response|\bCRL\b|not approv/i.test(e.outcome) ? "neg" : /approv/i.test(e.outcome) ? "pos" : "warn"}>{e.outcome}</div> : null}{e.note ? <details><summary className="muted">review history</summary>{e.note}</details> : null}{e.detailUrl ? <> <a href={e.detailUrl} target="_blank" rel="noreferrer">details</a></> : null}{decided(e) ? null : <PanelChip n={panelOn(e.symbol)} />}</td>
+                    <td className="small">{cards.length ? <CardChips cards={cards} /> : e.symbol && !decided(e) ? <ResearchButton from={{ label: "Pharma", url: e.detailUrl ?? "/pharma" }} symbol={e.symbol} term={`${e.symbol} FDA ${e.when}: ${e.drug}`.slice(0, 80)} observation={`Upcoming FDA catalyst: ${e.company} (${e.symbol}), ${e.drug}. ${e.event}. Expected ${e.when}${e.status ? `; ${e.status.trim()}` : ""}. Research whether there is a trade into or around this decision: what the market already prices (the stock's move, options-implied move), the approval odds from the data and the FDA's history in this indication, the size of the drug for this company, and what happens on approval versus a rejection or delay. ${(() => { const n = panelOn(e.symbol); const t = n ? panelNoteText(n) : null; return t ? `${t} ` : ""; })()}${BRIEF_RULES}`} /> : <span className="muted">—</span>}</td>
                   </tr>
                 );
               })}</tbody>
@@ -107,6 +127,8 @@ export default async function PharmaPage() {
         ))}
         {upcoming.length === 0 && <p className="small muted">No upcoming FDA dates on file{fda.error ? "" : " yet"}.</p>}
       </section>
+
+      <PanelStudy state={study} />
 
       <section className="card section">
         <details open={readouts.length <= 40}>
