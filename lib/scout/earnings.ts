@@ -22,7 +22,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { query as q } from "../db";
 import type { DailyBar, MarketData, NewsItem } from "../alpaca";
-import { calendarDay, DEFENSIVE, finnhubRevenue, pressRelease, sectorOf, type EarningsReport, type Timing } from "../sources/earnings-data";
+import { calendarDay, DEFENSIVE, finnhubRevenue, pressRelease, revenueFallback, sectorOf, type EarningsReport, type Timing } from "../sources/earnings-data";
 import { addDays, toEt } from "../time";
 import type { CallModel } from "./llm";
 import * as store from "./store";
@@ -69,6 +69,8 @@ export interface Numbers {
   consensus_captured_at: string | null;
   surprise: number; surprise_pct_rank: number | null; rank_basis: number;
   revenue_actual: number | null; revenue_consensus: number | null; revenue_surprise_pct: number | null; revenue_beat: boolean | null;
+  /** Where the revenue figures came from (and whether the consensus was frozen before the report or read after it). */
+  revenue_source?: string;
   reaction_pct: number; volume_ratio: number | null;
   runup_10d_pct: number | null; runup_pct_rank: number | null;
   days_after_quarter_end: number | null;
@@ -190,7 +192,7 @@ const aiSchema = z.object({
 });
 
 /** The rules, prompt, reply format and data conventions, hashed: changing any of them starts a new version. */
-export const EARN_VERSION = createHash("sha256").update(JSON.stringify({ EARN, EARN_PROMPT, EARN_SCHEMA, data: "nasdaq-calendar+snapshot-consensus+finnhub-revenue+sec-8k", conventions: "entry next open; ranks all sectors; volume filter on A" })).digest("hex").slice(0, 10);
+export const EARN_VERSION = createHash("sha256").update(JSON.stringify({ EARN, EARN_PROMPT, EARN_SCHEMA, data: "nasdaq-calendar+snapshot-consensus+finnhub-revenue+fmp-revenue+sec-8k-6k; surprise explained to the model", conventions: "entry next open; ranks all sectors; volume filter on A" })).digest("hex").slice(0, 10);
 
 export interface EarnCard {
   ticker: string; setup: Setup; report_date: string; timing: Timing; numbers: Numbers;
@@ -208,7 +210,7 @@ export function toCard(reply: string, s: { symbol: string; setup: Setup; reportD
     next_earnings_date: s.nextKnown && s.nextReport ? s.nextReport : "unknown",
     exit_plan: s.exitDate ? `close of ${s.exitDate}, ${s.nextKnown ? "the day before next earnings" : "60 trading days or the day before the expected next report"}` : "unknown",
     ai_recommendation: promote ? "promote" : "log_only", confidence: Math.max(0, Math.min(100, Math.round(a.confidence))),
-    unknowns: [...a.unknowns, ...(s.numbers.revenue_actual === null || s.numbers.revenue_consensus === null ? ["revenue vs consensus (no FINNHUB_API_KEY, or not in the snapshot)"] : []), ...(s.numbers.sector === null ? ["sector"] : [])],
+    unknowns: [...a.unknowns, ...(s.numbers.revenue_actual === null || s.numbers.revenue_consensus === null ? ["revenue vs consensus (not in Finnhub or Financial Modeling Prep)"] : []), ...(s.numbers.sector === null ? ["sector"] : [])],
   };
 }
 
@@ -378,7 +380,7 @@ export async function scanEarnings(data: MarketData, now: Date, fetchImpl?: type
   const capOf = (r: EarningsReport) => snaps.get(`${r.symbol}|${r.reportDate}`)?.marketCap ?? r.marketCap;
   const fresh = reports.filter((r) => { const c = capOf(r); return !done.has(`${r.symbol}|${r.reportDate}`) && c !== null && c >= EARN.minCap && c < EARN.maxCap && r.epsActual !== null; });
   if (!fresh.length) return out;
-  const revenue = await finnhubRevenue(prev, today, env, fetchImpl ?? fetch).catch(() => null);
+  const revenue = await finnhubRevenue(prev, today, env, fetchImpl ?? fetch).catch((err) => { console.warn(`earnings: Finnhub revenue calendar failed: ${err instanceof Error ? err.message : String(err)}`); return null; });
   const bars = await data.getDailyBars(["SPY", ...fresh.map((r) => r.symbol)], addDays(today, -45), today);
   const by = new Map<string, DailyBar[]>();
   for (const b of bars) by.set(b.symbol, [...(by.get(b.symbol) ?? []), b]);
@@ -420,6 +422,21 @@ export async function scanEarnings(data: MarketData, now: Date, fetchImpl?: type
     // Sector only for reports that could be a setup (one request each, cached per stock).
     const maybe = (n.surprise_pct_rank ?? 0) >= EARN.topRank || Math.abs(n.reaction_pct) > EARN.gapPct;
     if (maybe && n.consensus_source === "snapshot") n.sector = await sector(r.symbol, fetchImpl);
+    if (n.revenue_actual !== null && n.revenue_consensus !== null) n.revenue_source = "Finnhub (consensus frozen before the report)";
+    else if (maybe) {
+      // A possible setup the calendar call had no revenue for: ask by symbol (Finnhub, then Financial Modeling Prep).
+      const fb = await revenueFallback(r.symbol, r.reportDate, env, fetchImpl ?? fetch);
+      if (fb) {
+        const frozen = n.revenue_consensus !== null;
+        n.revenue_actual ??= fb.revenueActual;
+        n.revenue_consensus ??= fb.revenueEstimate;
+        if (n.revenue_actual !== null && n.revenue_consensus !== null) {
+          n.revenue_surprise_pct = r2((n.revenue_actual / n.revenue_consensus - 1) * 100);
+          n.revenue_beat = n.revenue_actual > n.revenue_consensus;
+        }
+        n.revenue_source = `${fb.source} (${frozen ? "consensus frozen before the report" : "consensus as published after the report"})`;
+      }
+    }
     const { setup, reason } = classify(n);
     const row = (await q(`INSERT INTO earnings_scans (version, symbol, report_date, reaction_date, timing, setup, reason, numbers) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (symbol, report_date) DO NOTHING RETURNING id`,
       [EARN_VERSION, r.symbol, r.reportDate, today, snap?.timing ?? r.timing, setup, reason, JSON.stringify(n)]))[0];
@@ -555,7 +572,7 @@ export async function writeCards(deps: { data: MarketData | null; callModel: Cal
     const docs = await gatherDocs(s, day(w.entry_date)!, deps);
     const user = [
       `Ticker ${s.symbol}, setup ${s.setup}, reported ${s.reportDate} (${s.timing.replace("_", " ")}).`,
-      `NUMBERS (from the data feed; do not change): ${JSON.stringify(s.numbers)}`,
+      `NUMBERS (from the data feed; do not change; "surprise" is (actual EPS − consensus EPS) ÷ the share price before the report, not a percent of consensus): ${JSON.stringify(s.numbers)}`,
       docs.pressText ? `PRESS RELEASE (${docs.pressUrl}):\n${docs.pressText}` : "PRESS RELEASE: not found.",
       docs.headlines.length ? `HEADLINES (published before the paper entry):\n${docs.headlines.map((h) => `- ${h.at.slice(0, 10)} ${h.headline}`).join("\n")}` : "HEADLINES: none before the paper entry.",
       "Reply with the JSON object.",

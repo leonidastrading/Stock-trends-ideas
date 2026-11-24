@@ -66,7 +66,7 @@ describe("earnings setups", () => {
     expect(toCard(reply({}), s)).toMatchObject({ ai_recommendation: "promote", numbers: base, next_earnings_date: "unknown" });
     expect(toCard(reply({ guidance: "cut" }), s).ai_recommendation).toBe("log_only");
     expect(toCard(reply({ beat_quality: "low" }), s).ai_recommendation).toBe("log_only");
-    expect(toCard(reply({}), s).unknowns).toContain("revenue vs consensus (no FINNHUB_API_KEY, or not in the snapshot)");
+    expect(toCard(reply({}), s).unknowns).toContain("revenue vs consensus (not in Finnhub or Financial Modeling Prep)");
   });
 
   it("benchmarks each report against the other reports in its size group and week; t-stat clustered by week", () => {
