@@ -44,3 +44,35 @@ describe("still valid? re-check", () => {
     expect(RECHECK_SCHEMA.properties.verdict.enum).toEqual(["still_valid", "weakened", "played_out", "invalidated", "expired", "unclear"]);
   });
 });
+
+describe("a check that is started and left", () => {
+  it("counts as running for a few minutes, then as never finished", async () => {
+    const { stillRunning, recheckError } = await import("@/lib/scout/recheck");
+    const now = new Date("2026-11-24T18:00:00Z");
+    expect(stillRunning("2026-11-24T17:59:10Z", now)).toBe(true);
+    expect(stillRunning("2026-11-24T17:50:00Z", now)).toBe(false);
+    expect(stillRunning(null, now)).toBe(false);
+    expect(recheckError("capped")).toMatch(/AI budget is spent/);
+    expect(recheckError("boom")).toBe("the check failed: boom");
+  });
+
+  it("keeps where the check stands: running while it runs, and the reason when it fails (PGlite)", async () => {
+    const { PGlite } = await import("@electric-sql/pglite");
+    const { setQuerierForTests } = await import("@/lib/db");
+    const { recheckStatus, runRecheck } = await import("@/lib/scout/recheck");
+    const pg = new PGlite();
+    setQuerierForTests({ query: async (text, params) => (await pg.query(text, params as unknown[])).rows as Record<string, unknown>[] });
+    try {
+      expect(await recheckStatus(999)).toEqual({ recheck: null, runningSince: null, error: null });
+      // No such card: the run ends, leaves no "running" marker, and the reason is kept for the card to show.
+      await runRecheck(999, { data: null, callModel: async () => { throw new Error("not reached"); }, now: new Date() });
+      expect(await recheckStatus(999)).toEqual({ recheck: null, runningSince: null, error: "card not found" });
+      // A marker from a check in progress shows as running; an old one does not.
+      await pg.query(`INSERT INTO dashboard_cache (key, data, updated_at) VALUES ('recheck:pending:7', $1, now())`, [JSON.stringify({ at: new Date().toISOString() })]);
+      expect((await recheckStatus(7)).runningSince).not.toBeNull();
+      expect((await recheckStatus(7, new Date(Date.now() + 10 * 60_000))).runningSince).toBeNull();
+    } finally {
+      setQuerierForTests(null);
+    }
+  });
+});

@@ -46,7 +46,7 @@ export default async function CardSignals({ cardId, symbol }: { cardId: number; 
   if (!c?.entry && !c?.latest && !cv && !d && !sites.length && !rc && !web.length && !saved.some((x) => x.archiveUrl)) return null;
   return (
     <>
-      {rc && <><dt>Still valid?</dt><dd className="small">
+      {rc && <><dt id={`valid-${cardId}`}>Still valid?</dt><dd className="small">
         <span className={`tag ${VERDICT_LABEL[rc.verdict][1]}`}>{VERDICT_LABEL[rc.verdict][0]}</span> <span className="muted">checked {fmtEtAgo(rc.checkedAt)}{priceLine(rc)}</span>
         <div>{rc.summary}</div>
         {rc.changed.length > 0 && <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>{rc.changed.map((x, i) => <li key={i}>{x}</li>)}</ul>}

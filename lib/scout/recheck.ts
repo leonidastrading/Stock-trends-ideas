@@ -150,3 +150,48 @@ export async function recheckCard(cardId: number, deps: { data: MarketData | nul
   );
   return { recheck: toRecheck(rows[0]), fresh: true };
 }
+
+// ---------------------------------------------------------------- running it without waiting for it
+
+/** A check takes about a minute; one still marked as running after this long did not finish. */
+export const RECHECK_STALE_MIN = 3;
+const pendingKey = (cardId: number) => `recheck:pending:${cardId}`;
+const errorKey = (cardId: number) => `recheck:error:${cardId}`;
+
+export interface RecheckStatus { recheck: Recheck | null; /** When a check that is still running was started. */ runningSince: string | null; /** Why the last attempt failed, if it is newer than the last answer. */ error: string | null }
+
+/** Pure: whether a running marker still counts (a check that never finished stops counting after a few minutes). */
+export const stillRunning = (startedAt: string | null | undefined, now: Date) => !!startedAt && now.getTime() - Date.parse(startedAt) < RECHECK_STALE_MIN * 60_000;
+
+/** Where a card's check stands: the last answer, whether one is running now, and the last failure if it is newer. */
+export async function recheckStatus(cardId: number, now = new Date()): Promise<RecheckStatus> {
+  const [last, pending, failed] = await Promise.all([
+    latestRechecks([cardId]).then((m) => m.get(cardId) ?? null).catch(() => null),
+    store.cacheGet<{ at: string }>(pendingKey(cardId)).catch(() => null),
+    store.cacheGet<{ at: string; error: string }>(errorKey(cardId)).catch(() => null),
+  ]);
+  const runningSince = stillRunning(pending?.data?.at, now) ? pending!.data.at : null;
+  const error = failed?.data?.error && (!last || failed.data.at > last.checkedAt) && !runningSince ? failed.data.error : null;
+  return { recheck: last, runningSince, error };
+}
+
+/** Pure: a failure in words a person can act on. */
+export function recheckError(msg: string): string {
+  return msg === "capped" ? "today's AI budget is spent (raise the daily cap in Settings)" : /credit balance/i.test(msg) ? "the Anthropic account is out of credit" : msg === "card not found" ? msg : `the check failed: ${msg.slice(0, 160)}`;
+}
+
+/**
+ * Run one check to the end, marked as running while it runs, so it can be started and left: the answer is saved on
+ * the card, and a failure is kept for the card to show. Never throws.
+ */
+export async function runRecheck(cardId: number, deps: { data: MarketData | null; callModel: CallModel; now: Date }): Promise<void> {
+  await store.cachePut(pendingKey(cardId), { at: deps.now.toISOString() }).catch(() => undefined);
+  try {
+    await recheckCard(cardId, deps);
+    await store.unlock(errorKey(cardId)).catch(() => undefined);
+  } catch (err) {
+    await store.cachePut(errorKey(cardId), { at: new Date().toISOString(), error: recheckError(err instanceof Error ? err.message : String(err)) }).catch(() => undefined);
+  } finally {
+    await store.unlock(pendingKey(cardId)).catch(() => undefined);
+  }
+}

@@ -5,6 +5,7 @@ import CardFundamentals from "@/components/CardFundamentals";
 import { gateReason } from "@/lib/scout/gate-reason";
 import CardInvestigate from "@/components/CardInvestigate";
 import CompanyLogo from "@/components/CompanyLogo";
+import RecheckLine from "@/components/RecheckLine";
 import { cardInvestigationText } from "@/lib/scout/card-investigate";
 import Direction from "@/components/Direction";
 import CardAsk from "@/components/CardAsk";
@@ -202,6 +203,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
         <StockChart symbol={c.primaryTicker} tvSymbol={tvSymbol(c.primaryTicker, info?.exchange)} entry={track?.entryDate && track.entryPrice ? { date: track.entryDate, price: track.entryPrice, direction: track.direction, exitDate: track.exitDate, exitPrice: track.exitPrice, exitReason: track.exitReason, label: "scout entry", cardId: c.id } : { date: pendingEntryDay, price: null, direction: c.direction, label: "entry at the next open", cardId: c.id }} />
       </div>
       <div className="actions">{actions}<CardInvestigate text={cardInvestigationText({ id: c.id, title: k.title, ticker: c.primaryTicker, company: info?.name ?? company, direction: c.direction, thesis, observation: k.observation, whyNotPriced: k.why_not_priced, unknowns: k.unknowns })} /><CardAsk cardId={c.id} symbol={c.primaryTicker} tickers={k.tickers.map((t) => t.symbol)} /></div>
+      <Suspense fallback={null}><RecheckLine cardId={c.id} /></Suspense>
       <Feedback target={`card:${c.id}`} initial={feedback ? { vote: feedback.vote, note: feedback.note } : null} />
     </CardCollapse>
   );

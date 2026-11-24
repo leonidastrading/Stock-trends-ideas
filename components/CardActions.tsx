@@ -13,16 +13,25 @@ export default function CardActions({ cardId, canSend, sent, open, swingConfigur
   const [checking, setChecking] = useState(false);
   const [check, setCheck] = useState<{ verdict: string; summary: string; fresh: boolean } | null>(null);
 
-  // "Still valid?": the scout re-reads the card against what happened since (about a minute); the answer is saved and shown on the card.
+  // "Still valid?": the scout re-reads the card against what happened since (about a minute). The check runs on the
+  // server to the end even if this page is left; the answer is saved and shown on the card (under these buttons too).
   async function recheck() {
     setChecking(true);
     setMsg(null);
     const res = await fetch(`/api/cards/${cardId}/recheck`, { method: "POST" }).catch(() => null);
     const j = res ? await res.json().catch(() => ({ errors: [`HTTP ${res.status}`] })) : { errors: ["network error"] };
+    if (!res?.ok || !j.ok) { setChecking(false); return setMsg((j.errors ?? ["failed"]).join("; ")); }
+    if (j.recheck) { setChecking(false); setCheck({ verdict: j.recheck.verdict, summary: j.recheck.summary, fresh: false }); return router.refresh(); }
+    // Started: look every few seconds until the answer is saved (or it fails, or two and a half minutes pass).
+    const started = Date.parse(j.runningSince ?? new Date().toISOString());
+    for (let i = 0; i < 38; i++) {
+      await new Promise((r) => setTimeout(r, 4000));
+      const s = await fetch(`/api/cards/${cardId}/recheck`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      if (s?.recheck && Date.parse(s.recheck.checkedAt) >= started - 1000) { setChecking(false); setCheck({ verdict: s.recheck.verdict, summary: s.recheck.summary, fresh: true }); return router.refresh(); }
+      if (s && !s.runningSince) { setChecking(false); return setMsg(s.error ?? "the check stopped without an answer; press Still valid? again"); }
+    }
     setChecking(false);
-    if (!res?.ok || !j.ok) return setMsg((j.errors ?? ["failed"]).join("; "));
-    setCheck({ verdict: j.recheck.verdict, summary: j.recheck.summary, fresh: j.fresh });
-    router.refresh();
+    setMsg("still checking; the answer will appear on this card when it is done");
   }
 
   async function post(path: string, body?: unknown, confirmText?: string, what?: "sent" | "invalidated" | "excluded") {
