@@ -110,5 +110,5 @@ export async function runPanelWatch(env: NodeJS.ProcessEnv = process.env, now = 
   // A stock whose decision is no longer pending drops off.
   for (const s of Object.keys(notes)) if (!pending.includes(s)) delete notes[s];
   await store.cachePut(PANEL_WATCH.key, notes);
-  return `panel watch: ${read} of ${pending.length} stocks read (${pending.filter(stale).length - read} still due)${said.length ? ` · ${said.join("; ")}` : " · no panel votes in these"}`;
+  return `panel watch: ${read} of ${pending.length} stocks read (${pending.filter(stale).length} still due)${said.length ? ` · ${said.join("; ")}` : " · no panel votes in these"}`;
 }
