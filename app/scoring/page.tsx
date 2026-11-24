@@ -89,7 +89,7 @@ export default async function ScoringPage({ searchParams }: { searchParams: Prom
                 const base = i.baseline.length ? i.baseline.reduce((a, b) => a + b, 0) / i.baseline.length : null;
                 return (
                   <tr key={i.cardId}>
-                    <td>{i.cardId}</td>
+                    <td><a href={`/cards/${i.cardId}`}>#{i.cardId}</a></td>
                     <td><b className={i.direction === "long" ? "pos" : "neg"}>{i.direction === "long" ? "▲" : "▼"} {i.symbol}</b> <span className="small secondary">{c.title}</span><div className="small muted">{KIND_LABEL[c.kind as Kind]} · {i.origin}{i.tapped ? " · tapped" : ""} · rank {i.rankScore}</div></td>
                     <td><span className={`tag ${i.status}`}>{i.status}</span>{!i.closed && <span className="tag">open</span>}</td>
                     <td className="small">{i.entryDate}</td><td className="small">{i.exitDate ?? "—"}</td>
