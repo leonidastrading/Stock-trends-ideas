@@ -35,7 +35,7 @@ export default async function DriftPage({ searchParams }: { searchParams: Promis
   // The downgrade look-back: its progress and results; a visit starts (or restarts) it when no pass ran in the last 7 minutes.
   const [study, studyRows] = await Promise.all([studyState(), studyEvents().catch(() => [] as StudyEvent[])]);
   const host = (await headers()).get("host");
-  if (host && data && !study?.done && (!study || Date.now() - Date.parse(study.updatedAt) > 7 * 60_000)) {
+  if (host && data && !(study?.done && study.headlines > 0) && !study?.probe && (!study || Date.now() - Date.parse(study.updatedAt) > 7 * 60_000)) {
     after(() => import("@/lib/scout/jobs").then(({ startJob }) => startJob(`https://${host}`, "/api/cron/job/ratingstudy", "lock:job:ratingstudy:next", 1)).catch(() => undefined));
   }
   const cardById = new Map(cards.map((c) => [c.id, c]));

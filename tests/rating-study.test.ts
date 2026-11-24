@@ -106,6 +106,17 @@ describe("the paced job (PGlite)", () => {
       const before = pages;
       expect(await runRatingStudy(data)).toEqual({ line: "rating study: done", more: false });
       expect(pages).toBe(before);
+      // A history that comes back empty is never "done": the study probes what the history holds, once, and waits.
+      await pg.query(`DELETE FROM dashboard_cache WHERE key LIKE 'rating-study:%'`);
+      let probes = 0;
+      const empty = { ...(data as object), getNewsPage: async () => { probes++; return { items: [], next: null }; } } as never;
+      const r = await runRatingStudy(empty, Date.now() + 60_000);
+      expect(r.more).toBe(false);
+      expect(r.line).toMatch(/returned no headlines .* Probe: AAPL 2019-03: 0 · /);
+      expect((await studyState())).toMatchObject({ done: false, probeVersion: 1 });
+      const after = probes;
+      expect((await runRatingStudy(empty)).line).toBe("rating study: waiting (the news history came back empty)");
+      expect(probes).toBe(after);
     } finally {
       setQuerierForTests(null);
     }

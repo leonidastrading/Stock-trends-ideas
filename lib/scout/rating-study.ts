@@ -77,7 +77,9 @@ export function eventReturns(bars: DailyBar[], spy: Map<string, DailyBar>, day0:
 
 // ---------------------------------------------------------------- the paced job
 
-export interface StudyState { batch: number; token: string | null; done: boolean; pages: number; headlines: number; events: number; at: string | null; startedAt: string; updatedAt: string; error: string | null }
+export interface StudyState { batch: number; token: string | null; done: boolean; pages: number; headlines: number; events: number; at: string | null; startedAt: string; updatedAt: string; error: string | null; /** Set when the news history came back empty: what a probe of it found (the study waits; it is not done). */ probe?: string | null; probeVersion?: number }
+/** Bump to probe the news history again after a change. */
+const PROBE_VERSION = 1;
 const STATE = "rating-study:state", SPY = "rating-study:spy";
 
 export async function studyState(): Promise<StudyState | null> {
@@ -86,12 +88,37 @@ export async function studyState(): Promise<StudyState | null> {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** How far back the news history goes: a week of headlines for one busy stock in several years, and for every stock in one. A line for the log. */
+export async function probeHistory(data: MarketData, now = new Date()): Promise<string> {
+  const week = (from: string) => [new Date(`${from}T00:00:00Z`), new Date(Date.parse(`${from}T00:00:00Z`) + 7 * 86400_000)] as const;
+  const out: string[] = [];
+  const one = async (label: string, symbols: string[], a: Date, b: Date) => {
+    try {
+      const p = await data.getNewsPage!(symbols, a, b, null);
+      const sources = [...new Set(p.items.map((i) => i.source || "?"))].slice(0, 3).join("/");
+      out.push(`${label}: ${p.items.length}${p.next ? "+" : ""}${p.items.length ? ` (${sources}; first ${p.items[0].ts.slice(0, 10)}; e.g. "${p.items[0].headline.slice(0, 60)}")` : ""}`);
+    } catch (err) {
+      out.push(`${label}: error ${(err instanceof Error ? err.message : String(err)).slice(0, 80)}`);
+    }
+  };
+  for (const from of ["2019-03-04", "2021-03-01", "2023-03-06", "2025-03-03", "2026-03-02"]) await one(`AAPL ${from.slice(0, 7)}`, ["AAPL"], ...week(from));
+  await one("AAPL last 7 days", ["AAPL"], new Date(now.getTime() - 7 * 86400_000), now);
+  await one("all stocks 2023-03", [], ...week("2023-03-06"));
+  await one("AAPL 2019 to mid-2025", ["AAPL"], new Date(`${RATING_STUDY.start}T00:00:00Z`), new Date(`${RATING_STUDY.end}T23:59:59Z`));
+  // The other reader (newest first), in case the order matters.
+  try { const d = await data.getNews(["AAPL"], ...week("2023-03-06"), 50); out.push(`AAPL 2023-03 newest-first: ${d.length}`); } catch (err) { out.push(`newest-first: error ${(err instanceof Error ? err.message : String(err)).slice(0, 80)}`); }
+  return out.join(" · ");
+}
+
 /** One pass: read headlines from where the last pass stopped until the time is up. Returns a line for the log, and whether there is more. */
 export async function runRatingStudy(data: MarketData | null, deadline = Date.now() + RATING_STUDY.passMs): Promise<{ line: string; more: boolean }> {
   if (!data?.getNewsPage) return { line: "rating study: news stream not configured (Alpaca keys)", more: false };
   const now = () => new Date().toISOString();
   const st: StudyState = (await studyState()) ?? { batch: 0, token: null, done: false, pages: 0, headlines: 0, events: 0, at: null, startedAt: now(), updatedAt: now(), error: null };
+  // "Done" with nothing read is not done: the news history came back empty. Find out what it holds, once, and wait.
+  if (st.done && st.headlines === 0) { st.done = false; st.batch = 0; st.token = null; st.pages = 0; }
   if (st.done) return { line: "rating study: done", more: false };
+  if (st.probe && st.probeVersion === PROBE_VERSION) return { line: "rating study: waiting (the news history came back empty)", more: false };
   if (!(await store.tryLock("lock:rating-study:run", 5))) return { line: "rating study: another pass is running", more: false };
   const all = studySymbols(), batches = Math.ceil(all.length / RATING_STUDY.batch);
   const save = () => store.cachePut(STATE, { ...st, updatedAt: now() } satisfies StudyState).catch(() => undefined);
@@ -140,8 +167,15 @@ export async function runRatingStudy(data: MarketData | null, deadline = Date.no
       st.batch++; st.token = null; st.at = null;
       await save();
     }
-    st.done = st.batch >= batches;
+    st.done = st.batch >= batches && st.headlines > 0;
     st.error = null;
+    if (st.batch >= batches && st.headlines === 0) {
+      st.probe = await probeHistory(data);
+      st.probeVersion = PROBE_VERSION;
+      st.batch = 0;
+      await save();
+      return { line: `rating study: the news history returned no headlines for ${RATING_STUDY.start} to ${RATING_STUDY.end}. Probe: ${st.probe}`, more: false };
+    }
     await save();
     return { line: `rating study: ${st.done ? "done" : `batch ${st.batch + 1} of ${batches}${st.at ? `, at ${st.at.slice(0, 10)}` : ""}`} · ${st.pages.toLocaleString("en-US")} pages, ${st.headlines.toLocaleString("en-US")} headlines, ${st.events.toLocaleString("en-US")} rating changes`, more: !st.done };
   } catch (err) {

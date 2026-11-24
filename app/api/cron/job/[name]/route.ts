@@ -38,7 +38,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ name: strin
       }
     }
     // The finished study answers every 5 minutes: not worth a log line each time.
-    if (result! !== "rating study: done") console.log(result!);
+    if (result! !== "rating study: done" && !result!.startsWith("rating study: waiting")) console.log(result!);
     return NextResponse.json({ status: "ok", result: result! });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

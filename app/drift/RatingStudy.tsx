@@ -9,13 +9,15 @@ const cell = (s: Stat, short = true) => {
 };
 
 /** The look-back: what large and mid caps did after analyst downgrades (and upgrades), 2019 to mid-2025. */
-export default function RatingStudy({ state, events }: { state: StudyState | null; events: StudyEvent[] }) {
+export default function RatingStudy({ state: raw, events }: { state: StudyState | null; events: StudyEvent[] }) {
+  // A pass that read nothing is not a finished study.
+  const state = raw && raw.done && !raw.headlines ? { ...raw, done: false } : raw;
   const batches = Math.ceil(studySymbols().length / RATING_STUDY.batch);
   const rows = studyTable(events);
   return (
     <details className="card section" open={!!state?.done}>
       <summary><b>Downgrade study, {RATING_STUDY.start.slice(0, 4)} to mid-{RATING_STUDY.end.slice(0, 4)}</b> <span className="small muted">
-        {!state ? "not started yet: it starts by itself" : state.done ? `${events.filter((e) => e.kind === "downgrade").length.toLocaleString("en-US")} downgrades and ${events.filter((e) => e.kind === "upgrade").length.toLocaleString("en-US")} upgrades on ${studySymbols().length} stocks` : `reading the news history: batch ${state.batch + 1} of ${batches}${state.at ? `, at ${state.at.slice(0, 7)}` : ""} · ${state.headlines.toLocaleString("en-US")} headlines read, ${state.events.toLocaleString("en-US")} rating changes found · last pass ${etLabelAgo(state.updatedAt)}${state.error ? ` · stopped: ${state.error}` : ""}`}
+        {!state ? "not started yet: it starts by itself" : state.probe && !state.done && !state.headlines ? "waiting: the news history came back empty for these years (being looked into)" : state.done ? `${events.filter((e) => e.kind === "downgrade").length.toLocaleString("en-US")} downgrades and ${events.filter((e) => e.kind === "upgrade").length.toLocaleString("en-US")} upgrades on ${studySymbols().length} stocks` : `reading the news history: batch ${state.batch + 1} of ${batches}${state.at ? `, at ${state.at.slice(0, 7)}` : ""} · ${state.headlines.toLocaleString("en-US")} headlines read, ${state.events.toLocaleString("en-US")} rating changes found · last pass ${etLabelAgo(state.updatedAt)}${state.error ? ` · stopped: ${state.error}` : ""}`}
       </span></summary>
       <div className="small secondary">
         <p>Does a stock keep falling after an analyst downgrade? Every rating headline in the news history for the scout&apos;s {studySymbols().length} large and mid caps, and what the stock did next against SPY. The reaction day is the first session whose close came after the headline. No AI is involved: headlines are matched by their wording, returns come from daily prices.</p>
