@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { MarketData, NewsItem } from "@/lib/alpaca";
 import { query, setQuerierForTests } from "@/lib/db";
 import type { CallModel } from "@/lib/scout/llm";
-import { buildStoryPrompt, detectStories, nearestStories, parseStoryTriage, runStories, STORY_JSON_SCHEMA, storyTerm } from "@/lib/scout/stories";
+import { buildStoryPrompt, detectStories, nearestStories, parseStoryTriage, runStories, STORY_JSON_SCHEMA, STORY_SYSTEM_PROMPT, storyTerm, takeoverTalk } from "@/lib/scout/stories";
 import * as store from "@/lib/scout/store";
 import { sampleCard } from "./card.test";
 
@@ -194,5 +194,53 @@ describe("story freshness", () => {
     const { fmtEt } = await import("@/lib/time");
     expect(fmtEt("2026-11-13T19:14:00Z")).toBe("Nov 13, 2:14 PM ET");
     expect(fmtEt("nonsense")).toBe("");
+  });
+});
+
+describe("takeover talk: one credible report is the story", () => {
+  it("knows talk of a sale from a signed deal and from boilerplate (headlines from the live feed)", () => {
+    for (const h of [
+      "Ambarella in Final-Stage Acquisition Talks With NXP Semiconductors",
+      "Exclusive: Chipmaker explores sale after takeover interest, sources say",
+      "Warner rejects $2 billion takeover bid from rival",
+      "Retailer said to weigh a sale of the company",
+      "Software maker draws buyout interest from private equity firms",
+      "Paramount makes hostile bid for Warner Bros",
+    ]) expect(takeoverTalk(h), h).toBe(true);
+    for (const h of [
+      "MISTRAS Group, Inc. Stockholders Approve Acquisition by H.I.G. Capital",
+      "Merck KGaA Commences Tender Offer for Rapid Micro Biosystems",
+      "Coign Capital Advisors LLC Acquires Shares of Vertex Pharmaceuticals Incorporated",
+      "SunScout Holding Limited to Acquire BestMow Robotic Mower Technology and Assets",
+      "Georgia Ports Authority Endorses Union Pacific-Norfolk Southern Merger",
+      "Bold Eagle Acquisition Corp. files 8-K: material agreement",
+      "Local Bounti Corporation/DE files 8-K: material agreement; acquisition or sale completed",
+      "SHAREHOLDER ALERT: law firm investigates the proposed acquisition of Acme, considers whether the offer is fair",
+      "Automaker in talks with union over pay",
+      "Chipmaker in talks to supply processors to phone maker",
+      "Acme agrees to acquire Widget Co in $3 billion deal",
+      "Oppenheimer and Fubon Adjust Price Targets for Marvell Technology",
+    ]) expect(takeoverTalk(h), h).toBe(false);
+  });
+
+  it("a single report from a trusted source is a story for the target and the buyer; a wire rumour alone is not", () => {
+    const report = n("Ambarella in Final-Stage Acquisition Talks With NXP Semiconductors", ["AMBA", "NXPI"]);
+    const s = detectStories([report, n("Apple launches new iPad", ["AAPL"])]);
+    expect(s.map((x) => x.key).sort()).toEqual(["AMBA", "NXPI"]);
+    expect(s[0]).toMatchObject({ takeover: 1, stories: 1, mainstream: 1 });
+    expect(s[0].headlines[0].headline).toMatch(/Final-Stage Acquisition Talks/);
+    expect(detectStories([n("Ambarella in Final-Stage Acquisition Talks With NXP Semiconductors", ["AMBA", "NXPI"], false)])).toEqual([]);
+    // A sector round-up that happens to use the words is not about one company.
+    expect(detectStories([n("Chip stocks: who is in takeover talks this week", ["A", "B", "C", "D"])])).toEqual([]);
+  });
+
+  it("tells the model it is talk, not a deal, and when the company reports", () => {
+    const [amba] = detectStories([n("Ambarella in Final-Stage Acquisition Talks With NXP Semiconductors", ["AMBA"])]);
+    amba.earnings = "AMBA reports earnings on 2026-11-24 (after close), in 5 days: before any deal can be signed.";
+    const p = buildStoryPrompt([amba], "2026-11-19");
+    expect(p).toMatch(/takeover or sale talk reported \(not a signed deal\)/);
+    expect(p).toMatch(/AMBA reports earnings on 2026-11-24 \(after close\), in 5 days/);
+    expect(STORY_SYSTEM_PROMPT).toMatch(/Takeover or sale talk/);
+    expect(STORY_SYSTEM_PROMPT).toMatch(/loses the premium and the miss together/);
   });
 });

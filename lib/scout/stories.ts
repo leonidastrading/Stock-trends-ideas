@@ -40,6 +40,21 @@ export function escalationWords(text: string): string[] {
 /** Deal and liquidity events: often about a private company, so the listed winners are its holders, not the headline's ticker. */
 export const CATALYST = /\b(IPO|initial public offering|S-1|files? (?:confidentially )?(?:to go public|for (?:an )?IPO)|direct listing|goes public|going public|funding round|raises \$[\d.]+ ?(?:billion|bn|B)|tender offer|valuation of \$|valued at \$|acquires?|acquisition|takeover|buyout|merger|spin-?off|stake)\b/i;
 
+/**
+ * A report that a listed company may be bought or sold, short of a signed deal ("in final-stage acquisition talks",
+ * "weighs a sale", "rejects a takeover bid"). One credible headline is the whole story here, and it moves a small
+ * company at once: the desk must not wait for three (it missed Ambarella's NXP talks on Nov 19, 2026 that way).
+ */
+const DEAL_WORD = /\b(acqui\w+|takeover|buyout|merg\w+|take[- ]private|go(?:ing)? private|sell itself|sale of (?:the )?(?:company|itself)|strategic alternatives|sale process|potential sale|possible sale|a sale\b|bid for|offers? to buy)/i;
+const TALK_WORD = /\b(talks?|approach(?:es|ed)?|interest|explor\w+|weigh\w*|consider\w*|mull\w*|unsolicited|bid(?:s|ding)?|offers?|proposal|near(?:s|ing)?|said to|reportedly|sources say|suitors?|draws?|attract\w*|reject\w*|rebuff\w*|spurn\w*)\b/i;
+/** Signed or finished deals, and the lawyers' and funds' boilerplate that uses the same words. */
+const NOT_TALK = /\b(shareholder alert|investor alert|investor action|investigat\w+|law (?:firm|offices?)|class action|complet\w+|closes|closed|definitive agreement|agree[sd]? to (?:acquire|buy|be acquired|merge|sell)|to acquire [^.]{0,60} for \$|tender offer|stockholders? approve|shareholders? approve|acquires? shares|shares (?:acquired|bought|sold) by|stake in|price target|initiates? coverage|to participate|conference|blank[- ]check|SPAC|acquisition corp)\b/i;
+
+/** Pure: whether a headline reports takeover or sale talk about a listed company (not a signed deal). */
+export function takeoverTalk(headline: string): boolean {
+  return DEAL_WORD.test(headline) && TALK_WORD.test(headline) && !NOT_TALK.test(headline);
+}
+
 /** First shock or catalyst word in a text, lower-cased; null if none. */
 export function eventWord(text: string): string | null {
   const m = SHOCK.exec(text) ?? CATALYST.exec(text);
@@ -70,6 +85,10 @@ export interface Story {
   attention?: Attention[];
   /** Measured by code: how much today's headlines repeat the ticker's previous stories (0 new … 1 repeated). */
   staleness?: number | null;
+  /** Mainstream headlines reporting takeover or sale talk about this ticker (short of a signed deal). */
+  takeover?: number;
+  /** Set by runStories for takeover talk: the company's results date when it falls in the next days. */
+  earnings?: string;
   /** Time of the newest headline in the story (ISO). */
   latest: string;
   /** Newest first; `at` is the headline's full ISO timestamp. */
@@ -111,7 +130,11 @@ export function detectStories(items: NewsItem[], opts: DetectOptions = {}): Stor
           t.escalationHits++;
           for (const w of esc) if (!t.escalation.includes(w)) t.escalation.push(w);
         }
-        if (t.headlines.length < 8 && (shock || main || esc.length)) t.headlines.push(h);
+        // Takeover talk: one or two companies in the headline (the target, perhaps the buyer), from a source the desk trusts.
+        const talk = main && n.symbols.length <= 3 && takeoverTalk(n.headline);
+        if (talk) t.takeover = (t.takeover ?? 0) + 1;
+        if (talk) t.headlines.unshift(h);
+        else if (t.headlines.length < 8 && (shock || main || esc.length)) t.headlines.push(h);
         byTicker.set(s, t);
       }
     } else if (shock && n.symbols.length === 0) {
@@ -135,7 +158,7 @@ export function detectStories(items: NewsItem[], opts: DetectOptions = {}): Stor
     const avg = dailyAvg[t.key];
     const spike = avg ? t.stories >= spikeMultiple * avg : false;
     const newStage = openTickers.has(t.key) && (t.escalationHits >= 1 || building.has(t.key)) && t.mainstream >= 2;
-    if (newStage || (t.mainstream >= minMainstream && (t.shockHits >= 2 || spike || t.stories >= minStories * 2))) out.push(t);
+    if (newStage || (t.takeover ?? 0) >= 1 || (t.mainstream >= minMainstream && (t.shockHits >= 2 || spike || t.stories >= minStories * 2))) out.push(t);
   }
   for (const m of macro.values()) {
     // A single big private-company liquidity event is a story; it needs mainstream pick-up, not volume.
@@ -144,7 +167,7 @@ export function detectStories(items: NewsItem[], opts: DetectOptions = {}): Stor
   }
   // The strongest stories make the cut; they are then listed freshest first, headlines newest first.
   return out
-    .sort((a, b) => b.shockHits * 3 + b.escalationHits * 3 + b.mainstream - (a.shockHits * 3 + a.escalationHits * 3 + a.mainstream))
+    .sort((a, b) => b.shockHits * 3 + b.escalationHits * 3 + b.mainstream + (b.takeover ?? 0) * 6 - (a.shockHits * 3 + a.escalationHits * 3 + a.mainstream + (a.takeover ?? 0) * 6))
     .slice(0, maxStories)
     .map((s) => ({ ...s, headlines: s.headlines.slice().sort((a, b) => b.at.localeCompare(a.at)) }))
     .sort((a, b) => b.latest.localeCompare(a.latest));
@@ -184,6 +207,7 @@ Then the trades:
 - Second-order: who wins or loses one step away that the headlines are not about yet (a rival that takes share, a supplier, a customer, a platform that loses traffic).
 - Reaction: who has to respond to the reaction, and what that response does to which listed companies (an industry facing a political backlash, the businesses a regulator will target, the peers a probe may spread to). Horizon in weeks, not days.
 - Private-company liquidity events (an IPO filing or pricing, a large funding round or tender offer, an acquisition): the listed winners are the companies that hold stakes, strategic investors and corporate venture arms, especially where the stake is a large share of the holder's market value. Name the holder, say roughly what the stake may be worth against its market cap if you know, and flag lock-ups and dilution as risks.
+- Takeover or sale talk (a report that a company is in talks, weighing a sale or has had an approach, with no signed deal): one credible report is the story, so judge it even when it is the only headline. Say who is the target and who the buyer, how much of the jump is already in the price, and what the talks still have to survive: a denial, a board that says no, financing, antitrust, and above all the target's own results. When you are told the target reports earnings within days, treat that as the main risk: a miss while a premium is in the price can end the talks or reset the terms, and the stock then loses the premium and the miss together. A long on the target needs a reason the premium is still too small; a short needs a reason the talk is weak or the premium is at risk before a deal can be signed; the buyer usually dips. If neither holds, skip and say so.
 - For each trade: how long the repricing should take, what would prove it wrong, and why the market may still be mispricing it after the first move (forced sellers, a slow-burning investigation, an index or fund flow, a second shoe to drop, a political process that has not started yet).
 
 For every story also give "company" (the main listed company's name as Wikipedia titles it; empty for a macro story) and "people" (at most three people at the centre of the story, full names as Wikipedia titles them; empty if none), so the scout can measure public attention.
@@ -252,7 +276,8 @@ export function buildStoryPrompt(stories: Story[], date: string, preferences: st
   const L = [`Date: ${date}. ${stories.length} stories from the last 24 hours of the news stream.`];
   if (preferences) L.push(`\n${preferences}`);
   for (const s of stories) {
-    L.push(`\n## ${s.key} — ${s.symbols.length ? s.symbols.join(", ") : "macro"}: ${s.stories} headlines, ${s.mainstream} mainstream, ${s.shockHits} with shock wording${s.escalation.length ? `, institutions acting: ${s.escalation.slice(0, 6).join(", ")}` : ""}`);
+    L.push(`\n## ${s.key} — ${s.symbols.length ? s.symbols.join(", ") : "macro"}: ${s.stories} headlines, ${s.mainstream} mainstream, ${s.shockHits} with shock wording${s.takeover ? ", takeover or sale talk reported (not a signed deal)" : ""}${s.escalation.length ? `, institutions acting: ${s.escalation.slice(0, 6).join(", ")}` : ""}`);
+    if (s.earnings) L.push(s.earnings);
     if (s.staleness !== undefined) L.push(`Measured ${stalenessLabel(s.staleness)}.`);
     if (s.coverage) L.push(`${s.symbols[0] ?? s.key} ${s.coverage.line}.${s.coverage.building ? " What will this growing attention force to happen next?" : ""}`);
     for (const x of s.attention ?? []) L.push(`Public attention: ${x.line}.`);
@@ -294,6 +319,8 @@ export function parseStoryTriage(text: string): StoryTriage & { dropped: string[
 // ------------------------------------------------------------------- run
 
 export const STORY_COOLDOWN_DAYS = 3;
+/** For a takeover-talk story, how far ahead the desk looks for the company's results date. */
+export const TAKEOVER_EARNINGS_DAYS = 10;
 export const storyTerm = (key: string, ticker: string) => `story: ${key} → ${ticker}`;
 
 export interface StoriesReport {
@@ -388,6 +415,18 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
   for (const s of chosen) {
     const ev = s.history?.length ? events.filter((e) => e.key === s.key && (e.people.length || e.company)).at(-1) : undefined;
     if (ev) s.attention = await publicAttention([...ev.people, ...(ev.company ? [ev.company] : [])], s.history![0].date, et.date, deps.fetchImpl);
+  }
+  // Takeover talk: is the company about to report? Results before a deal is signed are what most often breaks the talks.
+  if (chosen.some((s) => s.takeover)) {
+    const { earningsOn } = await import("../market/sources");
+    for (let d = 0; d <= TAKEOVER_EARNINGS_DAYS && chosen.some((s) => s.takeover && !s.earnings); d++) {
+      const day = addDays(et.date, d);
+      const rows = await earningsOn(day, deps.fetchImpl).catch(() => []);
+      for (const s of chosen) {
+        const r = s.takeover && !s.earnings ? rows.find((x) => x.symbol === s.key) : undefined;
+        if (r) s.earnings = `${s.key} reports earnings on ${day}${r.time ? ` (${r.time})` : ""}, ${d === 0 ? "today" : `in ${d} day${d === 1 ? "" : "s"}`}: before any deal can be signed.`;
+      }
+    }
   }
   const prompt = buildStoryPrompt(chosen, et.date, preferences);
   let lastError = "";
