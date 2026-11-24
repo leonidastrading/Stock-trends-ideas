@@ -34,8 +34,6 @@ export async function GET(request: Request) {
   background(async () => {
     // Right after a deploy: do the investigation keys work? (logged and shown on Settings; never the keys themselves)
     await import("@/lib/scout/key-check").then(({ checkKeysOnce }) => checkKeysOnce()).then((line) => line && console.log(line)).catch((err) => console.error(`key check failed: ${err instanceof Error ? err.message : String(err)}`));
-    // One-off (Nov 24 2026): the card numbers for the tickers in Vadim's notebook, printed once to the log.
-    await import("@/lib/scout/card-list-log").then(({ logCardList }) => logCardList()).catch((err) => console.error(`card list failed: ${err instanceof Error ? err.message : String(err)}`));
     // Korea's company list (for DART filings) downloads slowly, so it is fetched in its own call when missing or a week old.
     await (async () => {
       if (!process.env.DART_API_KEY?.trim()) return;
