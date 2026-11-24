@@ -12,7 +12,9 @@ export const dynamic = "force-dynamic";
  * (the site login is not); the proxy lets exactly GET/HEAD /api/cards/<id> through to this check.
  */
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
-  if (!bearerOk(request.headers.get("authorization"), process.env.SCOUT_API_TOKEN)) {
+  // Two read-only tokens: the oo-trading dashboard's, and a second one Vadim had created for card lookups in his coding sessions.
+  const auth = request.headers.get("authorization");
+  if (!bearerOk(auth, process.env.SCOUT_API_TOKEN) && !bearerOk(auth, process.env.SCOUT_READ_TOKEN)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401, headers: { "WWW-Authenticate": 'Bearer realm="trend-scout"', "Cache-Control": "no-store" } });
   }
   if (!hasDatabase()) return NextResponse.json({ error: "database not connected" }, { status: 503 });

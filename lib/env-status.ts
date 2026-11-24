@@ -27,6 +27,7 @@ export function envStatus(env: NodeJS.ProcessEnv = process.env): EnvStatus[] {
     row("FMP_API_KEY", false, "Card Financials (income statements, EPS) and earnings drift revenue when Finnhub has none (Financial Modeling Prep)"),
     row("NEWSFILTER_API_KEY", false, "News tab Top news: CNBC, Bloomberg and government items (newsfilter.io, free plan)"),
     row("SCOUT_API_TOKEN", false, "Read-only card API for the oo-trading dashboard (GET /api/cards/<number>)"),
+    row("SCOUT_READ_TOKEN", false, "Read-only card API: a second token, for card lookups from coding sessions"),
     row("FEC_API_KEY", false, "Investigations: campaign and PAC money (free from api.data.gov; without it a shared demo key)"),
     row("LDA_API_KEY", false, "Investigations: lobbying filings (optional, higher rate limit)"),
     row("BRAVE_SEARCH_API_KEY", false, "Investigations: web search while following leads (Brave Search API)"),
