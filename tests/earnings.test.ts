@@ -35,6 +35,10 @@ describe("earnings setups", () => {
     expect(classify({ ...base, runup_pct_rank: 80 }).setup).toBe("A++");
     expect(classify({ ...base, runup_pct_rank: null }).setup).toBe("A+"); // no run-up history yet: not A++
     expect(classify({ ...base, volume_ratio: 1.1 }).setup).toBe("A0");
+    // A big beat the market sold 7%+ is a study short (D), not an up-drift setup, whatever the volume.
+    expect(classify({ ...base, reaction_pct: -7.7 })).toMatchObject({ setup: "D", reason: expect.stringMatching(/big beat the market sold \(-7\.7% vs SPY/) });
+    expect(classify({ ...base, reaction_pct: -7.7, volume_ratio: 1.1 }).setup).toBe("D");
+    expect(classify({ ...base, reaction_pct: -6.9 }).setup).not.toBe("D");
     expect(classify({ ...base, surprise_pct_rank: 70 })).toEqual({ setup: null, reason: "surprise rank 70 (needs 80+)" });
     expect(classify({ ...base, sector: "Utilities" }).reason).toBe("defensive sector (Utilities)");
     expect(classify({ ...base, consensus_source: "none" }).reason).toBe("no consensus snapshot from before the report (benchmark only)");

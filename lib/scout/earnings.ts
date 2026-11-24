@@ -8,6 +8,8 @@
  * - A0 (study): a big beat on quiet volume (fails only the volume filter), tracked to compare populations.
  * - B (study): $1-10B miss that gapped up more than 7%; C (study): $10B+ below the year-ago quarter's actual EPS that
  *   gapped down more than 7%. Logged as paper shorts, never promoted.
+ * - D (study): a big beat (top 20% surprise) the market sold more than 7% on the reaction day. The reaction points
+ *   down, so it is not an A setup; logged as a paper short to see whether these keep falling.
  *
  * No look-ahead: consensus EPS and revenue, market cap and year-ago EPS are frozen before each report (the latest
  * capture before the release) and the surprise uses only that snapshot. Reports without a snapshot stay in the
@@ -50,9 +52,11 @@ export const EARN = {
   lookaheadSessions: 10,
 };
 
-export type Setup = "A" | "A+" | "A++" | "A0" | "B" | "C";
+export type Setup = "A" | "A+" | "A++" | "A0" | "B" | "C" | "D";
 export const isA = (s: string | null | undefined) => s === "A" || s === "A+" || s === "A++";
-export const isStudy = (s: string | null | undefined) => s === "A0" || s === "B" || s === "C";
+export const isStudy = (s: string | null | undefined) => s === "A0" || s === "B" || s === "C" || s === "D";
+/** Study setups tracked as paper shorts. */
+export const isShortStudy = (s: string | null | undefined) => s === "B" || s === "C" || s === "D";
 export const capGroup = (cap: number) => EARN.capGroups.find((g) => cap >= g.lo && cap < g.hi)?.key ?? "large";
 const groupLabel = (key: string) => EARN.capGroups.find((g) => g.key === key)!.label;
 
@@ -88,6 +92,8 @@ export function classify(n: Numbers): { setup: Setup | null; reason: string | nu
   if (n.surprise_pct_rank === null) return { setup: null, reason: `not enough surprise history in the ${n.cap_group} group yet (${n.rank_basis} reports)` };
   if (n.surprise_pct_rank < EARN.topRank) return { setup: null, reason: `surprise rank ${n.surprise_pct_rank} (needs ${EARN.topRank}+)` };
   if (n.sector === null) return { setup: null, reason: "big beat, but the sector could not be checked" };
+  // A big beat the market sold hard is not an up-drift setup: the reaction points the other way. Study only, as a paper short.
+  if (n.reaction_pct <= -EARN.gapPct) return { setup: "D", reason: `big beat the market sold (${n.reaction_pct}% vs SPY on the reaction day): study only, paper short` };
   if (n.volume_ratio === null || n.volume_ratio < EARN.minVolumeRatio) return { setup: "A0", reason: `big beat on quiet volume (${n.volume_ratio ?? "?"}x; needs ${EARN.minVolumeRatio}x): study only` };
   const early = n.days_after_quarter_end !== null && n.days_after_quarter_end <= EARN.earlyDays;
   if (!early) return { setup: "A", reason: null };
@@ -192,7 +198,7 @@ const aiSchema = z.object({
 });
 
 /** The rules, prompt, reply format and data conventions, hashed: changing any of them starts a new version. */
-export const EARN_VERSION = createHash("sha256").update(JSON.stringify({ EARN, EARN_PROMPT, EARN_SCHEMA, data: "nasdaq-calendar+snapshot-consensus+finnhub-revenue+fmp-revenue+sec-8k-6k; surprise explained to the model", conventions: "entry next open; ranks all sectors; volume filter on A" })).digest("hex").slice(0, 10);
+export const EARN_VERSION = createHash("sha256").update(JSON.stringify({ EARN, EARN_PROMPT, EARN_SCHEMA, data: "nasdaq-calendar+snapshot-consensus+finnhub-revenue+fmp-revenue+sec-8k-6k; surprise explained to the model", conventions: "entry next open; ranks all sectors; volume filter on A; big beats sold off 7%+ are study D (short), not A" })).digest("hex").slice(0, 10);
 
 export interface EarnCard {
   ticker: string; setup: Setup; report_date: string; timing: Timing; numbers: Numbers;

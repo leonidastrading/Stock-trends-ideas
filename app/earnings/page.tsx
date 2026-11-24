@@ -2,7 +2,7 @@ import SetupNotice from "@/components/SetupNotice";
 import Ticker from "@/components/Ticker";
 import { marketDataFromEnv } from "@/lib/alpaca";
 import { hasDatabase } from "@/lib/db";
-import { allCards, allDocs, allTracks, EARN, EARN_VERSION, historyCount, isA, peerBench, scansSince, score, snapshotCount, weekOf, type CardRow, type DocRow, type Group, type ScanRow, type TrackRow } from "@/lib/scout/earnings";
+import { allCards, allDocs, allTracks, EARN, EARN_VERSION, historyCount, isA, isShortStudy, isStudy, peerBench, scansSince, score, snapshotCount, weekOf, type CardRow, type DocRow, type Group, type ScanRow, type TrackRow } from "@/lib/scout/earnings";
 import { calendarDay } from "@/lib/sources/earnings-data";
 import { addDays, etLabelAgo, toEt, dayAgo } from "@/lib/time";
 import EarningsSend from "./EarningsSend";
@@ -35,7 +35,7 @@ export default async function EarningsPage() {
     const px = cx?.ai_recommendation === "promote" ? 0 : cx ? 1 : 2, py = cy?.ai_recommendation === "promote" ? 0 : cy ? 1 : 2;
     return px - py || TIER[x.setup!] - TIER[y.setup!] || y.reactionDate.localeCompare(x.reactionDate);
   });
-  const study = scans.filter((s) => (s.setup === "A0" || s.setup === "B" || s.setup === "C") && s.reactionDate >= addDays(today, -30));
+  const study = scans.filter((s) => isStudy(s.setup) && s.reactionDate >= addDays(today, -30));
   const rejected = recent.filter((s) => !s.setup && s.reason && !/^surprise rank|^no consensus snapshot/.test(s.reason));
   // Open positions: the setups (every report is tracked for the benchmark, but only setups are shown here).
   const open = tracks.filter((t) => !t.closed && scanBy.get(t.scanId)?.setup);
@@ -56,7 +56,7 @@ export default async function EarningsPage() {
           <ul>
             <li><b>No look-ahead.</b> Consensus EPS and revenue, market cap and year-ago EPS are frozen before each report (the latest capture before the release, with its time). The surprise uses only that snapshot; a report without one stays in the benchmark but cannot be a setup. Surprise and run-up ranks use only the 12 months before the report.</li>
             <li><b>A</b>: the top 20% by (actual EPS − consensus) ÷ the close before the news, against the last 12 months of reports in the same size group (under $2B, $2-10B, $10-200B), on reaction-day volume of {EARN.minVolumeRatio}× normal or more. <b>A+</b>: reported within {EARN.earlyDays} days of quarter end. <b>A++</b>: also in the top third of 10-day run-ups, ranked the same way.</li>
-            <li>Study only, never promoted: <b>A0</b> a big beat on quiet volume (to compare populations); <b>B</b> a $1-10B company that missed and gapped up more than {EARN.gapPct}%; <b>C</b> a $10B+ company below the year-ago quarter&apos;s actual EPS (same street basis; from the scout&apos;s own history, else Nasdaq&apos;s year-ago figure) that gapped down more than {EARN.gapPct}% (paper shorts).</li>
+            <li>Study only, never promoted: <b>A0</b> a big beat on quiet volume (to compare populations); <b>B</b> a $1-10B company that missed and gapped up more than {EARN.gapPct}%; <b>C</b> a $10B+ company below the year-ago quarter&apos;s actual EPS (same street basis; from the scout&apos;s own history, else Nasdaq&apos;s year-ago figure) that gapped down more than {EARN.gapPct}% (paper shorts); <b>D</b> a big beat (top 20% surprise) the market sold more than {EARN.gapPct}% against SPY on the reaction day: the reaction points down, so it is kept out of A and tracked as a paper short to see whether these keep falling.</li>
             <li><b>Every report in the universe is tracked</b> the same way: entry at the next open, exit at the close of the session before the next report (rechecked daily; a confirmed date moves it, earlier or later, and each move is logged), or 60 sessions. The benchmark for a setup is the average excess over SPY of the other reports in its size group and report week. Returns are also measured from the reaction-day close.</li>
             <li>For each A-setup the AI reads the SEC press release filed by the reaction day and the headlines published before the paper entry, and judges the beat (high: revenue beat, guidance up, margins up; low: tax, buybacks, one-offs, guidance cut). The numbers come from the feeds; the AI cannot change them. The scout also reads the guidance direction from the press release&apos;s wording, without the model, for the numeric baseline.</li>
           </ul>
@@ -87,7 +87,7 @@ export default async function EarningsPage() {
             const ret = t.entryPrice && snap?.price ? (snap.price / t.entryPrice - 1) * 100 : null;
             const held = Math.max(0, Math.round((Date.parse(`${today}T12:00:00Z`) - Date.parse(`${t.entryDate}T12:00:00Z`)) / 86400_000));
             const toExit = t.exitDate ? Math.round((Date.parse(`${t.exitDate}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86400_000) : null;
-            const short = s.setup === "B" || s.setup === "C";
+            const short = isShortStudy(s.setup);
             return (
               <tr key={t.scanId}>
                 <td><Ticker symbol={s.symbol} className={short ? "neg" : "pos"} />{t.tappedAt ? <span className="tag ok">sent</span> : null}</td>
@@ -104,7 +104,7 @@ export default async function EarningsPage() {
 
       {study.length > 0 && (
         <details className="card section">
-          <summary><b>Study setups A0, B and C (last 30 days, {study.length})</b> <span className="small muted">tracked to compare, never promoted</span></summary>
+          <summary><b>Study setups A0, B, C and D (last 30 days, {study.length})</b> <span className="small muted">tracked to compare, never promoted</span></summary>
           <ul className="small">{study.map((s) => <li key={s.id}><Ticker symbol={s.symbol} className={s.setup === "A0" ? "accent" : "neg"} /> <b>{s.setup}</b> · reported {s.reportDate} · EPS {s.numbers.eps_actual} vs {s.numbers.eps_consensus} · reaction {pct(s.numbers.reaction_pct)} on {s.numbers.volume_ratio ?? "?"}× volume · ${s.numbers.market_cap_b}B {s.numbers.sector ?? ""}{s.setup === "C" ? ` · year-ago EPS ${s.numbers.year_ago_eps} (${s.numbers.year_ago_source})` : ""}</li>)}</ul>
         </details>
       )}
@@ -181,6 +181,7 @@ function Scoreboard({ scans, tracks, cards, docs }: { scans: ScanRow[]; tracks: 
       score("Beat quality high", A.filter((r) => r.c?.beat_quality === "high").map((r) => r.x)), score("Beat quality mixed", A.filter((r) => r.c?.beat_quality === "mixed").map((r) => r.x)), score("Beat quality low", A.filter((r) => r.c?.beat_quality === "low").map((r) => r.x)),
       score("Study A0 (big beat, quiet volume)", xs.filter((r) => r.s.setup === "A0").map((r) => r.x)),
       score("Study B (short)", xs.filter((r) => r.s.setup === "B").map((r) => r.x), true), score("Study C (short)", xs.filter((r) => r.s.setup === "C").map((r) => r.x), true),
+      score("Study D (big beat sold off, short)", xs.filter((r) => r.s.setup === "D").map((r) => r.x), true),
       ...quarters.map((qq) => score(`A-setups reported ${qq}`, A.filter((r) => quarterOf(r.s.reportDate) === qq).map((r) => r.x))),
     ];
   };
