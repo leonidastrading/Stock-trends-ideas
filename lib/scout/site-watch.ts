@@ -14,7 +14,7 @@ import { addDays, toEt } from "../time";
 import type { ResearchDeps } from "./research";
 import * as store from "./store";
 
-export const SITE_WATCH = { companiesPerRun: 3, everyDays: 7, maxPages: 6, minChangedChars: 150, baselineDaysAgo: 90 };
+export const SITE_WATCH = { companiesPerRun: 2, budgetMs: 180_000, everyDays: 7, maxPages: 6, minChangedChars: 150, baselineDaysAgo: 90 };
 
 export type PageKind = "home" | "investors" | "press" | "customers" | "careers" | "pricing" | "products";
 export const PAGE_KINDS: Array<[Exclude<PageKind, "home">, RegExp]> = [
@@ -111,7 +111,7 @@ async function live(url: string): Promise<string | null> {
 }
 
 /** One pass: the stocks with open cards whose site is due (about weekly), a few at a time. */
-export async function runSiteWatch(deps: ResearchDeps): Promise<string> {
+export async function runSiteWatch(deps: ResearchDeps, stopAt = Date.now() + SITE_WATCH.budgetMs): Promise<string> {
   const env = deps.env;
   const today = toEt(deps.now).date;
   const { pageText } = await import("../sources/websearch");
@@ -122,6 +122,8 @@ export async function runSiteWatch(deps: ResearchDeps): Promise<string> {
     .sort((a, b) => (lastRead.get(a) ?? 0) - (lastRead.get(b) ?? 0)).slice(0, SITE_WATCH.companiesPerRun);
   const notes: string[] = [];
   for (const sym of due) {
+    // A function is stopped at 5 minutes: a company not reached stays due and is read in the next run.
+    if (Date.now() > stopAt) { notes.push(`${sym}: out of time, next run`); continue; }
     const site = await websiteOf(sym, env);
     if (!site) { await q(`INSERT INTO site_watch (symbol, url, kind, checked_at) VALUES ($1, '-', 'home', now()) ON CONFLICT (symbol, url) DO UPDATE SET checked_at = now()`, [sym]); notes.push(`${sym}: no website on file`); continue; }
     let pages: Array<{ url: string; kind: PageKind; last: string | null }> = (await q(`SELECT url, kind, last_text FROM site_watch WHERE symbol = $1 AND url <> '-'`, [sym])).map((r) => ({ url: String(r.url), kind: r.kind as PageKind, last: (r.last_text as string) ?? null }));
@@ -129,9 +131,12 @@ export async function runSiteWatch(deps: ResearchDeps): Promise<string> {
       const homeHtml = await live(site);
       pages = homeHtml ? pickPages(site, homeHtml).map((p) => ({ ...p, last: null })) : [];
       if (!pages.length) { notes.push(`${sym}: site not readable`); await q(`INSERT INTO site_watch (symbol, url, kind, checked_at) VALUES ($1, '-', 'home', now()) ON CONFLICT (symbol, url) DO UPDATE SET checked_at = now()`, [sym]); continue; }
+      // Every page found is put on file at once, so one this run has no time for is read (against the archive) next week, not forgotten.
+      for (const p of pages) await q(`INSERT INTO site_watch (symbol, url, kind, checked_at) VALUES ($1, $2, $3, now()) ON CONFLICT (symbol, url) DO NOTHING`, [sym, p.url, p.kind]);
     }
-    let changed = 0;
+    let changed = 0, unread = 0;
     for (const p of pages) {
+      if (Date.now() > stopAt) { unread++; continue; }
       const html = await live(p.url);
       if (!html) continue;
       const now = pageText(html);
@@ -159,7 +164,7 @@ export async function runSiteWatch(deps: ResearchDeps): Promise<string> {
       await q(`INSERT INTO site_changes (symbol, url, kind, old_date, old_archive, new_archive, removed, added, read) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, [sym, p.url, p.kind, oldDate, oldUrl, newUrl, JSON.stringify(removed), JSON.stringify(added), read ? JSON.stringify(read) : null]);
       changed++;
     }
-    notes.push(`${sym}: ${pages.length} pages, ${changed} changed`);
+    notes.push(`${sym}: ${pages.length} pages, ${changed} changed${unread ? `, ${unread} not read (out of time)` : ""}`);
   }
   return `site watch: ${notes.join(" · ") || "nothing due"}`;
 }

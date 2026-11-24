@@ -6,7 +6,7 @@ import { callResearchModel } from "./llm";
 import { runReviews } from "./review";
 import { maybeSendDigest } from "./digest";
 import type { ResearchDeps } from "./research";
-import { runScan } from "./scan";
+import { runScan, type ScanReport } from "./scan";
 import { runStories } from "./stories";
 import * as store from "./store";
 import { updateTracks } from "./tracking";
@@ -16,8 +16,12 @@ export function defaultDeps(now = new Date()): ResearchDeps {
   return { data, sources: allSources(data), callModel: callResearchModel, now, env: process.env };
 }
 
-/** How one pass of the daily job spends its 5 minutes (ms from its start). */
-export const DAILY_BUDGET = { measureBy: 130_000, researchBy: 140_000, storiesBy: 175_000, followupsBy: 215_000, maxPasses: 5 };
+/**
+ * How one pass of the daily job spends its 5 minutes (ms from its start). "By" times are the latest a step may START;
+ * `finishBy` is when research still going is queued instead, and `hardStop` is when a step still going is left to the
+ * next pass, so the pass is always recorded and the next one started before the function is stopped at 300 seconds.
+ */
+export const DAILY_BUDGET = { measureBy: 110_000, researchBy: 120_000, storiesBy: 100_000, followupsBy: 120_000, finishBy: 245_000, hardStop: 265_000, maxPasses: 6 };
 export type DailyStep = "discovery" | "stories" | "followups";
 
 /** Pure: whether another pass is needed, and which steps are finished. */
@@ -27,44 +31,61 @@ export function dailyProgress(done: Iterable<string>, unmeasured: number): { don
   return { done: d, more: unmeasured > 0 || d.length < steps.length };
 }
 
+/** What a step that was still going at the hard stop is recorded as. */
+export const CUT = "cut off: still running at this pass's time limit; the next pass does it";
+
+/** A step's result, or null when it is still going at `by` (the step is left behind; its own writes are idempotent). */
+export async function within<T>(work: Promise<T>, by: number): Promise<{ value: T } | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), Math.max(0, by - Date.now())); });
+  const r = await Promise.race([work.then((value) => ({ value })), late]);
+  clearTimeout(timer);
+  if (!r) work.catch(() => undefined);
+  return r;
+}
+
 /**
  * The daily job: scan the watch-list, research candidates, and on Mondays send the digest.
  * A function is stopped at 5 minutes, so each pass keeps to a time budget: measuring stops in time, research that
  * would start too late goes on the catch-up queue (done within minutes), and steps it could not reach are left to
  * the next pass (`more`), which the caller starts with the steps already `done`.
  */
-export async function runDaily(base = defaultDeps(), opts: { done?: string[]; pass?: number } = {}) {
+export async function runDaily(base = defaultDeps(), opts: { done?: string[]; pass?: number; budget?: typeof DAILY_BUDGET } = {}) {
   const started = Date.now();
-  const deps: ResearchDeps = { ...base, startBy: base.startBy ?? started + DAILY_BUDGET.researchBy };
+  const B = opts.budget ?? DAILY_BUDGET;
+  const hardStop = started + B.hardStop;
+  const deps: ResearchDeps = { ...base, startBy: base.startBy ?? started + B.researchBy, finishBy: base.finishBy ?? started + B.finishBy };
   const done = new Set<string>(opts.done ?? []);
   const pass = opts.pass ?? 1;
   const run = await store.startRun("daily");
+  const took: string[] = [];
+  const timed = async <T>(name: string, work: () => Promise<T>): Promise<{ value: T } | null> => {
+    const t0 = Date.now();
+    const r = await within(work(), hardStop);
+    took.push(`${name} ${Math.round((Date.now() - t0) / 1000)}s${r ? "" : " (cut off)"}`);
+    return r;
+  };
   try {
-    const scan = await runScan(deps, { measureBy: started + DAILY_BUDGET.measureBy, skipDiscovery: done.has("discovery"), resume: pass > 1 });
+    const scanned = await timed("scan", () => runScan(deps, { measureBy: started + B.measureBy, skipDiscovery: done.has("discovery"), resume: pass > 1 }));
     const settings = await store.loadSettings();
-    if (!scan.unmeasured && (scan.discovery || settings.discoveryPerScan <= 0 || !settings.enabled)) done.add("discovery");
+    // Cut off mid-scan: what it measured is saved as it goes, so the next pass picks up where it stopped.
+    const scan: ScanReport = scanned?.value ?? { date: "", terms: 0, measured: [], researched: [], risingQueries: [], discovery: null, stoppedEarly: CUT, unmeasured: 1 };
+    if (scanned && !scan.unmeasured && (scan.discovery || settings.discoveryPerScan <= 0 || !settings.enabled)) done.add("discovery");
     const later = "later: no time left in this pass";
     let stories: unknown = done.has("stories") ? "done in an earlier pass" : later;
-    if (!done.has("stories") && Date.now() < started + DAILY_BUDGET.storiesBy) {
-      try {
-        stories = await runStories(deps);
-      } catch (err) {
-        stories = { error: err instanceof Error ? err.message : String(err) };
-      }
-      done.add("stories");
+    if (!done.has("stories") && Date.now() < started + B.storiesBy) {
+      const r = await timed("stories", () => runStories(deps).catch((err) => ({ error: err instanceof Error ? err.message : String(err) })));
+      stories = r ? r.value : CUT;
+      if (r) done.add("stories");
     }
     let followups: unknown = done.has("followups") ? "done in an earlier pass" : later;
-    if (!done.has("followups") && Date.now() < started + DAILY_BUDGET.followupsBy) {
-      try {
-        const { runFollowups } = await import("./followup");
-        followups = await runFollowups(deps);
-      } catch (err) {
-        followups = { error: err instanceof Error ? err.message : String(err) };
-      }
-      done.add("followups");
+    if (!done.has("followups") && Date.now() < started + B.followupsBy) {
+      const r = await timed("followups", () => import("./followup").then(({ runFollowups }) => runFollowups(deps)).catch((err) => ({ error: err instanceof Error ? err.message : String(err) })));
+      followups = r ? r.value : CUT;
+      if (r) done.add("followups");
     }
     const progress = dailyProgress(done, scan.unmeasured ?? 0);
-    const more = progress.more && pass < DAILY_BUDGET.maxPasses;
+    const more = progress.more && pass < B.maxPasses;
     let digest = more ? "after the last pass" : "skipped";
     if (!more) {
       try {
@@ -76,6 +97,7 @@ export async function runDaily(base = defaultDeps(), opts: { done?: string[]; pa
     const pushed = await pushNewCards(deps.env).catch((err) => `push failed: ${err instanceof Error ? err.message : String(err)}`);
     const detail = { ...scan, stories, followups, digest, pushed, pass, more, done: progress.done };
     await store.finishRun(run, scan.stoppedEarly && !more ? "skipped" : "ok", detail);
+    console.log(`daily pass ${pass}: ${took.join(", ")}; ${Math.round((Date.now() - started) / 1000)}s in all; done: ${progress.done.join(", ") || "nothing yet"}${more ? "; another pass follows" : ""}`);
     return { status: "ok" as const, ...detail };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

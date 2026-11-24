@@ -34,6 +34,8 @@ export interface ResearchDeps {
   fetchImpl?: typeof fetch;
   /** A run's time budget (ms since epoch): research that would start after this is queued and done within minutes instead. */
   startBy?: number;
+  /** The run's hard stop (ms since epoch): research still going then is put on the catch-up queue, so the run can end inside its 5 minutes. */
+  finishBy?: number;
 }
 
 export interface ResearchInput {
@@ -81,7 +83,31 @@ export async function recordHealth(results: SourceResult[]): Promise<void> {
 /** Why an idea was queued instead of researched when its run had no time left. */
 export const OUT_OF_TIME = "waiting: this run was out of time; queued, researched within minutes";
 
+/** Why an idea was queued when its research was still going at the run's hard stop. */
+export const CUT_OFF = "waiting: this run reached its time limit mid-research; queued, researched again within minutes";
+
+/**
+ * Research one idea. With a hard stop (`finishBy`), research still going at that moment is left behind and the idea is
+ * queued, so the run that called it ends cleanly instead of being killed at 5 minutes with nothing recorded.
+ */
 export async function researchCandidate(input: ResearchInput, deps: ResearchDeps): Promise<ResearchOutcome> {
+  const left = deps.finishBy ? deps.finishBy - Date.now() : Infinity;
+  if (!Number.isFinite(left) || input.queued || left <= 0) return researchNow(input, deps);
+  const work = researchNow(input, deps);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const cut = new Promise<"cut">((resolve) => { timer = setTimeout(() => resolve("cut"), left); });
+  const r = await Promise.race([work, cut]);
+  clearTimeout(timer);
+  if (r !== "cut") return r;
+  work.catch(() => undefined);
+  console.log(`research cut off at the run's time limit: ${input.term} (${input.tickersHint.join(",") || "no ticker"}); queued`);
+  const version = await currentVersion(await store.loadSettings());
+  await import("./catchup").then(({ enqueue, queuedResearch }) => enqueue("research", `${input.origin}:${input.term.toLowerCase()}:${input.tickersHint.join(",")}`, queuedResearch(input))).catch((err) => console.error(`queue failed: ${err instanceof Error ? err.message : String(err)}`));
+  const candidate = await store.addCandidate({ versionId: version.id, origin: input.origin, term: input.term, kindHint: input.kindHint, tickersHint: input.tickersHint, observation: input.observation, trigger: input.trigger ?? null, cardId: null, sourceLabel: input.source?.label ?? null, sourceUrl: input.source?.url ?? null, outcome: "rejected", reason: CUT_OFF });
+  return { outcome: "capped", reason: CUT_OFF, candidate };
+}
+
+async function researchNow(input: ResearchInput, deps: ResearchDeps): Promise<ResearchOutcome> {
   const settings = await store.loadSettings();
   const version = await currentVersion(settings);
   const et = toEt(deps.now);
