@@ -27,6 +27,8 @@ describe("one line on what a company does", () => {
     expect(isStale(a(50, "Makes things."), now)).toBe(true);
     expect(isStale(a(2, null), now)).toBe(false);
     expect(isStale(a(4, null), now)).toBe(true);
+    // An industry label alone is not a description: it is tried again too.
+    expect(isStale({ ...a(4, null), industry: "Aerospace & Defense" }, now)).toBe(true);
   });
 });
 

@@ -1,5 +1,5 @@
 import { background } from "@/lib/background";
-import { companyAbout, fillCompanyAbout, isStale } from "@/lib/scout/company-line";
+import { COMPANY_LINE, companyAbout, fillCompanyAbout, isStale } from "@/lib/scout/company-line";
 
 const SECTOR_LABEL: Record<string, string> = { technology: "Technology", communication: "Communication services", consumer_discretionary: "Consumer discretionary", consumer_staples: "Consumer staples", health_care: "Health care", financials: "Financials", industrials: "Industrials", energy: "Energy", materials: "Materials", utilities: "Utilities", real_estate: "Real estate" };
 
@@ -10,7 +10,7 @@ export default async function CompanyAbout({ symbol, sector }: { symbol: string;
     // Looked up once per stock: waited for briefly, finished after the page is sent if it takes longer.
     const filling = fillCompanyAbout(symbol).catch(() => null);
     background(async () => { await filling; });
-    a = (await Promise.race([filling, new Promise<null>((r) => setTimeout(() => r(null), 2500))])) ?? a;
+    a = (await Promise.race([filling, new Promise<null>((r) => setTimeout(() => r(null), COMPANY_LINE.waitMs))])) ?? a;
   }
   const label = SECTOR_LABEL[sector] ?? sector.replace(/_/g, " ");
   return (
