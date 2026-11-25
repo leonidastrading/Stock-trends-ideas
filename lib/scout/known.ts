@@ -17,9 +17,10 @@ import { addDays, toEt } from "../time";
  * 4 = research also reads the AI-trade backdrop (lib/scout/backdrop.ts) and the open paper calls (no related ticker
  *     may contradict one; lib/scout/conflicts.ts);
  * 5 = FDA citizen petitions on the stock (regulations.gov), with the FDA's response status;
- * 6 = what your websites' articles and reports say about the stock (site digests).
+ * 6 = what your websites' articles and reports say about the stock (site digests);
+ * 7 = the pre-earnings screen's warning signs on a stock that reports in the next days (lib/scout/pre-earnings.ts).
  */
-export const KNOWN_REVISION = 6;
+export const KNOWN_REVISION = 7;
 
 const cut = (s: string | null | undefined, n: number) => { const t = (s ?? "").replace(/\s+/g, " ").trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 const on = (sym: string, xs: string[] | undefined | null) => (xs ?? []).map((x) => x.toUpperCase()).includes(sym);
@@ -51,6 +52,8 @@ export async function whatTheScoutKnows(symbols: string[], now = new Date(), max
     safe(() => import("../sources/coverage").then(({ coverageOf }) => coverageOf(syms)), new Map()),
   ]);
   const petitions = await safe(() => store.cacheGet<import("./petitions").PetitionWatch>("regs:petitions"), null);
+  const preEarn = await safe(() => import("./pre-earnings").then(({ preEarningsFor }) => preEarningsFor(syms, today)), []);
+  const { preEarningsLine } = await import("./pre-earnings");
   const siteDigests = await safe(() => import("./site-digest").then(({ digestsFor }) => digestsFor(syms, 90, 12)), []);
   const { digestLine } = await import("./site-digest");
   const { petitionLine } = await import("./petitions");
@@ -78,6 +81,9 @@ export async function whatTheScoutKnows(symbols: string[], now = new Date(), max
   const sections: KnownSection[] = [];
 
   for (const sym of syms) {
+    // Warning signs seen before results (a code-only screen, new and unproven: something to check, not a verdict).
+    sections.push({ title: `${sym}: the pre-earnings screen (warning signs seen before results; a new, unproven screen: weigh the facts in it, not the flag)`, lines: preEarn.filter((r) => r.symbol === sym).slice(0, 1).map((r) => `${preEarningsLine(r)}${r.reactionPct !== null ? ` The report is out: ${r.reactionPct > 0 ? "+" : ""}${r.reactionPct}% close to close.` : ""}`) });
+
     // Investigations: the findings, not the whole report.
     const inv = invs.filter((i) => i.status === "done" && i.report && (on(sym, i.report.listed.map((x) => x.ticker)) || i.report.money_trail.some((m) => new RegExp(`\\b${sym}\\b`).test(m.finding))));
     sections.push({ title: `${sym}: the user's investigations (public records: federal contracts, lobbying, PAC money, headlines)`, lines: inv.slice(0, 3).map((i) => {

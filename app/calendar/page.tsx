@@ -10,6 +10,7 @@ import { stSnapshots, type StSnapshot } from "@/lib/scout/st-trending";
 import * as store from "@/lib/scout/store";
 import { calendarDay, type EarningsReport } from "@/lib/sources/earnings-data";
 import { addDays, toEt, type Session } from "@/lib/time";
+import PreEarnings from "./PreEarnings";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -80,11 +81,13 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const days = weekDays(monday);
   const db = hasDatabase();
   const data = marketDataFromEnv();
-  const [byDay, snaps, briefs, sessions] = await Promise.all([
+  const [byDay, snaps, briefs, sessions, pre, preRecord] = await Promise.all([
     Promise.all(days.map((d) => calendarDay(d).catch(() => null))),
     db ? stSnapshots(28).catch(() => [] as StSnapshot[]) : Promise.resolve([] as StSnapshot[]),
     db ? store.cardBriefsSince(180).catch(() => [] as store.CardBrief[]) : Promise.resolve([] as store.CardBrief[]),
     data ? data.getCalendar(days[0], days[4]).catch(() => null) : Promise.resolve(null),
+    db ? import("@/lib/scout/pre-earnings").then(({ preEarnings }) => preEarnings(today)).catch(() => null) : Promise.resolve(null),
+    db ? import("@/lib/scout/pre-earnings").then(({ preEarningsRecord }) => preEarningsRecord()).catch(() => null) : Promise.resolve(null),
   ]);
   // Market holidays and half days (only when the market calendar loaded).
   const sessionOf = (d: string) => (sessions ? sessions.find((x: Session) => x.date === d) ?? "closed" : null);
@@ -143,6 +146,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         )}
         <footer className="cal-foot">Data: Nasdaq earnings calendar · logos: Financial Modeling Prep · hover a logo for the estimate · ▲▼ the scout&apos;s cards on the stock (last 6 months)</footer>
       </div>
+      {pre && preRecord && <PreEarnings ahead={pre.ahead} past={pre.past} record={preRecord} />}
       {mine.length > 0 && (
         <section className="card">
           <h2>Your cards reporting this week</h2>

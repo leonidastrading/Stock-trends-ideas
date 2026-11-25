@@ -251,6 +251,14 @@ export async function submissions(cik: string, ua: string, fetchImpl?: typeof fe
   return getJson<SubmissionsDoc>(`https://data.sec.gov/submissions/CIK${cik.padStart(10, "0")}.json`, { headers: { "user-agent": ua }, minIntervalMs: SEC_MS, cacheMs: 3 * 3600_000, fetchImpl, retries: 1 });
 }
 
+/** The latest 10-K / 10-Q against the same report a year earlier, measured by code only (no AI, nothing stored). Null without a pair. */
+export async function mechanicalLatest(cik: string, ua: string, fetchImpl?: typeof fetch): Promise<{ latest: FilingRef; prior: FilingRef; m: Mechanical } | null> {
+  const pair = pickPair(await submissions(cik, ua, fetchImpl));
+  if (!pair?.prior) return null;
+  const [oldText, newText] = [await docText(pair.prior.url, ua, fetchImpl), await docText(pair.latest.url, ua, fetchImpl)];
+  return { latest: pair.latest, prior: pair.prior, m: mechanicalDiff(oldText, newText, pair.latest.form) };
+}
+
 /**
  * Diff one company's latest 10-K / 10-Q (if not done already) and store the result. Returns the stored diff,
  * null if there is nothing new, or throws "capped" when the day's AI budget is spent (nothing stored: retried later).
