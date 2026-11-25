@@ -6,6 +6,8 @@ import { allCards, allDocs, allTracks, EARN, EARN_VERSION, historyCount, isA, is
 import { calendarDay } from "@/lib/sources/earnings-data";
 import { addDays, etLabelAgo, toEt, dayAgo } from "@/lib/time";
 import EarningsSend from "./EarningsSend";
+import TabNew from "@/components/TabNew";
+import NewSince from "@/components/NewSince";
 import StockChart from "@/components/StockChart";
 import { tvSymbol } from "@/config/links";
 
@@ -48,7 +50,7 @@ export default async function EarningsPage() {
   return (
     <>
       <h1>Drift</h1>
-      <div className="toolbar"><span className="filter-links small"><a className="chip" href="/drift">Down drift (bad news)</a><a className="chip active" href="/earnings">Earnings drift (up)</a></span></div>
+      <div className="toolbar"><span className="filter-links small"><a className="chip" href="/drift">Down drift (bad news)<TabNew tab="drift" /></a><a className="chip active" href="/earnings">Earnings drift (up)</a></span></div>
       <details className="card section">
         <summary><b>How this works</b> <span className="small muted">big earnings beats that keep drifting up for ~60 trading days</span></summary>
         <div className="small secondary">
@@ -90,7 +92,7 @@ export default async function EarningsPage() {
             const short = isShortStudy(s.setup);
             return (
               <tr key={t.scanId}>
-                <td><Ticker symbol={s.symbol} className={short ? "neg" : "pos"} />{t.tappedAt ? <span className="tag ok">sent</span> : null}</td>
+                <td><Ticker symbol={s.symbol} className={short ? "neg" : "pos"} />{t.tappedAt ? <span className="tag ok">sent</span> : null}<NewSince tab="earnings" at={s.createdAt} /></td>
                 <td className="small">{s.setup}{s.setup === "A0" || short ? ` (study${short ? ", short" : ""})` : ""}</td>
                 <td className="small">{t.entryDate}{t.entryPrice ? ` @ $${t.entryPrice.toFixed(2)}` : " (next open)"}</td>
                 <td className="num small">{held}d</td>

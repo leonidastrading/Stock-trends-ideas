@@ -2,7 +2,7 @@
 import { query as q } from "../db";
 import * as store from "./store";
 
-export const BADGE_TABS = ["research", "bubbles", "stocktwits", "ideas", "news", "drift", "rumors", "themes", "investigate", "inbox", "filings", "congress", "watchlist"] as const;
+export const BADGE_TABS = ["research", "bubbles", "stocktwits", "ideas", "news", "drift", "earnings", "rumors", "themes", "investigate", "inbox", "filings", "congress", "watchlist"] as const;
 export type BadgeTab = (typeof BADGE_TABS)[number];
 
 const n = async (sql: string, since: string) => Number((await q(sql, [since]).catch(() => [{ n: 0 }]))[0]?.n ?? 0);
@@ -28,11 +28,13 @@ export async function badgeCounts(since: Partial<Record<BadgeTab, string>>, now 
   add("filings", async (s) => (await n(`SELECT count(*) AS n FROM insider_buys WHERE created_at > $1`, s)) + (await n(`SELECT count(*) AS n FROM filing_alerts WHERE created_at > $1`, s)));
   add("congress", (s) => n(`SELECT count(*) AS n FROM congress_trades WHERE created_at > $1`, s));
   add("watchlist", (s) => n(`SELECT count(*) AS n FROM watchlist WHERE added_at > $1`, s));
+  // The Drift tab has two pages, counted apart so the menu can say which one has something new:
+  // down drift (setups first listed since) and earnings drift (setups the nightly scan found since).
   add("drift", async (s) => {
-    const earn = await n(`SELECT count(*) AS n FROM earnings_scans WHERE setup IS NOT NULL AND created_at > $1`, s);
     const seen = (await store.cacheGet<Record<string, string>>("drift:first-seen").catch(() => null))?.data ?? {};
-    return earn + Object.values(seen).filter((at) => at > s).length;
+    return Object.values(seen).filter((at) => at > s).length;
   });
+  add("earnings", (s) => n(`SELECT count(*) AS n FROM earnings_scans WHERE setup IS NOT NULL AND created_at > $1`, s));
   // The News feed's shared copy (no extra calls): new headlines since the tab was last opened.
   add("news", async (s) => {
     // Only the top stories (big moves, events, your card stocks, pile-ups, Trump), not every headline.

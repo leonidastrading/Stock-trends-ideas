@@ -21,4 +21,16 @@ describe("menu badges", () => {
     const c = await badgeCounts({ rumors: "2026-11-16T00:00:00Z", investigate: "2026-11-16T00:00:00Z", drift: "2026-11-15T00:00:00Z" }, new Date("2026-11-16T12:00:00Z"));
     expect(c).toEqual({ rumors: 2, investigate: 1, drift: 1 });
   });
+
+  it("counts the Drift tab's two pages apart: a new earnings setup is not a new down-drift setup", async () => {
+    await pg.query(`INSERT INTO earnings_scans (created_at, version, symbol, report_date, reaction_date, timing, setup, numbers) VALUES
+      ('2026-11-16T03:00:00Z', 'v', 'DELL', '2026-11-15', '2026-11-16', 'amc', 'A', '{}'),
+      ('2026-11-16T03:00:00Z', 'v', 'HPQ', '2026-11-15', '2026-11-16', 'amc', NULL, '{}'),
+      ('2026-11-10T03:00:00Z', 'v', 'OLD', '2026-11-09', '2026-11-10', 'amc', 'B', '{}')`);
+    const since = "2026-11-15T00:00:00Z";
+    const c = await badgeCounts({ drift: since, earnings: since }, new Date("2026-11-16T12:00:00Z"));
+    // One down-drift setup first listed since (from the test above) and one earnings setup: each on its own page.
+    expect(c).toEqual({ drift: 1, earnings: 1 });
+    expect(await badgeCounts({ drift: "2026-11-16T10:00:00Z" }, new Date("2026-11-16T12:00:00Z"))).toEqual({ drift: 0 });
+  });
 });

@@ -7,6 +7,7 @@ import { afterMove, bubbleRows, EVENT_LABEL, type BubbleRow } from "@/lib/scout/
 import * as store from "@/lib/scout/store";
 import Movers from "./Movers";
 import { daysBetween, fmtEtAgo, toEt } from "@/lib/time";
+import NewSince from "@/components/NewSince";
 
 const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
@@ -69,7 +70,7 @@ export default async function BubblesPage() {
               const left = daysBetween(today, r.date);
               return (
                 <tr key={r.id}>
-                  <td><Ticker symbol={r.symbol} /></td>
+                  <td><Ticker symbol={r.symbol} /><NewSince tab="bubbles" at={r.firstSeen} /></td>
                   <td className="small"><b>{EVENT_LABEL[r.type]}</b>: {r.url ? <a href={r.url} target="_blank" rel="noreferrer">{r.what}</a> : r.what} <span className="muted">({r.source})</span></td>
                   <td className="small" style={{ whiteSpace: "nowrap" }}>{fmtDay(r.date)}<div className="muted">{left === 0 ? "today" : `in ${left} day${left === 1 ? "" : "s"}`}</div></td>
                   <td className={`num ${r.run30 !== null && r.run30 - (r.spy30 ?? 0) >= 15 ? "warn" : ""}`}>{pct(r.run30)}<div className="small muted">SPY {pct(r.spy30)}</div></td>

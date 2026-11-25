@@ -3,17 +3,22 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { openTab, PREV_KEY, SEEN_KEY } from "@/lib/last-visit";
 
-const LINKS: Array<{ href: string; label: string; badge?: string }> = [
+const LINKS: Array<{ href: string; label: string; badge?: string; also?: string[] }> = [
   { href: "/", label: "Home" }, { href: "/ideas", label: "Ideas", badge: "ideas" }, { href: "/research", label: "Research", badge: "research" }, { href: "/favorites", label: "★ Favorites" }, { href: "/news", label: "News", badge: "news" }, { href: "/prs", label: "Press releases" }, { href: "/calendar", label: "Calendar" },
-  { href: "/drift", label: "Drift", badge: "drift" }, { href: "/rumors", label: "Rumors", badge: "rumors" }, { href: "/themes", label: "Themes", badge: "themes" }, { href: "/bubbles", label: "Bubbles", badge: "bubbles" }, { href: "/stocktwits", label: "Stocktwits", badge: "stocktwits" }, { href: "/dots", label: "Dots" }, { href: "/pharma", label: "Pharma" }, { href: "/court", label: "Court" }, { href: "/positioning", label: "Positioning" }, { href: "/chart", label: "Chart" }, { href: "/investigate", label: "Investigate", badge: "investigate" },
+  { href: "/drift", label: "Drift", badge: "drift", also: ["earnings"] }, { href: "/rumors", label: "Rumors", badge: "rumors" }, { href: "/themes", label: "Themes", badge: "themes" }, { href: "/bubbles", label: "Bubbles", badge: "bubbles" }, { href: "/stocktwits", label: "Stocktwits", badge: "stocktwits" }, { href: "/dots", label: "Dots" }, { href: "/pharma", label: "Pharma" }, { href: "/court", label: "Court" }, { href: "/positioning", label: "Positioning" }, { href: "/chart", label: "Chart" }, { href: "/investigate", label: "Investigate", badge: "investigate" },
   { href: "/map", label: "Map" }, { href: "/chat", label: "Chat" }, { href: "/notice", label: "I noticed something" }, { href: "/inbox", label: "Inbox", badge: "inbox" },
   { href: "/filings", label: "Filings", badge: "filings" }, { href: "/congress", label: "Congress", badge: "congress" }, { href: "/watchlist", label: "Watch-list", badge: "watchlist" },
   { href: "/scoreboard", label: "Scoreboard" }, { href: "/scoring", label: "Scoring" }, { href: "/chatter", label: "Chatter test" }, { href: "/settings", label: "Settings" },
 ];
-/** Pages that belong to a tab (the Drift tab also covers the earnings view). */
-const TAB_OF: Record<string, string> = { "/earnings": "drift" };
-const KEY = "scout-seen";
+/**
+ * Pages that sit under another tab, with their own "new" count: the Drift tab's second page is the earnings view.
+ * Opening one page marks only that page as seen, so the menu keeps its count for the other until you open it.
+ */
+const PAGE_OF: Record<string, { href: string; tab: string }> = { "/earnings": { href: "/drift", tab: "earnings" } };
+const KEY = SEEN_KEY;
+const readPrev = (): Record<string, string> => { try { return JSON.parse(localStorage.getItem(PREV_KEY) ?? "{}"); } catch { return {}; } };
 const POLL_MS = 90_000;
 
 const readSeen = (): Record<string, string> => { try { return JSON.parse(localStorage.getItem(KEY) ?? "{}"); } catch { return {}; } };
@@ -26,15 +31,23 @@ export default function NavBar() {
   // The site was updated since this page was opened (switching tabs keeps the old styles and code): reload.
   const build = useRef<string | null>(null);
   const [stale, setStale] = useState(false);
-  const active = TAB_OF[path] ? LINKS.find((l) => l.badge === TAB_OF[path])?.href : path === "/" ? "/" : LINKS.find((l) => l.href !== "/" && (path === l.href || path.startsWith(`${l.href}/`)))?.href;
-  const current = TAB_OF[path] ?? LINKS.find((l) => l.href === active)?.badge ?? null;
+  const active = PAGE_OF[path] ? PAGE_OF[path].href : path === "/" ? "/" : LINKS.find((l) => l.href !== "/" && (path === l.href || path.startsWith(`${l.href}/`)))?.href;
+  const current = PAGE_OF[path]?.tab ?? LINKS.find((l) => l.href === active)?.badge ?? null;
 
   const poll = useCallback(async () => {
     const seen = readSeen();
     const now = new Date().toISOString();
     // First visit: start counting from now (no badges for everything that already exists).
     for (const l of LINKS) if (l.badge && !seen[l.badge]) seen[l.badge] = now;
-    if (current) seen[current] = now;
+    // A page under a tab starts from when its tab was last opened (nothing already counted is lost or doubled).
+    for (const l of LINKS) for (const t of l.also ?? []) if (!seen[t]) seen[t] = seen[l.badge!] ?? now;
+    if (current) {
+      // Keep the moment before this visit, so the page can flag what is new since then (see lib/last-visit.ts).
+      const next = openTab(seen, readPrev(), current, now);
+      seen[current] = now;
+      try { localStorage.setItem(PREV_KEY, JSON.stringify(next.prev)); } catch { /* storage unavailable */ }
+      window.dispatchEvent(new Event("scout-visit"));
+    }
     writeSeen(seen);
     try {
       const r = await fetch(`/api/badges?s=${encodeURIComponent(JSON.stringify(seen))}`, { cache: "no-store" });
@@ -63,7 +76,8 @@ export default function NavBar() {
       <Link href="/" className="brand" aria-label="Scout home"><img src="/icon.svg" alt="" width={22} height={22} className="brand-logo" /> Scout</Link>
       {stale && <button type="button" className="chip nav-update" onClick={() => window.location.reload()} title="The site was updated since this page was opened">Updated · reload</button>}
       {LINKS.map((l) => {
-        const c = l.badge && l.badge !== current ? counts[l.badge] ?? 0 : 0;
+        // A tab's count is its own page's plus its other pages', less the page that is open now.
+        const c = [l.badge, ...(l.also ?? [])].filter((t): t is string => !!t && t !== current).reduce((a, t) => a + (counts[t] ?? 0), 0);
         return (
           <Link key={l.href} href={l.href} className={`nav-link${l.href === active ? " active" : ""}`} aria-current={l.href === active ? "page" : undefined}>
             {l.label}

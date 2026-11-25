@@ -4,6 +4,7 @@ import Ticker from "@/components/Ticker";
 import type { CardBrief } from "@/lib/scout/store";
 import { moverOutcome, moverRows, themeSummary, type MoverRow, type ThemeSummary } from "@/lib/scout/bubble-run";
 import { fmtEtAgo } from "@/lib/time";
+import NewSince from "@/components/NewSince";
 
 const pct = (x: number | null) => (x === null ? "—" : `${x > 0 ? "+" : x < 0 ? "−" : ""}${Math.abs(x).toFixed(1)}%`);
 const LEVEL: Record<string, [string, string]> = { mania: ["mania", "error"], building: ["building", "late"], quiet: ["quiet", ""] };
@@ -58,7 +59,7 @@ export default async function Movers({ briefs }: { briefs: CardBrief[] }) {
               const cards = cardsOn(r.symbol);
               return (
                 <tr key={r.id}>
-                  <td><Ticker symbol={r.symbol} />{r.theme ? <div className="small muted">{r.theme}</div> : null}</td>
+                  <td><Ticker symbol={r.symbol} /><NewSince tab="bubbles" at={r.firstSeen} />{r.theme ? <div className="small muted">{r.theme}</div> : null}</td>
                   <td className="small">{r.why ? (r.url ? <a href={r.url} target="_blank" rel="noreferrer">{r.why}</a> : r.why) : <span className="muted">{r.source}</span>}</td>
                   <td className="num">{pct(r.run30)}<div className="small muted">{r.sigmas30 ?? "?"}σ</div></td>
                   <td className="num">{pct(r.run5)}</td>

@@ -5,7 +5,12 @@ import { hasDatabase } from "@/lib/db";
 import { panel } from "@/lib/market/panels";
 import { downgradeInfo, DRIFT, latestFirst, scanDrift, shortLine, type DriftSetup } from "@/lib/scout/drift";
 import * as store from "@/lib/scout/store";
-import { etLabelAgo, dayAgo } from "@/lib/time";
+import { etLabelAgo, dayAgo, fmtEtAgo } from "@/lib/time";
+import TabNew from "@/components/TabNew";
+import NewSince from "@/components/NewSince";
+
+/** A setup says when it was first listed for this long after (the red NEW is since your last visit). */
+const NEW_HOURS = 36;
 import DriftResearch from "./DriftResearch";
 import DriftBook from "./DriftBook";
 import RatingStudy from "./RatingStudy";
@@ -48,13 +53,15 @@ export default async function DriftPage({ searchParams }: { searchParams: Promis
     bySym.set(card.primaryTicker, [...(bySym.get(card.primaryTicker) ?? []), { id: card.id, status: card.status }]);
   }
   const all: DriftSetup[] = latestFirst(p.data?.setups ?? []);
+  // When the scout first listed each setup: a setup can be new on the list although its event is days old.
+  const firstSeen = (await store.cacheGet<Record<string, string>>("drift:first-seen").catch(() => null))?.data ?? {};
   const isDowngrade = (s: DriftSetup) => s.eventKind === "downgrade";
   const setups = kind === "downgrade" ? all.filter(isDowngrade) : kind === "other" ? all.filter((s) => !isDowngrade(s)) : all;
   const nDown = all.filter(isDowngrade).length;
   return (
     <>
       <h1>Drift</h1>
-      <div className="toolbar"><span className="filter-links small"><a className="chip active" href="/drift">Down drift (bad news)</a><a className="chip" href="/earnings">Earnings drift (up)</a></span></div>
+      <div className="toolbar"><span className="filter-links small"><a className="chip active" href="/drift">Down drift (bad news)</a><a className="chip" href="/earnings">Earnings drift (up)<TabNew tab="earnings" /></a></span></div>
       <details className="card section">
         <summary><b>How this page works</b> <span className="small muted">stocks still falling days after bad news</span></summary>
         <div className="small secondary">
@@ -85,7 +92,7 @@ export default async function DriftPage({ searchParams }: { searchParams: Promis
         return (
           <section key={s.symbol} className="card drift-item">
             <div>
-              <Ticker symbol={s.symbol} className="neg" /> <span className={`tag ${s.stage === "building" ? "late" : ""}`}>{s.stage}</span> <span className="small secondary">{s.eventKind} · {day(s.eventDate)}</span>
+              <Ticker symbol={s.symbol} className="neg" /> <span className={`tag ${s.stage === "building" ? "late" : ""}`}>{s.stage}</span> <span className="small secondary">{s.eventKind} · {day(s.eventDate)}</span><NewSince tab="drift" at={firstSeen[`${s.symbol}|${s.eventDate}`]} />{(() => { const at = firstSeen[`${s.symbol}|${s.eventDate}`]; return at && Date.now() - Date.parse(at) < NEW_HOURS * 3600_000 ? <span className="small muted" style={{ marginLeft: 6 }}>first listed {fmtEtAgo(at)}</span> : null; })()}
             </div>
             <div>{s.eventUrl ? <a href={s.eventUrl} target="_blank" rel="noreferrer">{s.eventHeadline}</a> : s.eventHeadline}</div>
             {isDowngrade(s) && (() => { const d = downgradeInfo(s.eventHeadline); return d ? <div className="small">{d.broker ? <b>{d.broker}</b> : "Broker not named"}{d.from || d.to ? <>: {d.from ?? "?"} → {d.to ?? "?"}</> : null} · <span className={d.strength === "strong" ? "neg" : "muted"}>{d.strength === "strong" ? "strong (to Sell or below)" : d.strength === "mild" ? "mild (to Neutral or Hold)" : "rating not in the headline"}</span>{d.topBroker ? <span className="tag">top broker</span> : null}</div> : null; })()}
