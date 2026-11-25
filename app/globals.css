@@ -617,3 +617,6 @@ a.source-tag:hover { background: color-mix(in srgb, var(--accent) 14%, transpare
 .top-news-head { font-weight: 600; font-size: 15px; color: var(--text-primary); text-decoration: none; }
 .top-news-head:hover { text-decoration: underline; }
 .top-news-cards { margin-top: 3px; }
+
+/* "full answer" under a card's Still valid? line: looks like the link it replaced. */
+summary.recheck-full { display: inline-block; cursor: pointer; color: var(--accent, #6ea8fe); text-decoration: underline; }
