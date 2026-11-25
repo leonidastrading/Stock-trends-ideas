@@ -11,6 +11,7 @@ import Direction from "@/components/Direction";
 import CardAsk from "@/components/CardAsk";
 import CardCollapse from "@/components/CardCollapse";
 import CapShort from "@/components/CapShort";
+import CompanyAbout from "@/components/CompanyAbout";
 import StockChart from "@/components/StockChart";
 import FavoriteStar from "@/components/FavoriteStar";
 import Ticker from "@/components/Ticker";
@@ -153,6 +154,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
           {beforeExit ? <span className="tag warn" style={{ marginLeft: 6 }}>before this card&apos;s exit ({fmtDay(track!.deadlineDate)})</span> : null}
         </div>
         <h2 style={{ margin: "6px 0 2px" }}>{k.title}</h2>
+        {hasDatabase() && <Suspense fallback={null}><CompanyAbout symbol={c.primaryTicker} sector={c.sector} /></Suspense>}
         <div className={`card-thesis card-thesis-${c.direction}`}><span className="card-thesis-label">{c.direction === "long" ? "▲" : "▼"} Thesis</span> {thesis}</div>
         {/* Every score as a percentage (the 0-10 ratings x 10); tap the row for what they mean. "lateness" is shown as "early" (100% = nobody is talking about it yet). */}
         <details className="scores-details">

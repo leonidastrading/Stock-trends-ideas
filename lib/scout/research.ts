@@ -152,7 +152,7 @@ async function researchNow(input: ResearchInput, deps: ResearchDeps): Promise<Re
     await recordHealth(results);
   }
 
-  const [optionsLine, positioning, known, backdrop, calls, priceNow] = await Promise.all([
+  const [optionsLine, positioning, known, backdrop, calls, priceNow, earningsCall] = await Promise.all([
     readOptions(deps, input.tickersHint[0]),
     input.tickersHint[0] ? import("../market/positioning").then(({ positioningFor }) => positioningFor(input.tickersHint[0], deps.now, deps.fetchImpl)).catch(() => null) : Promise.resolve(null),
     // Investigations, earlier cards, themes, Dots, rumors, lawsuits, FDA dates, filings, insiders, Congress: background.
@@ -163,6 +163,8 @@ async function researchNow(input: ResearchInput, deps: ResearchDeps): Promise<Re
     store.allTracks().then(async (t) => (await import("./conflicts")).openCalls(t)).catch(() => []),
     // What the stock has already done, after hours and pre-market included, so news the market has reacted to is not called overlooked.
     import("./price-check").then(({ priceCheckLine }) => priceCheckLine(deps.data, input.tickersHint[0], deps.now)).catch(() => null),
+    // The latest earnings call, when the stock reported in the last few weeks: guidance, tone and what analysts pressed on.
+    import("./earnings-call").then(({ earningsCallText }) => earningsCallText(input.tickersHint[0], deps.now, deps.env, deps.fetchImpl)).catch(() => null),
   ]);
   // Name the page an idea was sent from, so the card credits it ("the scout's Dots tab found…"), not "Vadim reports".
   const sourceNote = input.source && input.source.label !== "Your note" ? `Where this idea came from: the ${input.source.label} tab of this scout${input.source.url ? ` (${input.source.url})` : ""}, sent to research by Vadim. Credit it to that page when you describe where the idea came from; the facts in it are what that page read. ` : "";
@@ -171,6 +173,7 @@ async function researchNow(input: ResearchInput, deps: ResearchDeps): Promise<Re
     + (positioning ? `\n\nPositioning (who is already in the trade; say whether the call goes with or against it, and treat a crowded side as a risk, not proof): ${positioning.text}` : "")
     + (known ? `\n\n${known}\nUse it to build a complete picture: say in the thesis or risks when it supports, contradicts or changes the call (an earlier card on the same stock that failed, an investigation's confirmed findings, a lawsuit, an FDA date), and never cite it as if it were news or a source.` : "")
     + (priceNow ? `\n\n${priceNow}` : "")
+    + (earningsCall ? `\n\n${earningsCall}` : "")
     + (backdrop ? `\n\n${backdrop}` : "")
     + (await import("./conflicts").then(({ openCallsText }) => { const t = openCallsText(calls); return t ? `\n\n${t}` : ""; }));
 

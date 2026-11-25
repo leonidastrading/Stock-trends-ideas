@@ -22,7 +22,17 @@ export async function cardTheses(ids?: number[]): Promise<Map<number, string>> {
   return new Map(rows.map((r) => [Number(r.card_id), String(r.thesis)]));
 }
 
+/**
+ * Pure: a thesis as shown. Some cards open a one-sided idea as if it were a pair ("Long nothing; Short PLXS: ...",
+ * "Short nothing, Long X: ..."): the empty half is left out on screen. The logged card is not changed.
+ */
+export function tidyThesis(t: string): string {
+  const cut = t.replace(/^\s*(?:long|short)\s+(?:nothing|none|n\/a)\s*[;,.:–—-]\s*/i, "");
+  // Only what was cut is tidied: any other thesis is shown exactly as written.
+  return cut === t ? t : cut.replace(/^([a-z])/, (m) => m.toUpperCase());
+}
+
 /** Pure: the thesis to show: the card's own, else the one written for it earlier, else one built from its fields. */
 export function thesisFor(c: Pick<store.StoredCard, "direction" | "primaryTicker" | "card">, written?: string): string {
-  return c.card.thesis?.trim() || written || fallbackThesis(c);
+  return tidyThesis(c.card.thesis?.trim() || written || fallbackThesis(c));
 }
