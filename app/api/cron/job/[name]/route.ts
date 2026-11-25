@@ -29,6 +29,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ name: strin
       case "sttrending": result = await import("@/lib/scout/st-trending").then(({ runStTrending }) => runStTrending({ data: deps.data ?? null, now: deps.now })); break;
       case "listings": result = await import("@/lib/scout/listing-wait").then(({ runListingWatch }) => runListingWatch(deps.data ?? null, deps.now)); break;
       case "petitions": result = await import("@/lib/scout/petitions").then(({ runPetitionWatch }) => runPetitionWatch(deps.env, deps.now)); break;
+      case "fdaletters": result = await import("@/lib/scout/fda-letters").then(({ runFdaLetters }) => runFdaLetters(deps.env, deps.now)); break;
       case "panelwatch": result = await import("@/lib/scout/panel-watch").then(({ runPanelWatch }) => runPanelWatch(deps.env, deps.now)); break;
       case "panelstudy": result = await import("@/lib/scout/panel-study").then(({ runPanelStudy }) => runPanelStudy(deps.data ?? null, deps.now)); break;
       case "ratingstudy": {

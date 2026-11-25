@@ -15,6 +15,11 @@
  * A decision announced the same day as the vote (Nektar withdrew its application that evening) counts as an outcome
  *   but gives no trade to the decision.
  *
+ * Checked against the FDA's own records on Nov 25, 2026 (openFDA): the approval dates of Xpovio, Twirla, Tepezza,
+ *   Vascepa's wider label, Relyvrio, Xacduro, Rytelo, Miplyffa and Zusduri match Drugs@FDA to the day, and the
+ *   rejection dates for Lexicon (2024) and Replimune match the FDA's published letters. Rejections before 2024 are
+ *   not in the FDA's published set and rest on the companies' own announcements.
+ *
  * It is NOT complete: there is no free machine-readable list of panel votes. Treat the study as a small sample.
  * A row: the day the vote was public | ticker then | company | + for, - against | for | against | the day the
  * decision was announced | A approved, R rejected (a complete response letter, a withdrawn application, a refused

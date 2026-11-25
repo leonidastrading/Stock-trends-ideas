@@ -12,6 +12,8 @@ import { panelVoteLabel } from "@/lib/sources/panel-vote";
 import { panelStudy } from "@/lib/scout/panel-study";
 import { mismatch, panelNoteText, panelWatch, type PanelNote } from "@/lib/scout/panel-watch";
 import PanelStudy from "./PanelStudy";
+import FdaLetters from "./FdaLetters";
+import { fdaLetterWatch } from "@/lib/scout/fda-letters";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -89,7 +91,7 @@ export default async function PharmaPage() {
     ua ? panel<TrialReadout[]>("pharma:trials", 24 * 60, async () => fetchTrialReadouts(today, await secTickerList(ua)), 25_000) : Promise.resolve({ data: null, updatedAt: null, error: "SEC_USER_AGENT is not set" }),
     store.cardBriefsSince(180).catch(() => [] as store.CardBrief[]),
   ]);
-  const [study, watch] = await Promise.all([panelStudy(), panelWatch()]);
+  const [study, watch, letters] = await Promise.all([panelStudy(), panelWatch(), fdaLetterWatch()]);
   const panelOn = (sym: string | null) => (sym ? watch.notes[sym] : undefined);
   const cardsOn = (sym: string | null) => (sym ? briefs.filter((c) => c.primaryTicker === sym || c.tickers.includes(sym)) : []);
 
@@ -136,6 +138,8 @@ export default async function PharmaPage() {
         ))}
         {upcoming.length === 0 && <p className="small muted">No upcoming FDA dates on file{fda.error ? "" : " yet"}.</p>}
       </section>
+
+      <FdaLetters watch={letters} cardsOn={cardsOn} />
 
       <PanelStudy state={study} />
 
