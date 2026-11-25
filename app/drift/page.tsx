@@ -116,7 +116,13 @@ export default async function DriftPage({ searchParams }: { searchParams: Promis
               </details>
             )}
             {/* The bad-news day marked on the chart, at that day's close. */}
-            <div style={{ marginTop: 10 }}><StockChart symbol={s.symbol} tvSymbol={tvSymbol(s.symbol)} height={440} entry={{ date: s.eventDate, price: null, direction: "short", label: `${s.eventKind}` }} /></div>
+            {(() => {
+              // The desk's own paper short, once it has entered, is the entry on the chart; the news day is only pointed at.
+              const t = mine.map((m) => tracks.find((x) => x.cardId === m.id && x.entryDate && x.entryPrice && !x.excluded)).find(Boolean);
+              return <div style={{ marginTop: 10 }}><StockChart symbol={s.symbol} tvSymbol={tvSymbol(s.symbol)} height={440}
+                entry={t ? { date: t.entryDate, price: t.entryPrice, direction: "short", label: "paper entry", cardId: t.cardId, exitDate: t.exitDate, exitPrice: t.exitPrice, exitReason: t.exitReason } : { date: s.eventDate, price: null, direction: "short", label: s.eventKind, event: true }}
+                marks={t ? [{ date: s.eventDate, side: "sell", text: s.eventKind }] : undefined} /></div>;
+            })()}
           </section>
         );
       })}

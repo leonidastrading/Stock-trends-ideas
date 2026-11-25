@@ -2,16 +2,21 @@ import Ticker from "@/components/Ticker";
 import type { MarketData } from "@/lib/alpaca";
 import { paperResult, vsSpy } from "@/lib/scout/paper-result";
 import type { StoredCard, Track } from "@/lib/scout/store";
+import { beforeOpen } from "@/lib/scout/tracking";
 import { addDays, toEt } from "@/lib/time";
 
 const weekday = (d: string) => ![0, 6].includes(new Date(`${d}T12:00:00Z`).getUTCDay());
 const dayLabel = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
 
-/** Pure: the session a not-yet-entered track enters at: the next weekday after today (or after the card's day). */
-export function entryDay(cardDate: string, today: string, beforeOpen = false): string {
-  if (beforeOpen && cardDate < today && weekday(today)) return today;
-  let d = addDays(cardDate > today ? cardDate : today, 1);
-  while (!weekday(d)) d = addDays(d, 1);
+/**
+ * Pure: the session a not-yet-entered track enters at, by the tracker's own rule: that day's open for a card written
+ * before it, otherwise the next session's. `sessions` are the market's open days (holidays left out); without them
+ * every weekday counts.
+ */
+export function entryDay(cardDate: string, writtenBeforeOpen = false, sessions: string[] = []): string {
+  const open = (d: string) => (sessions.length && d >= sessions[0] && d <= sessions[sessions.length - 1] ? sessions.includes(d) : weekday(d));
+  let d = writtenBeforeOpen ? cardDate : addDays(cardDate, 1);
+  while (!open(d)) d = addDays(d, 1);
   return d;
 }
 
@@ -36,7 +41,9 @@ export default async function DriftBook({ cards, tracks, data, downgradeIds = []
   const snaps = (open.length && data?.getSnapshots ? await data.getSnapshots(syms).catch(() => ({})) : {}) as Record<string, { price: number; delayed?: boolean }>;
   const spyNow = snaps.SPY?.price ?? null;
   const et = toEt(new Date());
-  const today = et.date, beforeOpen = et.minutes < 9 * 60 + 30;
+  const today = et.date;
+  // The market's open days around today, so a pending entry is not promised for a holiday.
+  const sessions = (open.some((t) => !t.entryDate) && data ? await data.getCalendar(addDays(today, -10), addDays(today, 10)).catch(() => []) : []).map((x) => x.date);
   const results = closed.map((t) => paperResult(t, null, null)).filter((r): r is NonNullable<typeof r> => !!r);
   const all = bookStats(results);
   const byStatus = (s: string) => bookStats(closed.filter((t) => byId.get(t.cardId)?.status === s).map((t) => paperResult(t, null, null)).filter((r): r is NonNullable<typeof r> => !!r));
@@ -59,7 +66,7 @@ export default async function DriftBook({ cards, tracks, data, downgradeIds = []
                 <tr key={t.cardId}>
                   <td><Ticker symbol={t.symbol} /></td>
                   <td className="small"><a href={`/cards/${c.id}`}>#{c.id}</a> <span className={`tag ${c.status}`}>{c.status.replace("_", " ")}</span>{t.invalidatedAt ? <span className="tag neg">invalidated</span> : null}</td>
-                  <td className="small">{t.entryDate ? `${t.entryDate} @ $${t.entryPrice?.toFixed(2)}` : <span className="muted">enters {dayLabel(entryDay(t.cardDate, today, beforeOpen))} open</span>}</td>
+                  <td className="small">{t.entryDate ? `${t.entryDate} @ $${t.entryPrice?.toFixed(2)}` : (() => { const d = entryDay(t.cardDate, beforeOpen(t.cardDate, t.cardAt), sessions); return <span className="muted">{d < today || (d === today && et.minutes >= 9 * 60 + 30) ? `entered at the ${dayLabel(d)} open; the price is written in at the next tracking pass` : `enters ${dayLabel(d)} open`}</span>; })()}</td>
                   <td className="num">{r ? `${r.days}d` : "—"}</td>
                   <td className={`num ${r ? (r.ret >= 0 ? "pos" : "neg") : "muted"}`}>{r ? pct(r.ret) : t.entryDate ? "no price" : "not entered yet"}{r && snaps[t.symbol]?.delayed ? <span className="muted small" title="No recent IEX trade: priced from the whole market, 15 minutes delayed"> ·15m</span> : null}</td>
                   <td className={`num ${r && r.spy !== null ? (vsSpy(t.direction, r)! >= 0 ? "pos" : "neg") : "muted"}`}>{r && r.spy !== null ? pct(vsSpy(t.direction, r)) : "—"}</td>
