@@ -8,6 +8,7 @@ import * as store from "@/lib/scout/store";
 import { etLabelAgo, dayAgo, fmtEtAgo } from "@/lib/time";
 import TabNew from "@/components/TabNew";
 import NewSince from "@/components/NewSince";
+import CardChips from "@/components/CardChips";
 
 /** A setup says when it was first listed for this long after (the red NEW is since your last visit). */
 const NEW_HOURS = 36;
@@ -89,10 +90,13 @@ export default async function DriftPage({ searchParams }: { searchParams: Promis
       {p.data && setups.length === 0 && <p className="small muted">Nothing qualifies right now.</p>}
       {setups.map((s) => {
         const mine = bySym.get(s.symbol) ?? [];
+        // Every other card on the stock, from any desk or from you (the desk's own are linked beside the research button).
+        const others = cards.filter((c) => (c.primaryTicker === s.symbol || c.card.tickers.some((t) => t.symbol === s.symbol)) && !mine.some((m) => m.id === c.id))
+          .map((c) => ({ id: c.id, createdAt: c.createdAt, status: c.status, direction: c.direction, primaryTicker: c.primaryTicker, tickers: c.card.tickers.map((t) => t.symbol) }));
         return (
           <section key={s.symbol} className="card drift-item">
             <div>
-              <Ticker symbol={s.symbol} className="neg" /> <span className={`tag ${s.stage === "building" ? "late" : ""}`}>{s.stage}</span> <span className="small secondary">{s.eventKind} · {day(s.eventDate)}</span><NewSince tab="drift" at={firstSeen[`${s.symbol}|${s.eventDate}`]} />{(() => { const at = firstSeen[`${s.symbol}|${s.eventDate}`]; return at && Date.now() - Date.parse(at) < NEW_HOURS * 3600_000 ? <span className="small muted" style={{ marginLeft: 6 }}>first listed {fmtEtAgo(at)}</span> : null; })()}
+              <Ticker symbol={s.symbol} className="neg" /> <span className={`tag ${s.stage === "building" ? "late" : ""}`}>{s.stage}</span> <span className="small secondary">{s.eventKind} · {day(s.eventDate)}</span><NewSince tab="drift" at={firstSeen[`${s.symbol}|${s.eventDate}`]} />{(() => { const at = firstSeen[`${s.symbol}|${s.eventDate}`]; return at && Date.now() - Date.parse(at) < NEW_HOURS * 3600_000 ? <span className="small muted" style={{ marginLeft: 6 }}>joined this list {fmtEtAgo(at)}: the news is older, but a stock is only listed once it has kept falling for {DRIFT.minDaysAfter} trading days after it</span> : null; })()}
             </div>
             <div>{s.eventUrl ? <a href={s.eventUrl} target="_blank" rel="noreferrer">{s.eventHeadline}</a> : s.eventHeadline}</div>
             {isDowngrade(s) && (() => { const d = downgradeInfo(s.eventHeadline); return d ? <div className="small">{d.broker ? <b>{d.broker}</b> : "Broker not named"}{d.from || d.to ? <>: {d.from ?? "?"} → {d.to ?? "?"}</> : null} · <span className={d.strength === "strong" ? "neg" : "muted"}>{d.strength === "strong" ? "strong (to Sell or below)" : d.strength === "mild" ? "mild (to Neutral or Hold)" : "rating not in the headline"}</span>{d.topBroker ? <span className="tag">top broker</span> : null}</div> : null; })()}
@@ -104,6 +108,7 @@ export default async function DriftPage({ searchParams }: { searchParams: Promis
             </div>
             <div className="small" style={{ marginTop: 4 }}>
               {mine.length ? mine.map((c) => <a key={c.id} href={`/cards/${c.id}`} style={{ marginRight: 8 }}>card #{c.id} ({c.status.replace("_", " ")})</a>) : <DriftResearch symbol={s.symbol} />}
+              {others.length > 0 && <span style={{ marginLeft: 8 }}><span className="muted">{mine.length ? "Other cards" : "Cards already"} on {s.symbol}: </span><CardChips cards={others} max={6} /></span>}
             </div>
             {s.headlines.length > 0 && (
               <details className="small"><summary>Bad headlines ({s.headlines.length})</summary>
