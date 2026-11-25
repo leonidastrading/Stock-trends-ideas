@@ -11,7 +11,7 @@
 import type { DailyBar, MarketData, MinuteBar } from "../alpaca";
 import { addDays, toEt } from "../time";
 
-export const PRICE_CHECK_REVISION = 1;
+export const PRICE_CHECK_REVISION = 2;
 
 export interface PriceCheck {
   symbol: string;
@@ -61,6 +61,28 @@ export function priceCheckText(p: PriceCheck, now: Date): string {
   return `PRICE CHECK (measured by the scout's code now; not a source): ${head}${ext}${so} The paper entry is the next open, so anything that has already moved is not the card's to gain.`;
 }
 
+/**
+ * Pure: how far the stock has moved over the last week, month and quarter, against SPY. Cards kept listing this as
+ * an unknown ("the price history was not measured here") although the scout has the prices.
+ */
+export function trailingMoves(symbol: string, bars: DailyBar[], today: string): string | null {
+  const of = (sym: string) => bars.filter((b) => b.symbol === sym).sort((a, b) => a.date.localeCompare(b.date));
+  const move = (list: DailyBar[], days: number): number | null => {
+    const last = list.at(-1), base = list.filter((b) => b.date <= addDays(today, -days)).at(-1);
+    return last && base && base.c > 0 && base.date < last.date ? r1((last.c / base.c - 1) * 100) : null;
+  };
+  const mine = of(symbol), spy = of("SPY");
+  if (mine.length < 5) return null;
+  const parts = ([[7, "7 days"], [30, "30 days"], [90, "90 days"]] as const).map(([d, label]) => {
+    const m = move(mine, d), s = move(spy, d);
+    return m === null ? null : `${signed(m)} over ${label}${s === null ? "" : ` (SPY ${signed(s)})`}`;
+  }).filter(Boolean);
+  if (!parts.length) return null;
+  const high = Math.max(...mine.map((b) => b.h ?? b.c)), last = mine.at(-1)!;
+  const off = high > 0 ? r1((last.c / high - 1) * 100) : null;
+  return `PRICE HISTORY (measured by the scout's code; closes to ${last.date}): ${symbol} is ${parts.join(", ")}${off !== null && off < -1 ? `; ${signed(off)} from its high of the last ${mine.length} sessions` : ""}. Do not list the recent price moves as unknown.`;
+}
+
 /** The price check for one stock at research time; null when prices are not set up or nothing is found. Never throws. */
 export async function priceCheckLine(data: MarketData | null, symbol: string | undefined, now: Date): Promise<string | null> {
   if (!data || !symbol) return null;
@@ -72,7 +94,9 @@ export async function priceCheckLine(data: MarketData | null, symbol: string | u
     // From an hour before the earliest possible 4 PM ET close (8 PM UTC in summer) on the close's day, to now.
     const minute = data.getMinuteBars ? await data.getMinuteBars(symbol, new Date(`${last.date}T19:55:00Z`), now, "sip").catch(() => [] as MinuteBar[]) : [];
     const p = priceCheck(symbol, daily, minute, now);
-    return p ? priceCheckText(p, now) : null;
+    // The longer history rides along (split-adjusted, with SPY for comparison); the check stands without it.
+    const history = await data.getDailyBars([symbol, "SPY"], addDays(today, -130), today, { feed: "sip", adjustment: "all" }).then((b) => trailingMoves(symbol, b, today)).catch(() => null);
+    return p ? `${priceCheckText(p, now)}${history ? `\n${history}` : ""}` : history;
   } catch {
     return null;
   }

@@ -8,10 +8,19 @@ import { secTickerList } from "../sources/edgar";
 import { companyArticle } from "../sources/wikipedia";
 import * as store from "./store";
 
-export interface CompanyAbout { symbol: string; at: string; about: string | null; article: string | null; industry: string | null; /** Which version of the lookup wrote this (an older one is looked up again). */ rev?: number }
+export interface CompanyAbout { symbol: string; at: string; about: string | null; article: string | null; industry: string | null; /** The industry the SEC files the company under (more specific than a vendor's, which often repeats the sector). */ sic?: string | null; /** Which version of the lookup wrote this (an older one is looked up again). */ rev?: number }
 const UA = { "user-agent": "trend-scout/0.1 (research dashboard)" };
 /** `rev`: raise it when the lookup gains a source, so lines written by the older lookup are done again. */
-export const COMPANY_LINE = { rev: 2, keepDays: 45, retryDays: 3, maxChars: 230, vendorPerDay: 4, waitMs: 6000 };
+export const COMPANY_LINE = { rev: 3, keepDays: 45, retryDays: 3, maxChars: 230, vendorPerDay: 4, waitMs: 6000 };
+
+/**
+ * A sentence that names the company without saying what it does: "X is a publicly traded company located in
+ * Princeton, New Jersey." (CytoSorbents' article opens that way; the next sentence is the one that matters).
+ */
+const SAYS_NOTHING = /^.{0,90}?\b(?:is|was) (?:an? |the )?(?:(?:American|Canadian|British|Israeli|U\.S\.|US|publicly|privately|public|private|traded|listed|held|owned|multinational|global|international|independent|holding|based|[A-Z][a-z]+-based)[ -]?)*(?:company|corporation|firm|business|enterprise)(?:,? (?:that is |which is )?(?:located|headquartered|based|incorporated|founded|established|listed|traded|domiciled)\b[^.]*)?\.$/;
+
+/** Pure: whether a sentence only places the company (where it is, that it is listed) without saying what it does. */
+export const saysNothing = (sentence: string) => SAYS_NOTHING.test(sentence.trim());
 
 /** Pure: the opening sentence or two of an article, whole sentences only, without the pronunciation and listing asides. */
 export function firstSentences(extract: string, max = COMPANY_LINE.maxChars): string | null {
@@ -20,11 +29,24 @@ export function firstSentences(extract: string, max = COMPANY_LINE.maxChars): st
   let out = "", n = 0;
   // "Inc." and "Corp." end with a full stop but not the sentence. At most two sentences: what it is, then one more detail.
   for (const s of text.split(/(?<=(?<!\b(?:Inc|Corp|Co|Ltd|L\.P|U\.S|St|Dr|No))[.!?])\s+(?=[A-Z])/)) {
+    // An opening that only places the company is skipped: the line is for what it does.
+    if (!out && saysNothing(s)) continue;
     if (out && out.length + s.length + 1 > max) break;
     out = out ? `${out} ${s}` : s;
     if (++n >= 2 || out.length >= max * 0.5) break;
   }
+  if (!out) return null;
   return out.length > max ? `${out.slice(0, max).replace(/\s+\S*$/, "")}…` : out;
+}
+
+/**
+ * Pure: the industry to show beside the sector: the most specific label that does not just repeat the sector
+ * ("Health care · Health Care" said nothing; the SEC's "Surgical & medical instruments" does).
+ */
+export function industryToShow(sectorLabel: string, industry: string | null | undefined, sic: string | null | undefined): string | null {
+  const key = (x: string) => x.toLowerCase().replace(/[^a-z]+/g, "");
+  const sector = key(sectorLabel);
+  return [industry, sic].find((x): x is string => !!x && key(x) !== sector && !sector.startsWith(key(x)) && !key(x).startsWith(sector)) ?? null;
 }
 
 /** Pure: the SEC's industry label in ordinary case ("PRINTED CIRCUIT BOARDS" → "Printed circuit boards"). */
@@ -52,7 +74,7 @@ export function fillCompanyAbout(symbol: string, env: NodeJS.ProcessEnv = proces
   const running = inFlight.get(symbol);
   if (running) return running;
   const work = (async () => {
-    const out: CompanyAbout = { symbol, at: now.toISOString(), about: null, article: null, industry: null, rev: COMPANY_LINE.rev };
+    const out: CompanyAbout = { symbol, at: now.toISOString(), about: null, article: null, industry: null, sic: null, rev: COMPANY_LINE.rev };
     let name = (await store.symbolInfo([symbol]).catch(() => new Map<string, store.SymbolInfo>())).get(symbol)?.name ?? null;
     const ua = env.SEC_USER_AGENT?.trim();
     if (ua) {
@@ -61,7 +83,8 @@ export function fillCompanyAbout(symbol: string, env: NodeJS.ProcessEnv = proces
         if (hit) {
           name ??= hit.title;
           const sub = await getJson<{ sicDescription?: string }>(`https://data.sec.gov/submissions/CIK${hit.cik.padStart(10, "0")}.json`, { headers: { "user-agent": ua }, minIntervalMs: 150, cacheMs: 3 * 3600_000, fetchImpl, retries: 1 });
-          out.industry = industryLabel(sub.sicDescription);
+          out.sic = industryLabel(sub.sicDescription);
+          out.industry = out.sic;
         }
       } catch { /* the line can do without the SEC's label */ }
     }

@@ -86,7 +86,7 @@ export const wikipedia: Source = {
   probe: (ctx) =>
     guarded("wikipedia", async () => {
       // A desk's label is not a topic: measure the company's own article, or nothing (never a look-alike).
-      const label = isDeskLabel(ctx.term), symbol = ctx.tickers[0];
+      const label = isDeskLabel(ctx.term) || ctx.subject === "company", symbol = ctx.tickers[0];
       const name = label && symbol ? (ctx.names?.[symbol] ?? (await nameOnFile(symbol, ctx.env, ctx.fetchImpl))) : null;
       const title = label ? (name ? await companyArticle(name, ctx.fetchImpl) : symbol ? null : await findArticle(ctx.term.replace(/^[a-z+ ]+:\s*/, ""), ctx.fetchImpl)) : await findArticle(ctx.term, ctx.fetchImpl);
       if (!title) return { source: "wikipedia", status: "ok", detail: label && symbol ? `no company article found for ${symbol}${name ? ` (${name})` : " (no name on file)"}` : `no article for "${ctx.term}"`, signals: [] };

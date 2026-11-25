@@ -18,7 +18,7 @@ export const EXIT_RULE = "time_limit";
 export const ENTRY_RULE = "live_when_open";
 
 export function versionSpec(model: string, effort: string) {
-  return { model, effort, systemPrompt: SYSTEM_PROMPT, replySchema: CARD_JSON_SCHEMA, triagePrompt: TRIAGE_SYSTEM_PROMPT, triageSchema: TRIAGE_JSON_SCHEMA, storyPrompt: STORY_SYSTEM_PROMPT, storySchema: STORY_JSON_SCHEMA, inboxPrompt: INBOX_SYSTEM_PROMPT, inboxSchema: INBOX_JSON_SCHEMA, rules: SCOUT, sources: SOURCE_IDS, sourceRevisions: SOURCE_REVISIONS, sectors: SECTORS, universe: UNIVERSE, known: KNOWN_REVISION, priceCheck: PRICE_CHECK_REVISION, earningsCall: CALL_REVISION, routing: { light: LIGHT_MODEL, purposes: LIGHT_PURPOSES }, exitRule: EXIT_RULE, entryRule: ENTRY_RULE };
+  return { model, effort, systemPrompt: SYSTEM_PROMPT, replySchema: CARD_JSON_SCHEMA, triagePrompt: TRIAGE_SYSTEM_PROMPT, triageSchema: TRIAGE_JSON_SCHEMA, storyPrompt: STORY_SYSTEM_PROMPT, storySchema: STORY_JSON_SCHEMA, inboxPrompt: INBOX_SYSTEM_PROMPT, inboxSchema: INBOX_JSON_SCHEMA, rules: SCOUT, sources: SOURCE_IDS, sourceRevisions: SOURCE_REVISIONS, sectors: SECTORS, universe: UNIVERSE, known: KNOWN_REVISION, priceCheck: PRICE_CHECK_REVISION, probeTerm: 2, earningsCall: CALL_REVISION, routing: { light: LIGHT_MODEL, purposes: LIGHT_PURPOSES }, exitRule: EXIT_RULE, entryRule: ENTRY_RULE };
 }
 
 export function versionHash(spec: unknown): string {

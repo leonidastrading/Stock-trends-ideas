@@ -1,5 +1,5 @@
 import { background } from "@/lib/background";
-import { COMPANY_LINE, companyAbout, fillCompanyAbout, isStale } from "@/lib/scout/company-line";
+import { COMPANY_LINE, companyAbout, fillCompanyAbout, industryToShow, isStale } from "@/lib/scout/company-line";
 
 const SECTOR_LABEL: Record<string, string> = { technology: "Technology", communication: "Communication services", consumer_discretionary: "Consumer discretionary", consumer_staples: "Consumer staples", health_care: "Health care", financials: "Financials", industrials: "Industrials", energy: "Energy", materials: "Materials", utilities: "Utilities", real_estate: "Real estate" };
 
@@ -13,10 +13,11 @@ export default async function CompanyAbout({ symbol, sector }: { symbol: string;
     a = (await Promise.race([filling, new Promise<null>((r) => setTimeout(() => r(null), COMPANY_LINE.waitMs))])) ?? a;
   }
   const label = SECTOR_LABEL[sector] ?? sector.replace(/_/g, " ");
+  const industry = industryToShow(label, a?.industry, a?.sic);
   return (
     <div className="small secondary" style={{ margin: "2px 0 4px" }}>
       {a?.about ? <><b>What it does:</b> {a.about}{a.article ? <> <a href={`https://en.wikipedia.org/wiki/${encodeURIComponent(a.article.replace(/ /g, "_"))}`} target="_blank" rel="noreferrer" className="muted">Wikipedia</a></> : null} · </> : null}
-      <b>Sector:</b> {label}{a?.industry ? <> · <span title="The industry the SEC files this company under">{a.industry}</span></> : null}
+      <b>Sector:</b> {label}{industry ? <> · <span title="Its industry (the data vendor's label, or the one the SEC files it under)">{industry}</span></> : null}
     </div>
   );
 }

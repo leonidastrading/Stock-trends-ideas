@@ -20,7 +20,8 @@ export const SOURCE_IDS = ["google_trends", "youtube", "reddit", "wikipedia", "a
 
 /** Bump a source's revision when its data source or measurement changes: it starts a new version. */
 export const SOURCE_REVISIONS: Record<(typeof SOURCE_IDS)[number], number> = {
-  google_trends: 1, youtube: 1, wikipedia: 1, hacker_news: 1, news: 1, polymarket: 1,
+  google_trends: 1, youtube: 1, hacker_news: 1, news: 1, polymarket: 1,
+  wikipedia: 2, // 1 = searched the term as typed (a desk label found a film, "TXN" found TX Network); 2 = the company's own article for desk cards and bare tickers, or nothing
   reddit: 2, // 1 = Reddit Data API (never approved: Reddit stopped taking requests); 2 = the scout's copy of 9 finance subreddits via the Arctic Shift archive
   app_store: 2, // 1 = applemarketingtools feed, 20 s limit (timed out); 2 = new host, 45 s, shared per scan, iTunes RSS fallback
   edgar: 4, // 1 = full-text search only (blocked from cloud); 2 = data.sec.gov per-ticker filings, 8-K events, revenue YoY; 3 = full-text path fixed (/LATEST/) for the relay; 4 = insider signals re-weighted by our own Form 4 test (after-a-drop boost, lighter clusters, ~90-day horizon)

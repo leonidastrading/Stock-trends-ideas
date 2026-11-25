@@ -76,10 +76,13 @@ export async function buildBriefing(now = new Date()): Promise<string> {
         const spy = t.spyEntry && t.spyExit ? (t.spyExit / t.spyEntry - 1) * 100 : null;
         paper = `closed ${t.exitDate} (${t.exitReason}): ${pct(r)}${spy !== null ? `, SPY ${pct(spy)}` : ""}`;
       } else if (t?.entryPrice) {
-        const now1 = last.get(t.symbol)?.c, spyNow = last.get("SPY")?.c;
+        // Only a close on or after the entry day counts: for a card entered today the last stored close is yesterday's,
+        // which gave "+3.6% vs SPY +3.0%" on a trade that was up 1.2% (card #409).
+        const since = (sym: string) => { const b = last.get(sym); return b && b.date >= t.entryDate! ? b.c : undefined; };
+        const now1 = since(t.symbol), spyNow = since("SPY");
         const r = now1 ? (now1 / t.entryPrice - 1) * (t.direction === "long" ? 100 : -100) : null;
         const spy = spyNow && t.spyEntry ? (spyNow / t.spyEntry - 1) * 100 : null;
-        paper = `open since ${t.entryDate} at $${t.entryPrice.toFixed(2)}${r !== null ? `, now ${pct(r)}` : ""}${spy !== null ? ` vs SPY ${pct(spy)}` : ""}, deadline ${t.deadlineDate}`;
+        paper = `open since ${t.entryDate} at $${t.entryPrice.toFixed(2)}${r !== null ? `, at the last close ${pct(r)}` : ", no close since the entry yet (use the live price)"}${spy !== null ? ` vs SPY ${pct(spy)}` : ""}, deadline ${t.deadlineDate}`;
       } else if (t) paper = `waiting for entry (deadline ${t.deadlineDate})`;
       const k = c.card;
       return `- card #${c.id} ${c.createdAt.slice(0, 10)} [${c.status}] ${c.origin === "human" ? "(Vadim's) " : ""}${c.direction} ${k.tickers.map((x) => x.symbol).join("/")}: ${cut(k.title, 90)}. Confidence ${k.confidence}. Catalyst: ${cut(k.catalyst.what, 80)} (${k.catalyst.date || "no date"}). Why not priced: ${cut(k.why_not_priced, 160)} Invalidation: ${cut(k.invalidation, 110)} Paper: ${paper}.`;

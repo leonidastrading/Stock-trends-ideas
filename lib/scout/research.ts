@@ -146,7 +146,9 @@ async function researchNow(input: ResearchInput, deps: ResearchDeps): Promise<Re
     }
   }
 
-  const results = input.results ?? (await probeAll(deps.sources, { term: input.term, kind: input.kindHint, tickers: input.tickersHint, now: deps.now, env: deps.env, fetchImpl: deps.fetchImpl }));
+  // A bare ticker is searched by the company's name (the letters "TXN" measure nothing about Texas Instruments).
+  const subject = input.results ? { term: input.term } : await import("./probe-term").then(({ probeSubject }) => probeSubject(input.term, input.tickersHint)).catch(() => ({ term: input.term }));
+  const results = input.results ?? (await probeAll(deps.sources, { ...subject, kind: input.kindHint, tickers: input.tickersHint, now: deps.now, env: deps.env, fetchImpl: deps.fetchImpl }));
   if (!input.results) {
     await store.saveSignals(input.term, results.flatMap((r) => r.signals));
     await recordHealth(results);

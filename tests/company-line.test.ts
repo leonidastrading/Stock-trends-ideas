@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { firstSentences, industryLabel, isStale } from "../lib/scout/company-line";
+import { firstSentences, industryLabel, industryToShow, isStale, saysNothing } from "../lib/scout/company-line";
 import { thesisFor, tidyThesis } from "../lib/scout/thesis";
 
 describe("one line on what a company does", () => {
@@ -21,7 +21,7 @@ describe("one line on what a company does", () => {
   });
   it("looks a stock up again after 45 days, or after 3 when nothing was found", () => {
     const now = new Date("2026-11-25T12:00:00Z");
-    const a = (daysAgo: number, about: string | null) => ({ symbol: "X", at: new Date(now.getTime() - daysAgo * 86400_000).toISOString(), about, article: null, industry: null, rev: 2 });
+    const a = (daysAgo: number, about: string | null) => ({ symbol: "X", at: new Date(now.getTime() - daysAgo * 86400_000).toISOString(), about, article: null, industry: null, rev: 3 });
     // A line written by an older version of the lookup (Redwire's, with an industry but no description) is done again at once.
     expect(isStale({ ...a(0, null), rev: undefined }, now)).toBe(true);
     expect(isStale({ ...a(0, "Makes things."), rev: 1 }, now)).toBe(true);
@@ -32,6 +32,24 @@ describe("one line on what a company does", () => {
     expect(isStale(a(4, null), now)).toBe(true);
     // An industry label alone is not a description: it is tried again too.
     expect(isStale({ ...a(4, null), industry: "Aerospace & Defense" }, now)).toBe(true);
+  });
+});
+
+describe("the line says what the company does, not where it is", () => {
+  it("skips an opening that only places the company (CytoSorbents' article)", () => {
+    const extract = "CytoSorbents Corporation is a publicly traded company located in Princeton, New Jersey. The company develops blood purification technology that removes toxic substances from blood using polymer beads. Its main product is CytoSorb.";
+    expect(firstSentences(extract)).toBe("The company develops blood purification technology that removes toxic substances from blood using polymer beads. Its main product is CytoSorb.");
+    for (const t of ["CytoSorbents Corporation is a publicly traded company located in Princeton, New Jersey.", "Acme Corp. is an American company headquartered in Austin, Texas.", "Widget Holdings is a public company.", "Foo Inc. is a Delaware-based corporation founded in 1999."]) expect(saysNothing(t), t).toBe(true);
+    for (const t of ["Plexus Corp. is an American multinational corporation that provides electronics design, manufacturing and aftermarket services.", "Ashland Inc. is an American chemical company.", "Redwire Corporation is an American aerospace manufacturer and space infrastructure technology company headquartered in Jacksonville, Florida.", "The company develops blood purification technology."]) expect(saysNothing(t), t).toBe(false);
+    // Nothing but the placing sentence: no line at all (the data vendor's description is tried instead).
+    expect(firstSentences("CytoSorbents Corporation is a publicly traded company located in Princeton, New Jersey.")).toBeNull();
+  });
+  it("shows an industry only when it adds something to the sector", () => {
+    expect(industryToShow("Health care", "Health Care", "Surgical & medical instruments & apparatus")).toBe("Surgical & medical instruments & apparatus");
+    expect(industryToShow("Health care", "Health Care", null)).toBeNull();
+    expect(industryToShow("Industrials", "Aerospace & Defense", "Guided missiles & space vehicles & parts")).toBe("Aerospace & Defense");
+    expect(industryToShow("Technology", "Technology", "Technology")).toBeNull();
+    expect(industryToShow("Financials", null, null)).toBeNull();
   });
 });
 
