@@ -55,6 +55,29 @@ export function takeoverTalk(headline: string): boolean {
   return DEAL_WORD.test(headline) && TALK_WORD.test(headline) && !NOT_TALK.test(headline);
 }
 
+/**
+ * Pure: what the stock has done since the close before the first takeover-talk report, against SPY. A stock that
+ * has not risen holds no takeover premium, so there is nothing for a "the premium leaks out" short to earn (card
+ * #394, Ashland: two bidder reports in three days and the stock was lower than before the first).
+ */
+export function premiumSince(symbol: string, firstAt: string, bars: Array<{ symbol: string; date: string; c: number }>, minPoints = 5): { pct: number; spyPct: number | null; line: string } | null {
+  const et = toEt(new Date(firstAt));
+  // A report after the close (or on a weekend) is measured from that day's close; one during the day from the close before.
+  const before = (b: { date: string }) => (et.minutes >= 16 * 60 ? b.date <= et.date : b.date < et.date);
+  const of = (sym: string) => bars.filter((b) => b.symbol === sym).sort((a, b) => a.date.localeCompare(b.date));
+  const move = (sym: string): number | null => {
+    const list = of(sym), base = list.filter(before).at(-1), last = list.at(-1);
+    return base && last && last.date > base.date && base.c > 0 ? Math.round((last.c / base.c - 1) * 1000) / 10 : null;
+  };
+  const pct = move(symbol);
+  if (pct === null) return null;
+  const spyPct = move("SPY");
+  const excess = Math.round((pct - (spyPct ?? 0)) * 10) / 10;
+  const sign = (x: number) => `${x > 0 ? "+" : ""}${x}%`;
+  const verdict = excess >= minPoints ? `about ${excess} points of takeover premium are in the price` : "little or no takeover premium is in the price, so there is none to fade and a denial costs holders little";
+  return { pct, spyPct, line: `Since the close before the first takeover report (${et.date}), ${symbol} is ${sign(pct)}${spyPct === null ? "" : ` against SPY ${sign(spyPct)}`}: ${verdict}.` };
+}
+
 /** First shock or catalyst word in a text, lower-cased; null if none. */
 export function eventWord(text: string): string | null {
   const m = SHOCK.exec(text) ?? CATALYST.exec(text);
@@ -89,6 +112,9 @@ export interface Story {
   takeover?: number;
   /** Set by runStories for takeover talk: the company's results date when it falls in the next days. */
   earnings?: string;
+  /** Set by runStories for takeover talk: the talk reports of the last 30 days (oldest first) and the move since the first. */
+  talkLog?: string[];
+  premium?: string;
   /** Time of the newest headline in the story (ISO). */
   latest: string;
   /** Newest first; `at` is the headline's full ISO timestamp. */
@@ -207,7 +233,7 @@ Then the trades:
 - Second-order: who wins or loses one step away that the headlines are not about yet (a rival that takes share, a supplier, a customer, a platform that loses traffic).
 - Reaction: who has to respond to the reaction, and what that response does to which listed companies (an industry facing a political backlash, the businesses a regulator will target, the peers a probe may spread to). Horizon in weeks, not days.
 - Private-company liquidity events (an IPO filing or pricing, a large funding round or tender offer, an acquisition): the listed winners are the companies that hold stakes, strategic investors and corporate venture arms, especially where the stake is a large share of the holder's market value. Name the holder, say roughly what the stake may be worth against its market cap if you know, and flag lock-ups and dilution as risks.
-- Takeover or sale talk (a report that a company is in talks, weighing a sale or has had an approach, with no signed deal): one credible report is the story, so judge it even when it is the only headline. Say who is the target and who the buyer, how much of the jump is already in the price, and what the talks still have to survive: a denial, a board that says no, financing, antitrust, and above all the target's own results. When you are told the target reports earnings within days, treat that as the main risk: a miss while a premium is in the price can end the talks or reset the terms, and the stock then loses the premium and the miss together. A long on the target needs a reason the premium is still too small; a short needs a reason the talk is weak or the premium is at risk before a deal can be signed; the buyer usually dips. If neither holds, skip and say so.
+- Takeover or sale talk (a report that a company is in talks, weighing a sale or has had an approach, with no signed deal): one credible report is the story, so judge it even when it is the only headline. Say who is the target and who the buyer, how much of the jump is already in the price, and what the talks still have to survive: a denial, a board that says no, financing, antitrust, and above all the target's own results. When you are told the target reports earnings within days, treat that as the main risk: a miss while a premium is in the price can end the talks or reset the terms, and the stock then loses the premium and the miss together. You are told what the stock has done since the first report, against the market: if it has not risen there is no premium in the price, so a short on "the premium leaking out" has nothing to earn; say so and skip, or ask whether the market is ignoring a credible bidder. A long on the target needs a reason the premium is still too small; a short needs a reason the talk is weak or the premium is at risk before a deal can be signed; the buyer usually dips. If neither holds, skip and say so.
 - For each trade: how long the repricing should take, what would prove it wrong, and why the market may still be mispricing it after the first move (forced sellers, a slow-burning investigation, an index or fund flow, a second shoe to drop, a political process that has not started yet).
 
 For every story also give "company" (the main listed company's name as Wikipedia titles it; empty for a macro story) and "people" (at most three people at the centre of the story, full names as Wikipedia titles them; empty if none), so the scout can measure public attention.
@@ -277,6 +303,8 @@ export function buildStoryPrompt(stories: Story[], date: string, preferences: st
   if (preferences) L.push(`\n${preferences}`);
   for (const s of stories) {
     L.push(`\n## ${s.key} — ${s.symbols.length ? s.symbols.join(", ") : "macro"}: ${s.stories} headlines, ${s.mainstream} mainstream, ${s.shockHits} with shock wording${s.takeover ? ", takeover or sale talk reported (not a signed deal)" : ""}${s.escalation.length ? `, institutions acting: ${s.escalation.slice(0, 6).join(", ")}` : ""}`);
+    if (s.talkLog?.length) L.push(`Takeover reports on ${s.key} in the last 30 days, oldest first: ${s.talkLog.join(" | ")}`);
+    if (s.premium) L.push(s.premium);
     if (s.earnings) L.push(s.earnings);
     if (s.staleness !== undefined) L.push(`Measured ${stalenessLabel(s.staleness)}.`);
     if (s.coverage) L.push(`${s.symbols[0] ?? s.key} ${s.coverage.line}.${s.coverage.building ? " What will this growing attention force to happen next?" : ""}`);
@@ -426,6 +454,18 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
         const r = s.takeover && !s.earnings ? rows.find((x) => x.symbol === s.key) : undefined;
         if (r) s.earnings = `${s.key} reports earnings on ${day}${r.time ? ` (${r.time})` : ""}, ${d === 0 ? "today" : `in ${d} day${d === 1 ? "" : "s"}`}: before any deal can be signed.`;
       }
+    }
+  }
+  // Takeover talk: every report of the last 30 days, and what the stock has done since the first (is there a premium at all?).
+  for (const s of chosen.filter((x) => x.takeover)) {
+    try {
+      const talk = (await deps.data.getNews([s.key], daysAgo(deps.now, 30), deps.now, 50)).filter((x) => takeoverTalk(x.headline)).sort((a, b) => a.ts.localeCompare(b.ts));
+      if (!talk.length) continue;
+      s.talkLog = talk.slice(0, 6).map((x) => `${toEt(new Date(x.ts)).date} "${x.headline.slice(0, 110)}"`);
+      const from = addDays(toEt(new Date(talk[0].ts)).date, -10);
+      s.premium = premiumSince(s.key, talk[0].ts, await deps.data.getDailyBars([s.key, "SPY"], from, et.date))?.line;
+    } catch {
+      /* the story is still read without the price line */
     }
   }
   const prompt = buildStoryPrompt(chosen, et.date, preferences);

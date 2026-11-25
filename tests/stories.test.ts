@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { MarketData, NewsItem } from "@/lib/alpaca";
 import { query, setQuerierForTests } from "@/lib/db";
 import type { CallModel } from "@/lib/scout/llm";
-import { buildStoryPrompt, detectStories, nearestStories, parseStoryTriage, runStories, STORY_JSON_SCHEMA, STORY_SYSTEM_PROMPT, storyTerm, takeoverTalk } from "@/lib/scout/stories";
+import { buildStoryPrompt, detectStories, nearestStories, parseStoryTriage, runStories, STORY_JSON_SCHEMA, premiumSince, STORY_SYSTEM_PROMPT, storyTerm, takeoverTalk } from "@/lib/scout/stories";
 import * as store from "@/lib/scout/store";
 import { sampleCard } from "./card.test";
 
@@ -242,5 +242,39 @@ describe("takeover talk: one credible report is the story", () => {
     expect(p).toMatch(/AMBA reports earnings on 2026-11-24 \(after close\), in 5 days/);
     expect(STORY_SYSTEM_PROMPT).toMatch(/Takeover or sale talk/);
     expect(STORY_SYSTEM_PROMPT).toMatch(/loses the premium and the miss together/);
+  });
+});
+
+describe("is there a takeover premium to fade? (card #394, Ashland)", () => {
+  const bar = (symbol: string, date: string, c: number) => ({ symbol, date, c });
+  // Fri Nov 20, Mon Nov 23, Tue Nov 24.
+  const ash = [bar("ASH", "2026-11-19", 74), bar("ASH", "2026-11-20", 72), bar("ASH", "2026-11-23", 69.7), bar("ASH", "2026-11-24", 69.55)];
+  const spy = [bar("SPY", "2026-11-19", 600), bar("SPY", "2026-11-20", 598), bar("SPY", "2026-11-23", 590), bar("SPY", "2026-11-24", 592)];
+
+  it("measures from the close before the first report: a Sunday-night report from Friday's close", () => {
+    const r = premiumSince("ASH", "2026-11-23T02:02:00Z", [...ash, ...spy])!; // Sunday 9:02 PM ET
+    expect(r.pct).toBeCloseTo(-3.4, 1);
+    expect(r.spyPct).toBeCloseTo(-1, 1);
+    expect(r.line).toMatch(/Since the close before the first takeover report \(2026-11-22\), ASH is -3\.4% against SPY -1%: little or no takeover premium/);
+  });
+  it("a report during the day is measured from the day before, and a real jump is called a premium", () => {
+    const amba = [bar("AMBA", "2026-11-18", 33), bar("AMBA", "2026-11-19", 45), bar("AMBA", "2026-11-23", 55.5)];
+    const r = premiumSince("AMBA", "2026-11-19T15:30:00Z", [...amba, ...spy])!; // 10:30 AM ET
+    expect(r.pct).toBeCloseTo(68.2, 1);
+    expect(r.line).toMatch(/about \d+(\.\d)? points of takeover premium are in the price/);
+  });
+  it("says nothing without prices before and after the report", () => {
+    expect(premiumSince("ASH", "2026-11-25T02:00:00Z", ash)).toBeNull();
+    expect(premiumSince("ZZZ", "2026-11-23T02:02:00Z", spy)).toBeNull();
+  });
+  it("shows the model the reports and the move, and tells it what no premium means", () => {
+    const [s] = detectStories([n("Evonik Reportedly Abandons Potential Acquisition Plans for Ashland", ["ASH"])]);
+    expect(s.takeover).toBe(1);
+    s.talkLog = ['2026-11-22 "Clariant and CD&R Reportedly in Talks to Acquire Ashland"', '2026-11-24 "Evonik Reportedly Abandons Potential Acquisition Plans for Ashland"'];
+    s.premium = premiumSince("ASH", "2026-11-23T02:02:00Z", [...ash, ...spy])!.line;
+    const p = buildStoryPrompt([s], "2026-11-24");
+    expect(p).toMatch(/Takeover reports on ASH in the last 30 days, oldest first: 2026-11-22 "Clariant and CD&R/);
+    expect(p).toMatch(/little or no takeover premium is in the price/);
+    expect(STORY_SYSTEM_PROMPT).toMatch(/has nothing to earn/);
   });
 });
