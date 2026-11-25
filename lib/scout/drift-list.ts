@@ -110,12 +110,13 @@ export async function recordListings(setups: DriftSetup[], firstSeen: Record<str
   return n;
 }
 
-/** One pass, after the hourly scan: paper shorts for the setups on the list that have none, then entries and exits that are due. */
+/** One pass (its own job, every ten minutes): paper shorts for the setups on the list that have none, then entries and exits that are due. */
 export async function updateListBook(data: MarketData, now = new Date()): Promise<string> {
   const [scan, seen] = await Promise.all([store.cacheGet<{ setups: DriftSetup[] }>("drift"), store.cacheGet<Record<string, string>>("drift:first-seen")]);
   const added = await recordListings(scan?.data?.setups ?? [], seen?.data ?? {}, { data, now, today: toEt(now).date });
   const settled = await settleList(data, now);
-  return `${added} new, ${settled.entered} entered at an open, ${settled.closed} closed`;
+  const open = await q(`SELECT symbol, entry_price, basis FROM drift_list WHERE exit_date IS NULL ORDER BY listed_at DESC`).catch(() => []);
+  return `${added} new, ${settled.entered} entered at an open, ${settled.closed} closed · ${open.length} open (${open.slice(0, 14).map((r) => `${r.symbol} ${r.entry_price === null ? "waits for the open" : `$${Number(r.entry_price).toFixed(2)}${r.basis === "minute bar" ? " 1-min" : ""}`}`).join(", ")})`;
 }
 
 /** Fill the entries waiting for an open, and close the shorts whose time is up. */
