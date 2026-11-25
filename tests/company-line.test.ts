@@ -21,7 +21,10 @@ describe("one line on what a company does", () => {
   });
   it("looks a stock up again after 45 days, or after 3 when nothing was found", () => {
     const now = new Date("2026-11-25T12:00:00Z");
-    const a = (daysAgo: number, about: string | null) => ({ symbol: "X", at: new Date(now.getTime() - daysAgo * 86400_000).toISOString(), about, article: null, industry: null });
+    const a = (daysAgo: number, about: string | null) => ({ symbol: "X", at: new Date(now.getTime() - daysAgo * 86400_000).toISOString(), about, article: null, industry: null, rev: 2 });
+    // A line written by an older version of the lookup (Redwire's, with an industry but no description) is done again at once.
+    expect(isStale({ ...a(0, null), rev: undefined }, now)).toBe(true);
+    expect(isStale({ ...a(0, "Makes things."), rev: 1 }, now)).toBe(true);
     expect(isStale(null, now)).toBe(true);
     expect(isStale(a(10, "Makes things."), now)).toBe(false);
     expect(isStale(a(50, "Makes things."), now)).toBe(true);

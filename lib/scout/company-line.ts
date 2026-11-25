@@ -8,9 +8,10 @@ import { secTickerList } from "../sources/edgar";
 import { companyArticle } from "../sources/wikipedia";
 import * as store from "./store";
 
-export interface CompanyAbout { symbol: string; at: string; about: string | null; article: string | null; industry: string | null }
+export interface CompanyAbout { symbol: string; at: string; about: string | null; article: string | null; industry: string | null; /** Which version of the lookup wrote this (an older one is looked up again). */ rev?: number }
 const UA = { "user-agent": "trend-scout/0.1 (research dashboard)" };
-export const COMPANY_LINE = { keepDays: 45, retryDays: 3, maxChars: 230, vendorPerDay: 4, waitMs: 6000 };
+/** `rev`: raise it when the lookup gains a source, so lines written by the older lookup are done again. */
+export const COMPANY_LINE = { rev: 2, keepDays: 45, retryDays: 3, maxChars: 230, vendorPerDay: 4, waitMs: 6000 };
 
 /** Pure: the opening sentence or two of an article, whole sentences only, without the pronunciation and listing asides. */
 export function firstSentences(extract: string, max = COMPANY_LINE.maxChars): string | null {
@@ -38,7 +39,7 @@ export async function companyAbout(symbol: string): Promise<CompanyAbout | null>
 
 /** Whether the line on file is missing or old enough to look up again. */
 export function isStale(a: CompanyAbout | null, now: Date): boolean {
-  if (!a) return true;
+  if (!a || (a.rev ?? 1) < COMPANY_LINE.rev) return true;
   const age = (now.getTime() - Date.parse(a.at)) / 86400_000;
   // Without a description it is tried again in a few days (an article may have been missed, or the day's allowance was used).
   return age > (a.about ? COMPANY_LINE.keepDays : COMPANY_LINE.retryDays);
@@ -51,7 +52,7 @@ export function fillCompanyAbout(symbol: string, env: NodeJS.ProcessEnv = proces
   const running = inFlight.get(symbol);
   if (running) return running;
   const work = (async () => {
-    const out: CompanyAbout = { symbol, at: now.toISOString(), about: null, article: null, industry: null };
+    const out: CompanyAbout = { symbol, at: now.toISOString(), about: null, article: null, industry: null, rev: COMPANY_LINE.rev };
     let name = (await store.symbolInfo([symbol]).catch(() => new Map<string, store.SymbolInfo>())).get(symbol)?.name ?? null;
     const ua = env.SEC_USER_AGENT?.trim();
     if (ua) {
