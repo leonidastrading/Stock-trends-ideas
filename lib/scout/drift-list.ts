@@ -15,9 +15,11 @@ import { query as q } from "../db";
 import { addDays, toEt } from "../time";
 import { DRIFT, type DriftSetup } from "./drift";
 import { paperResult, vsSpy } from "./paper-result";
+import * as store from "./store";
 import { beforeOpen } from "./tracking";
 
-export const DRIFT_LIST = { holdDays: DRIFT.holdCalendarDays };
+/** `freshMin`: a setup listed within this many minutes is entered at the scan's own price (the whole market's minute bars are only free after 15). */
+export const DRIFT_LIST = { holdDays: DRIFT.holdCalendarDays, freshMin: 20 };
 
 export type Basis = "listing" | "minute bar" | "open";
 export interface ListEntry {
@@ -73,25 +75,29 @@ export async function listBook(days = 240): Promise<ListEntry[]> {
 }
 
 /**
- * Enter a paper short for every setup that has none. `seenBefore` is when each setup was first listed, for setups
- * that were on the page before this scan; a setup missing from it is new now.
+ * Enter a paper short for every setup that has none. `firstSeen` is when each setup first appeared on the page (the
+ * scan records it); one listed in the last minutes enters at the scan's price, an older one at the 1-minute bar from
+ * the time it was listed, and one listed while the market was closed waits for the next open.
  */
-export async function recordListings(setups: DriftSetup[], seenBefore: Record<string, string>, ctx: { data: MarketData; now: Date; today: string; spyPrice: number | null }): Promise<number> {
+export async function recordListings(setups: DriftSetup[], firstSeen: Record<string, string>, ctx: { data: MarketData; now: Date; today: string }): Promise<number> {
   if (!setups.length) return 0;
   const have = new Set((await q(`SELECT symbol, event_date FROM drift_list WHERE symbol = ANY($1)`, [setups.map((s) => s.symbol)])).map((r) => `${r.symbol}|${day(r.event_date)}`));
-  let n = 0;
+  let n = 0, spyNow: number | null | undefined;
   for (const s of setups) {
     if (have.has(listKey(s))) continue;
-    const earlier = seenBefore[listKey(s)];
-    const listedAt = earlier ?? ctx.now.toISOString();
+    const listedAt = firstSeen[listKey(s)] ?? ctx.now.toISOString();
+    const at = new Date(listedAt), justNow = ctx.now.getTime() - at.getTime() <= DRIFT_LIST.freshMin * 60000;
     let entry: { date: string; price: number; spy: number | null; basis: Basis } | null = null;
-    if (!earlier) {
-      // New on this scan, market open and today's price in hand: in at that price.
-      if (inSession(ctx.now) && s.asOf === ctx.today && s.price > 0) entry = { date: ctx.today, price: s.price, spy: ctx.spyPrice, basis: "listing" };
-    } else if (inSession(new Date(earlier)) && ctx.data.getMinuteBars) {
-      // Listed before this book started: the price at the minute it was listed.
-      const at = new Date(earlier), from = new Date(at.getTime() - 20 * 60000);
-      const last = async (sym: string) => (await ctx.data.getMinuteBars!(sym, from, new Date(at.getTime() + 60000), "sip").catch(() => [])).filter((b) => b.t <= earlier).at(-1)?.c ?? null;
+    if (justNow) {
+      // Listed by the scan that just ran, market open and today's price in hand: in at that price.
+      if (inSession(ctx.now) && s.asOf === ctx.today && s.price > 0) {
+        if (spyNow === undefined) spyNow = ctx.data.getSnapshots ? (await ctx.data.getSnapshots(["SPY"]).catch(() => ({} as Record<string, { price: number }>))).SPY?.price ?? null : null;
+        entry = { date: ctx.today, price: s.price, spy: spyNow, basis: "listing" };
+      }
+    } else if (inSession(at) && ctx.data.getMinuteBars) {
+      // Listed earlier (before this book started, or a pass was missed): the price at the minute it was listed.
+      const from = new Date(at.getTime() - 20 * 60000);
+      const last = async (sym: string) => (await ctx.data.getMinuteBars!(sym, from, new Date(at.getTime() + 60000), "sip").catch(() => [])).filter((b) => b.t <= listedAt).at(-1)?.c ?? null;
       const price = await last(s.symbol);
       if (price) entry = { date: toEt(at).date, price, spy: await last("SPY"), basis: "minute bar" };
     }
@@ -102,6 +108,14 @@ export async function recordListings(setups: DriftSetup[], seenBefore: Record<st
     n++;
   }
   return n;
+}
+
+/** One pass, after the hourly scan: paper shorts for the setups on the list that have none, then entries and exits that are due. */
+export async function updateListBook(data: MarketData, now = new Date()): Promise<string> {
+  const [scan, seen] = await Promise.all([store.cacheGet<{ setups: DriftSetup[] }>("drift"), store.cacheGet<Record<string, string>>("drift:first-seen")]);
+  const added = await recordListings(scan?.data?.setups ?? [], seen?.data ?? {}, { data, now, today: toEt(now).date });
+  const settled = await settleList(data, now);
+  return `${added} new, ${settled.entered} entered at an open, ${settled.closed} closed`;
 }
 
 /** Fill the entries waiting for an open, and close the shorts whose time is up. */

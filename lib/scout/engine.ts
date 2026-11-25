@@ -291,6 +291,9 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
       const p = await panel("drift", 55, () => scanDrift(data, now), 60_000);
       return p.error ? `failed: ${p.error}` : `${p.data?.setups.length ?? 0} setups from ${p.data?.scanned ?? 0} stocks`;
     }).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+    // The list's own paper book (no card needed): a paper short for each setup from when it first appeared, entries and exits that are due.
+    out.driftList = await import("./drift-list").then(({ updateListBook }) => updateListBook(data, now)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+    if (!/^0 new, 0 entered at an open, 0 closed$/.test(String(out.driftList))) console.log(`drift list book: ${out.driftList}`);
   } else out.drift = "later: not enough time";
   // Options positioning: each stock's option chain once per trading day (10:00-16:00 ET), up to a minute and a half per call.
   if (left() > 60_000) {
