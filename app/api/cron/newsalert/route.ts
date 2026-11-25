@@ -17,6 +17,8 @@ export async function GET(request: Request) {
     console.warn(`cron auth refused ${new URL(request.url).pathname}: ${why.detail}`);
     return NextResponse.json({ error: "unauthorized", reason: why.reason }, { status: 401 });
   }
+  // Cards a coding session asked to read are written to the log once (config/card-peek.ts); nothing when none are asked for.
+  await import("@/lib/scout/card-peek").then(({ runCardPeek }) => runCardPeek(new URL(request.url).origin)).catch((e) => console.warn(`card peek failed: ${e instanceof Error ? e.message : e}`));
   // Quiet hours: nothing from 8 PM to 6 AM ET, hourly on weekends, so the database can sleep (lib/quiet-hours.ts).
   const resting = quietReply(request, "minute");
   if (resting) return NextResponse.json(resting);
