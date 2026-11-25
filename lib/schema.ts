@@ -708,6 +708,25 @@ CREATE TABLE IF NOT EXISTS evidence_archive (
   saved_at timestamptz,
   attempts integer NOT NULL DEFAULT 0
 );
+-- The Drift list's own paper book: every setup is a paper short from the moment it first appeared on the page (no card, no AI).
+CREATE TABLE IF NOT EXISTS drift_list (
+  symbol text NOT NULL,
+  event_date date NOT NULL,
+  event_kind text NOT NULL DEFAULT '',
+  headline text NOT NULL DEFAULT '',
+  url text,
+  listed_at timestamptz NOT NULL,
+  entry_date date,
+  entry_price double precision,
+  spy_entry double precision,
+  basis text NOT NULL DEFAULT 'open',
+  exit_by date,
+  exit_date date,
+  exit_price double precision,
+  spy_exit double precision,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (symbol, event_date)
+);
 -- The pre-earnings screen: one row per stock and report date, the warning signs seen before the report and the reaction after.
 CREATE TABLE IF NOT EXISTS pre_earnings (
   symbol text NOT NULL,

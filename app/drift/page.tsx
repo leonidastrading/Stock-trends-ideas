@@ -5,7 +5,7 @@ import { hasDatabase } from "@/lib/db";
 import { panel } from "@/lib/market/panels";
 import { downgradeInfo, DRIFT, latestFirst, scanDrift, shortLine, type DriftSetup } from "@/lib/scout/drift";
 import * as store from "@/lib/scout/store";
-import { etLabelAgo, dayAgo, fmtEtAgo } from "@/lib/time";
+import { etLabelAgo, dayAgo, fmtEt, fmtEtAgo } from "@/lib/time";
 import TabNew from "@/components/TabNew";
 import NewSince from "@/components/NewSince";
 import CardChips from "@/components/CardChips";
@@ -14,6 +14,8 @@ import CardChips from "@/components/CardChips";
 const NEW_HOURS = 36;
 import DriftResearch from "./DriftResearch";
 import DriftBook from "./DriftBook";
+import DriftList from "./DriftList";
+import { listBook, listKey, type ListEntry } from "@/lib/scout/drift-list";
 import RatingStudy from "./RatingStudy";
 import { studyEvents, studyState, type StudyEvent } from "@/lib/scout/rating-study";
 import { after } from "next/server";
@@ -38,6 +40,9 @@ export default async function DriftPage({ searchParams }: { searchParams: Promis
     store.candidatesSince(365), store.cardsSince(365),
   ]);
   const tracks = await store.allTracks().catch(() => [] as store.Track[]);
+  // The list's own paper shorts: one per setup, entered when it first appeared here.
+  const listEntries = await listBook().catch(() => [] as ListEntry[]);
+  const listOf = new Map(listEntries.map((e) => [listKey(e), e]));
   // The downgrade look-back: its progress and results; a visit starts (or restarts) it when no pass ran in the last 7 minutes.
   const [study, studyRows] = await Promise.all([studyState(), studyEvents().catch(() => [] as StudyEvent[])]);
   const host = (await headers()).get("host");
@@ -75,6 +80,7 @@ export default async function DriftPage({ searchParams }: { searchParams: Promis
           <p>Why: bad public news is followed by drift lasting months, while no-news moves tend to reverse (Chan 2003); bad news travels slowly in thinly covered stocks (Hong, Lim &amp; Stein 2000); negative news wording predicts weak earnings and returns (Tetlock et al. 2008; Lopez-Lira &amp; Tang find it strongest for negative news and small caps); holders sitting on gains sell slowly (Frazzini 2006).</p>
           <p>The freshest setups (up to {DRIFT.researchMaxDaysAfter} trading days after the event) are researched automatically, at most {DRIFT.maxResearchPerDay} a day, as short ideas held about 20 trading days on paper; they score as &quot;Scout · down drift&quot; on the Scoreboard. Your short rules still apply (nothing under $5, nothing that ran up hard just before). Much of the documented drift is in small stocks that can be hard or costly to short; short interest (% of float, days to cover) comes from Schwab when it is connected in Settings; borrow cost is not available.</p>
           <p><b>Building</b> = 2-5 trading days since the event; <b>established</b> = 6-15.</p>
+          <p><b>Paper shorts.</b> Every setup is shorted on paper the moment it first appears here, with no card: that is the entry drawn on its chart and the record under &quot;Paper shorts from the list&quot;. The researched cards are a second, separate record.</p>
         </div>
       </details>
       <p className="small muted">
@@ -96,7 +102,7 @@ export default async function DriftPage({ searchParams }: { searchParams: Promis
         return (
           <section key={s.symbol} className="card drift-item">
             <div>
-              <Ticker symbol={s.symbol} className="neg" /> <span className={`tag ${s.stage === "building" ? "late" : ""}`}>{s.stage}</span> <span className="small secondary">{s.eventKind} · {day(s.eventDate)}</span><NewSince tab="drift" at={firstSeen[`${s.symbol}|${s.eventDate}`]} />{(() => { const at = firstSeen[`${s.symbol}|${s.eventDate}`]; return at && Date.now() - Date.parse(at) < NEW_HOURS * 3600_000 ? <span className="small muted" style={{ marginLeft: 6 }}>joined this list {fmtEtAgo(at)}: the news is older, but a stock is only listed once it has kept falling for {DRIFT.minDaysAfter} trading days after it</span> : null; })()}
+              <Ticker symbol={s.symbol} className="neg" /> <span className={`tag ${s.stage === "building" ? "late" : ""}`}>{s.stage}</span> <span className="small secondary">{s.eventKind} · {day(s.eventDate)}</span><NewSince tab="drift" at={firstSeen[`${s.symbol}|${s.eventDate}`]} />{(() => { const at = firstSeen[`${s.symbol}|${s.eventDate}`]; return at && Date.now() - Date.parse(at) < NEW_HOURS * 3600_000 ? <span className="small muted" style={{ marginLeft: 6 }} title={`The news is older: a stock is only listed once it has kept falling for ${DRIFT.minDaysAfter} trading days after it`}>joined the list {fmtEtAgo(at)}</span> : null; })()}
             </div>
             <div>{s.eventUrl ? <a href={s.eventUrl} target="_blank" rel="noreferrer">{s.eventHeadline}</a> : s.eventHeadline}</div>
             {isDowngrade(s) && (() => { const d = downgradeInfo(s.eventHeadline); return d ? <div className="small">{d.broker ? <b>{d.broker}</b> : "Broker not named"}{d.from || d.to ? <>: {d.from ?? "?"} → {d.to ?? "?"}</> : null} · <span className={d.strength === "strong" ? "neg" : "muted"}>{d.strength === "strong" ? "strong (to Sell or below)" : d.strength === "mild" ? "mild (to Neutral or Hold)" : "rating not in the headline"}</span>{d.topBroker ? <span className="tag">top broker</span> : null}</div> : null; })()}
@@ -106,6 +112,12 @@ export default async function DriftPage({ searchParams }: { searchParams: Promis
             <div className="small muted">
               {shortLine(s) ? <span className={s.short?.squeeze === "high" ? "warn" : ""}>{shortLine(s)} · </span> : null}{s.volRatio ? `event-day volume ${s.volRatio}× normal · ` : ""}{s.badAfter} bad headline{s.badAfter === 1 ? "" : "s"} since{s.lawsuitAds ? ` (+${s.lawsuitAds} law-firm lawsuit ads)` : ""} · strength {s.score}
             </div>
+            {(() => {
+              const e = listOf.get(listKey(s));
+              if (!e) return <div className="small muted">Paper short from the list: written at the next hourly scan.</div>;
+              const ret = e.entryPrice && !e.exitDate ? -(s.price / e.entryPrice - 1) * 100 : null;
+              return <div className="small"><b>Paper short from the list:</b> joined {fmtEt(e.listedAt)}{e.entryPrice ? <> · entered at <b>${e.entryPrice.toFixed(2)}</b>{e.basis === "open" ? ` (${e.entryDate} open)` : ""}{ret !== null ? <> · <span className={ret >= 0 ? "pos" : "neg"}>{ret > 0 ? "+" : ""}{ret.toFixed(1)}%</span> so far</> : null}{e.exitBy ? <span className="muted"> · held to {e.exitBy}</span> : null}</> : <span className="muted"> · enters at the next open</span>}</div>;
+            })()}
             <div className="small" style={{ marginTop: 4 }}>
               {mine.length ? mine.map((c) => <a key={c.id} href={`/cards/${c.id}`} style={{ marginRight: 8 }}>card #{c.id} ({c.status.replace("_", " ")})</a>) : <DriftResearch symbol={s.symbol} />}
               {others.length > 0 && <span style={{ marginLeft: 8 }}><span className="muted">{mine.length ? "Other cards" : "Cards already"} on {s.symbol}: </span><CardChips cards={others} max={6} /></span>}
@@ -117,16 +129,19 @@ export default async function DriftPage({ searchParams }: { searchParams: Promis
             )}
             {/* The bad-news day marked on the chart, at that day's close. */}
             {(() => {
-              // The desk's own paper short, once it has entered, is the entry on the chart; the news day is only pointed at.
+              // The entry on the chart is the list's own paper short (when the setup first appeared here); the news day and the desk's card are only pointed at.
+              const e = listOf.get(listKey(s));
               const t = mine.map((m) => tracks.find((x) => x.cardId === m.id && x.entryDate && x.entryPrice && !x.excluded)).find(Boolean);
+              const notes = [...(e?.entryDate ? [{ date: s.eventDate, side: "note" as const, text: s.eventKind }] : []), ...(t ? [{ date: t.entryDate!, side: "sell" as const, text: `#${t.cardId} card short $${t.entryPrice!.toFixed(2)}` }] : [])];
               return <div style={{ marginTop: 10 }}><StockChart symbol={s.symbol} tvSymbol={tvSymbol(s.symbol)} height={440}
-                entry={t ? { date: t.entryDate, price: t.entryPrice, direction: "short", label: "paper entry", cardId: t.cardId, exitDate: t.exitDate, exitPrice: t.exitPrice, exitReason: t.exitReason } : { date: s.eventDate, price: null, direction: "short", label: s.eventKind, event: true }}
-                marks={t ? [{ date: s.eventDate, side: "sell", text: s.eventKind }] : undefined} /></div>;
+                entry={e?.entryDate && e.entryPrice ? { date: e.entryDate, price: e.entryPrice, direction: "short", label: "paper short from the list (entered when it first appeared here)" } : { date: s.eventDate, price: null, direction: "short", label: s.eventKind, event: true }}
+                marks={notes.length ? notes : undefined} /></div>;
             })()}
           </section>
         );
       })}
       <RatingStudy state={study} events={studyRows} />
+      <DriftList entries={listEntries} cards={cards} data={data} />
       <DriftBook cards={cards.filter((c) => cands.some((x) => x.cardId === c.id && x.term.startsWith("drift: ")))} tracks={tracks} data={data} downgradeIds={cands.filter((x) => x.cardId && x.term.startsWith("drift: ") && /\bdowngrade\b/.test(x.term)).map((x) => x.cardId!)} />
     </>
   );

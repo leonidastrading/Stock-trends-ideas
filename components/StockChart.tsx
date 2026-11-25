@@ -46,8 +46,8 @@ const sma = (bars: Bar[], n: number) => bars.map((b, i) => (i + 1 < n ? null : {
  * Ranges, daily or weekly bars, moving averages, log scale and volume are on the toolbar; drawing tools are in the
  * TradingView tab.
  */
-/** An extra marker on the chart: an insider's buy (below the line, green) or sale (above, red), with its text. */
-export interface ChartMark { date: string; side: "buy" | "sell"; text: string }
+/** An extra marker on the chart: an insider's buy (below the line, green) or sale (above, red), or a plain note (a grey dot), with its text. */
+export interface ChartMark { date: string; side: "buy" | "sell" | "note"; text: string }
 
 export default function StockChart({ symbol, tvSymbol, height = 680, entry, line = false, marks: extraMarks, tvOnly = false }: { symbol: string; tvSymbol: string; height?: number; entry?: ChartEntry; line?: boolean; marks?: ChartMark[]; tvOnly?: boolean }) {
   // Currencies, gold and crypto have no US stock prices for the scout chart: TradingView only.
@@ -181,7 +181,7 @@ export default function StockChart({ symbol, tvSymbol, height = 680, entry, line
           }
         }
       }
-      for (const m of extraMarks ?? []) marks.push({ time: keyOf(m.date), position: m.side === "buy" ? "belowBar" : "aboveBar", color: m.side === "buy" ? pos : neg, shape: m.side === "buy" ? "arrowUp" : "arrowDown", text: m.text });
+      for (const m of extraMarks ?? []) marks.push({ time: keyOf(m.date), position: m.side === "buy" ? "belowBar" : "aboveBar", color: m.side === "buy" ? pos : m.side === "note" ? muted : neg, shape: m.side === "buy" ? "arrowUp" : m.side === "note" ? "circle" : "arrowDown", text: m.text });
       const known = new Set(bars.map((b) => b[0]));
       candles.setMarkers(marks.filter((m) => known.has(m.time)).sort((a, b) => a.time.localeCompare(b.time)));
 

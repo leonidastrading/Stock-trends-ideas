@@ -54,7 +54,7 @@ export default async function DriftBook({ cards, tracks, data, downgradeIds = []
   return (
     <>
       <section className="card section">
-        <h2>Open paper positions ({open.length})</h2>
+        <h2>The desk&apos;s cards: open paper positions ({open.length})</h2>
         <p className="small muted">The desk&apos;s short cards on paper: entry when the card is written (the live price if the market is open, else the next open), held to the card&apos;s time limit or until its invalidation. Returns are for the short (a falling stock is a gain), at the latest price.</p>
         {open.length === 0 ? <p className="small muted">None open.</p> : (
           <div className="table-wrap"><table>

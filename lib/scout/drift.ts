@@ -235,6 +235,15 @@ export async function scanDrift(data: MarketData, now = new Date()): Promise<{ a
     const next: Record<string, string> = Object.fromEntries(Object.entries(seen).filter(([, at]) => at > cutoff));
     for (const s of setups) next[`${s.symbol}|${s.eventDate}`] ??= nowIso;
     await store.cachePut("drift:first-seen", next);
+    // The list's own paper book: every setup is a paper short from the moment it first appeared (no card needed).
+    try {
+      const { recordListings, settleList } = await import("./drift-list");
+      const added = await recordListings(setups, seen, { data, now, today, spyPrice: spy.at(-1)?.date === today ? spy.at(-1)!.c : null });
+      const settled = await settleList(data, now);
+      if (added || settled.entered || settled.closed) console.log(`drift list book: ${added} new paper short${added === 1 ? "" : "s"} from the list, ${settled.entered} entered at an open, ${settled.closed} closed`);
+    } catch (err) {
+      console.warn(`drift list book: ${err instanceof Error ? err.message : String(err)}`);
+    }
   } catch {
     /* the badge is optional */
   }
