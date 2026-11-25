@@ -3,7 +3,7 @@ import { findRank, resetAppChart, topFreeApps } from "@/lib/sources/appstore";
 import { interestSummary } from "@/lib/sources/googletrends";
 import { coverage, isMainstream } from "@/lib/sources/news";
 import { marketOdds } from "@/lib/sources/polymarket";
-import { wikipedia, pageviewSummary } from "@/lib/sources/wikipedia";
+import { isDeskLabel, pickCompanyArticle, wikipedia, pageviewSummary } from "@/lib/sources/wikipedia";
 import { hackerNews } from "@/lib/sources/hackernews";
 import { probeAll } from "@/lib/sources";
 
@@ -88,6 +88,33 @@ describe("probes against fake HTTP", () => {
     expect(r.status).toBe("ok");
     expect(r.signals[0].value).toBe(300);
     expect(r.signals[0].detail?.article).toBe("Data center");
+  });
+  it("wikipedia: a desk's label is not a topic (card #394 measured a film for 'story: ASH → ASH')", async () => {
+    for (const t of ["story: ASH → ASH", "filing: KGS 8-K 5.02", "insider: KGS", "insider+congress: LMT", "filing change: ASH 10-K 2026-11-20", "theme: Gulf escalation → FRO"]) expect(isDeskLabel(t), t).toBe(true);
+    for (const t of ["data center", "transformer shortage", "GLP-1 pills", "Ozempic: the next wave"]) expect(isDeskLabel(t), t).toBe(false);
+    const results = [
+      { title: "Ashland (film)", snippet: "Ashland is a 2019 American drama <span>film</span> directed by" },
+      { title: "Ashland, Oregon", snippet: "Ashland is a city in Jackson County, Oregon" },
+      { title: "Ashland Global", snippet: "Ashland Global Holdings Inc. is an American chemical <span>company</span> which operates in more than 100 countries" },
+    ];
+    expect(pickCompanyArticle("Ashland Inc.", results)).toBe("Ashland Global");
+    expect(pickCompanyArticle("Ashland Inc.", results.slice(0, 2))).toBeNull();
+    expect(pickCompanyArticle("Apple Inc.", [{ title: "Apple Inc.", snippet: "Apple Inc. is an American multinational corporation and technology company" }])).toBe("Apple Inc.");
+    expect(pickCompanyArticle("Inc.", results)).toBeNull();
+
+    const items = Array.from({ length: 60 }, (_, i) => ({ timestamp: `202609${String((i % 28) + 1).padStart(2, "0")}00`, views: 100 }));
+    const asked: string[] = [];
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input); asked.push(url);
+      return new Response(JSON.stringify(url.includes("action=query") ? { query: { search: results } } : { items }), { status: 200, headers: { "content-type": "application/json" } });
+    }) as typeof fetch;
+    const r = await wikipedia.probe({ term: "story: ASH → ASH", kind: "event", tickers: ["ASH"], now, env: {} as NodeJS.ProcessEnv, fetchImpl: f, names: { ASH: "Ashland Inc." } });
+    expect(decodeURIComponent(asked[0])).toMatch(/srsearch=Ashland company/);
+    expect(r.signals[0].detail?.article).toBe("Ashland Global");
+    // No name on file: nothing is measured, and the run says why.
+    const none = await wikipedia.probe({ term: "story: ZZZZ → ZZZZ", kind: "event", tickers: ["ZZZZ"], now, env: {} as NodeJS.ProcessEnv, fetchImpl: f });
+    expect(none.signals).toEqual([]);
+    expect(none.detail).toMatch(/no company article found for ZZZZ \(no name on file\)/);
   });
   it("probeAll marks unconfigured sources missing", async () => {
     const results = await probeAll([hackerNews, { id: "needs_key", label: "k", about: "", configured: () => false, probe: async () => { throw new Error("should not run"); } }], { term: "x", kind: null, tickers: [], now, env: {} as NodeJS.ProcessEnv, fetchImpl: fakeFetch({ "algolia": { nbHits: 0, hits: [] } }) });

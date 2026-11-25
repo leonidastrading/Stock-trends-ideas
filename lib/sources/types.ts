@@ -33,6 +33,8 @@ export interface ProbeContext {
   now: Date;
   env: NodeJS.ProcessEnv;
   fetchImpl?: typeof fetch;
+  /** Company names by ticker, when the caller has them (else a source looks them up itself). */
+  names?: Record<string, string>;
 }
 
 export interface Source {
