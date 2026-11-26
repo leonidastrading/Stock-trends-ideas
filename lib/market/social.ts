@@ -33,7 +33,10 @@ export async function moversPanel(now: Date, data: MarketData | null = marketDat
   if (data?.getMovers && data.getSnapshots) {
     try {
       const m = await data.getMovers(30);
-      const g = m.gainers.filter(plainMover).slice(0, 10), l = m.losers.filter(plainMover).slice(0, 10);
+      // SPAC units, warrants and rights are not stocks: a symbol shaped like one is decided by what the security is called.
+      const { commonStocksOnly } = await import("../scout/company-match");
+      const stocks = new Set(await commonStocksOnly([...m.gainers, ...m.losers].filter(plainMover).map((x) => x.symbol), data.getAsset ? (sym) => data.getAsset!(sym).then((a) => a?.name ?? null) : null));
+      const g = m.gainers.filter((x) => plainMover(x) && stocks.has(x.symbol)).slice(0, 10), l = m.losers.filter((x) => plainMover(x) && stocks.has(x.symbol)).slice(0, 10);
       if (g.length) {
         const snaps = await data.getSnapshots([...g, ...l].map((x) => x.symbol)).catch(() => ({} as Record<string, { volume?: number | null }>));
         const row = (x: { symbol: string; price: number; changePct: number }) => ({ ...x, changePct: Math.round(x.changePct * 100) / 100, volume: snaps[x.symbol]?.volume ?? null });
@@ -70,7 +73,9 @@ export const retailGreed = (bullish: number, bearish: number) => (bullish + bear
 
 export async function socialPanel(now: Date, fetchImpl?: typeof fetch): Promise<Social> {
   const trending = (await getJson<{ symbols?: StTrending[] }>(`${ST_HOST}/trending/symbols/equities.json`, { headers: ST_UA, fetchImpl, cacheMs: 5 * 60000 })).symbols ?? [];
-  const top = trending.slice(0, 20);
+  // US-listed stocks and funds only: Toronto, Korean, crypto and currency symbols have no price, chart or card here.
+  const { plainUsSymbol } = await import("../scout/company-match");
+  const top = trending.filter((t) => plainUsSymbol(t.symbol, (t as { exchange?: string }).exchange)).slice(0, 20);
   const streams = await Promise.all(top.map((t) => getJson<{ symbol?: { title?: string; watchlist_count?: number }; messages?: StMessage[] }>(`${ST_HOST}/streams/symbol/${encodeURIComponent(t.symbol)}.json`, { headers: ST_UA, fetchImpl, cacheMs: 10 * 60000, minIntervalMs: 300 }).catch(() => null)));
   // Rank change against the list kept about a day ago.
   const prev = await store.cacheGet<{ ranks: Record<string, number> }>("social-ranks").catch(() => null);

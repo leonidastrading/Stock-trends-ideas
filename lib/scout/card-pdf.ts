@@ -56,7 +56,7 @@ export interface CardPdfInput {
   /** Daily bars for the chart (oldest first), and the paper result so far, when prices are at hand. */
   bars: Array<{ date: string; c: number; o?: number; h?: number; l?: number; v?: number }>;
   /** The company's income statement and EPS against the estimate (quarterly unless asked otherwise), when on file. */
-  fundamentals?: { period: "annual" | "quarter"; income: Array<{ label: string; date: string; revenue: number | null; netIncome: number | null; margin: number | null }>; eps: Array<{ label: string; date: string; actual: number | null; estimate: number | null }>; source?: string | null } | null;
+  fundamentals?: { period: "annual" | "quarter"; income: Array<{ label: string; date: string; revenue: number | null; netIncome: number | null; margin: number | null }>; eps: Array<{ label: string; date: string; actual: number | null; estimate: number | null }>; source?: string | null; /** A failed check or a non-dollar currency, said under the charts. */ note?: string | null } | null;
   result: { ret: number; spy: number | null; vsSpy: number | null; closed: boolean } | null;
   siteUrl: string | null; now: Date;
 }
@@ -314,6 +314,7 @@ export async function cardPdf(input: CardPdfInput): Promise<Uint8Array> {
       }
       y -= 8;
     }
+    if (f.note) { for (const line of wrapText(safe(f.note), italic, 7.5, INNER)) { need(10); page.drawText(line, { x: M, y: y - 8, size: 7.5, font: italic, color: C.muted }); y -= 10; } y -= 6; }
   }
 
   // The body: a label and its text, like the card's own list.

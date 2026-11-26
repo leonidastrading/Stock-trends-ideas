@@ -29,8 +29,16 @@ export const SOURCE_REVISIONS: Record<(typeof SOURCE_IDS)[number], number> = {
 };
 
 /** Probe every source for one term, in parallel, never throwing. */
+/** Sources that measure what people search for or post about a phrase. */
+export const SEARCH_SOURCES = new Set(["google_trends", "youtube", "wikipedia", "hacker_news", "reddit", "app_store"]);
+
 export async function probeAll(sources: Source[], ctx: ProbeContext): Promise<SourceResult[]> {
-  return Promise.all(sources.map((s) => (s.configured(ctx.env) ? s.probe(ctx) : Promise.resolve<SourceResult>({ source: s.id, status: "missing", detail: "not configured", signals: [] }))));
+  return Promise.all(sources.map((s) => {
+    if (!s.configured(ctx.env)) return Promise.resolve<SourceResult>({ source: s.id, status: "missing", detail: "not configured", signals: [] });
+    // A ticker whose company name is also an ordinary word or acronym: what people search for it says nothing about the company.
+    if (ctx.subject === "unusable" && SEARCH_SOURCES.has(s.id)) return Promise.resolve<SourceResult>({ source: s.id, status: "ok", detail: "not searched: the name is also an ordinary word or acronym, so a search reading would be about something else", signals: [] });
+    return s.probe(ctx);
+  }));
 }
 
 export type { ProbeContext, Signal, Source, SourceResult, SourceStatus } from "./types";

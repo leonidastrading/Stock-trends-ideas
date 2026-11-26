@@ -6,6 +6,7 @@
  * Paper filings are scanned images and are skipped. Only rows with a ticker and asset type Stock or
  * Stock Option are kept.
  */
+import { decodeEntities } from "../entities";
 import { amountRange, type PtrTrade, type TxKind } from "./house";
 
 const BASE = "https://efdsearch.senate.gov";
@@ -76,7 +77,7 @@ export class SenateSession {
 export const senateReportUrl = (docId: string) => `${BASE}/search/view/ptr/${docId}/`;
 
 const usDate = (s: string) => { const m = s.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); return m ? `${m[3]}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}` : null; };
-const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, " ").trim();
+const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&[#a-z0-9]+;/gi, (e) => decodeEntities(e)).replace(/\s+/g, " ").trim();
 
 /** Pure: the search rows that are electronic transaction reports (paper filings have no table to read). */
 export function parseSenateSearch(json: unknown): { rows: number; reports: SenateReport[] } {

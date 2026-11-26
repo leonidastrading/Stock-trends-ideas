@@ -3,6 +3,7 @@
  * document and returns its text: web pages, PDFs (text layer), and, for scanned PDFs and images, the bytes so the
  * model can read them. Public addresses only; nothing is sent but the query and the address.
  */
+import { decodeEntities } from "../entities";
 import { cleanSiteUrl, htmlText } from "./site";
 import { edinetPdfUrl } from "./asia-filings";
 
@@ -11,7 +12,7 @@ export interface SearchHit { title: string; url: string; snippet: string; age: s
 
 export const hasWebSearch = (env: NodeJS.ProcessEnv) => !!env.BRAVE_SEARCH_API_KEY?.trim();
 
-const strip = (s: string) => s.replace(/<[^>]+>/g, "").replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
+const strip = (s: string) => s.replace(/<[^>]+>/g, "").replace(/&[#a-z0-9]+;/gi, (e) => decodeEntities(e)).replace(/\s+/g, " ").trim();
 
 /** Pure: Brave's web results. */
 export function braveHits(j: { web?: { results?: Array<{ title?: string; url?: string; description?: string; age?: string; page_age?: string; extra_snippets?: string[] }> } }): SearchHit[] {

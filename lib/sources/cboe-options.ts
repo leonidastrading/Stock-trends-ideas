@@ -33,6 +33,16 @@ export function parseChain(json: unknown, symbol: string): Chain | null {
 }
 
 export async function optionChain(symbol: string, fetchImpl?: typeof fetch): Promise<Chain | null> {
-  const body = await getText(`https://cdn.cboe.com/api/global/delayed_quotes/options/${encodeURIComponent(symbol)}.json`, { headers: BROWSER, fetchImpl, cacheMs: 0, minIntervalMs: 150, timeoutMs: 30000 });
-  return parseChain(JSON.parse(body), symbol);
+  // Its state goes on the health panel: a failing chain is why a dealer-gamma or options reading is missing.
+  const report = (ok: boolean, detail: string) => (fetchImpl ? undefined : import("../scout/health").then(({ reportHealth }) => reportHealth("cboe_options", ok, detail)).catch(() => undefined));
+  try {
+    const body = await getText(`https://cdn.cboe.com/api/global/delayed_quotes/options/${encodeURIComponent(symbol)}.json`, { headers: BROWSER, fetchImpl, cacheMs: 0, minIntervalMs: 150, timeoutMs: 30000 });
+    const chain = parseChain(JSON.parse(body), symbol);
+    await report(!!chain && chain.contracts.length > 0, chain ? `${symbol}: ${chain.contracts.length} contracts, as of ${chain.asOf}` : `${symbol}: the reply had no option chain`);
+    return chain;
+  } catch (e) {
+    // One stock with no listed options is not the source failing; an index fund or a large stock failing is.
+    if (/^(SPY|QQQ|IWM|AAPL|NVDA|MSFT|TSLA|AMZN|META)$/.test(symbol) || !/404/.test(String(e))) await report(false, `${symbol}: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`);
+    throw e;
+  }
 }

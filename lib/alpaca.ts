@@ -17,11 +17,8 @@ const ALLOWED: Record<string, RegExp[]> = {
   [PAPER_TRADING_HOST]: [/^\/v2\/calendar$/, /^\/v2\/assets$/, /^\/v2\/assets\/[A-Z][A-Z.]{0,9}$/],
 };
 
-/** Pure: HTML entities left in news text ("Trump&#39;s" → "Trump's"). */
-export function decodeEntities(s: string): string {
-  return s.replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
-    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
-}
+export { decodeEntities } from "./entities";
+import { decodeEntities } from "./entities";
 
 export interface AlpacaCreds {
   keyId: string;
@@ -241,7 +238,10 @@ export class AlpacaClient {
       }
       pageToken = resp.next_page_token ?? undefined;
     } while (pageToken && out.length < max);
-    return out;
+    // The whole stream's state goes on the health panel (in production only: tests pass their own fetch).
+    if (!symbols.length && !this.opts.fetchImpl) await import("./scout/health").then(({ reportHealth }) => reportHealth("news_stream", true, `${out.length} headlines`)).catch(() => undefined);
+    // Foreign listings tagged with the US symbol of the same letters are taken off (see news-symbols.ts).
+    return (await import("./scout/news-symbols")).cleanNews(out);
   }
 
   /** One page (50) of news for these symbols in [start, end], oldest first, with the token for the next page: for long historical reads that are paced and resumed. */
@@ -251,7 +251,7 @@ export class AlpacaClient {
       { start: start.toISOString(), end: end.toISOString(), symbols: symbols.join(","), sort: "asc", include_content: false, exclude_contentless: false, limit: 50, page_token: pageToken ?? undefined },
     );
     const items = (resp.news ?? []).map((n) => ({ id: n.id, ts: new Date(n.created_at).toISOString(), headline: decodeEntities(n.headline ?? ""), summary: "", symbols: n.symbols ?? [], source: n.source ?? "", url: n.url ?? "" }));
-    return { items, next: resp.next_page_token ?? null };
+    return { items: await (await import("./scout/news-symbols")).cleanNews(items), next: resp.next_page_token ?? null };
   }
 
   /** Option contract snapshots (market data only) for one underlying: contract symbol → implied volatility. Free accounts get the 15-minute-delayed indicative feed. */

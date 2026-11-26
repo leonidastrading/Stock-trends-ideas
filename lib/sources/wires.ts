@@ -3,6 +3,7 @@
  * and other news the moment it is out), the SEC's live list of 8-K filings, and Finnhub's market news when a key is set.
  * Each source is best effort: one that fails or is slow is skipped. Items carry a US ticker or are dropped.
  */
+import { decodeEntities } from "../entities";
 import type { NewsItem } from "../alpaca";
 import { getJson, getText } from "../http";
 import { secTickerList } from "./edgar";
@@ -70,7 +71,7 @@ export function secItems(xml: string, tickerByCik: Map<string, string>): NewsIte
     const ts = /<updated>([\s\S]*?)<\/updated>/i.exec(e)?.[1];
     const url = /<link[^>]*href="([^"]+)"/i.exec(e)?.[1] ?? "";
     if (!ts || !url) continue;
-    const company = t[1].replace(/\s+/g, " ").trim();
+    const company = decodeEntities(t[1]).replace(/\s+/g, " ").trim();
     out.push({ id: hashId(url), ts: new Date(ts).toISOString(), headline: `${company} files 8-K: ${named.join("; ")}`, summary: `SEC filing, items ${items.join(", ")}.`, symbols: [sym], source: "SEC 8-K", url });
   }
   return out;
@@ -142,18 +143,23 @@ export async function fastNews(env: NodeJS.ProcessEnv = process.env, fetchImpl?:
 
 async function fastNewsFresh(env: NodeJS.ProcessEnv, fetchImpl: typeof fetch | undefined, now: Date): Promise<NewsItem[]> {
   const since = now.getTime() - 24 * 3600_000;
-  const jobs: Array<Promise<NewsItem[]>> = WIRES.map((w) => getText(w.url, { headers: UA, fetchImpl, cacheMs: 10_000, timeoutMs: 6000, retries: 0 }).then((x) => wireItems(x, w.name, w.url)).catch(() => []));
+  // Each feed's state goes on the health panel (a feed that fails is skipped here, so nothing else would say so).
+  const seen = <T,>(source: string, p: Promise<T[]>): Promise<T[]> => p.then(
+    async (x) => { if (!fetchImpl) await import("../scout/health").then(({ reportHealth }) => reportHealth(source, true, `${x.length} items`)).catch(() => undefined); return x; },
+    async (e) => { if (!fetchImpl) await import("../scout/health").then(({ reportHealth }) => reportHealth(source, false, e instanceof Error ? e.message : String(e))).catch(() => undefined); return [] as T[]; },
+  );
+  const jobs: Array<Promise<NewsItem[]>> = WIRES.map((w) => seen(w.name === "GlobeNewswire" ? "wire_globenewswire" : "wire_prnewswire", getText(w.url, { headers: UA, fetchImpl, cacheMs: 10_000, timeoutMs: 6000, retries: 0 }).then((x) => wireItems(x, w.name, w.url))));
   for (const w of WORLD) jobs.push(getText(w.url, { headers: UA, fetchImpl, cacheMs: 30_000, timeoutMs: 6000, retries: 0 }).then((x) => worldItems(x, w.name, w.url)).catch(() => []));
-  jobs.push(getText(HALTS, { headers: UA, fetchImpl, cacheMs: 10_000, timeoutMs: 6000, retries: 0 }).then(haltItems).catch(() => []));
+  jobs.push(seen("nasdaq_halts", getText(HALTS, { headers: UA, fetchImpl, cacheMs: 10_000, timeoutMs: 6000, retries: 0 }).then(haltItems)));
   const ua = env.SEC_USER_AGENT?.trim();
   if (ua) {
-    jobs.push((async () => {
+    jobs.push(seen("sec_live_8k", (async () => {
       const [xml, map] = await Promise.all([
         getText(SEC_CURRENT, { headers: { "user-agent": ua, accept: "application/atom+xml" }, fetchImpl, cacheMs: 10_000, timeoutMs: 6000, retries: 0 }),
         tickerByCik(ua, fetchImpl),
       ]);
       return secItems(xml, map);
-    })().catch(() => []));
+    })()));
   }
   const key = env.FINNHUB_API_KEY?.trim();
   if (key) {
@@ -161,5 +167,7 @@ async function fastNewsFresh(env: NodeJS.ProcessEnv, fetchImpl: typeof fetch | u
       .then((list) => list.map((n) => ({ id: 8e12 + n.id, ts: new Date(n.datetime * 1000).toISOString(), headline: n.headline, summary: (n.summary ?? "").slice(0, 600), symbols: (n.related ?? "").split(",").map((s) => s.trim().toUpperCase()).filter((s) => /^[A-Z]{1,5}(\.[A-Z])?$/.test(s)), source: n.source || "Finnhub", url: n.url })))
       .catch(() => []));
   }
-  return (await Promise.all(jobs)).flat().filter((n) => Date.parse(n.ts) >= since && Date.parse(n.ts) <= now.getTime() + 120_000);
+  const all = (await Promise.all(jobs)).flat().filter((n) => Date.parse(n.ts) >= since && Date.parse(n.ts) <= now.getTime() + 120_000);
+  // Finnhub's "related" tags get the same check as the main feed's (a foreign listing is not the US symbol with the same letters).
+  return fetchImpl ? all : (await import("../scout/news-symbols")).cleanNews(all, env);
 }

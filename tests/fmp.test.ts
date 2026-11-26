@@ -68,3 +68,31 @@ describe("free fallbacks when FMP's plan does not cover a stock", () => {
     ]);
   });
 });
+
+import { incomeCheck, pickRevenue } from "@/lib/sources/fmp";
+
+describe("financials sanity", () => {
+  const yr = (y: number, val: number) => ({ start: `${y}-01-01`, end: `${y}-12-31`, val, form: "10-K", filed: `${y + 1}-02-15` });
+  it("takes total revenue for an insurer, not its fee line (MetLife showed $3.0B and a 329% margin)", () => {
+    const facts = { "us-gaap": {
+      RevenueFromContractWithCustomerExcludingAssessedTax: { units: { USD: [yr(2024, 2.9e9), yr(2025, 3.0e9)] } },
+      Revenues: { units: { USD: [yr(2024, 70e9), yr(2025, 73e9)] } },
+      NetIncomeLoss: { units: { USD: [yr(2024, 4.4e9), yr(2025, 9.9e9)] } },
+    } };
+    expect(pickRevenue(facts, "annual")!.rows.at(-1)!.val).toBe(73e9);
+    const r = secIncome(facts, "annual");
+    expect(r.rows.at(-1)).toMatchObject({ revenue: 73e9, netIncome: 9.9e9, margin: 13.6 });
+    expect(incomeCheck(r.rows)).toBeNull();
+  });
+  it("adds interest income and non-interest income for a bank with no total line", () => {
+    const facts = { "us-gaap": { InterestAndDividendIncomeOperating: { units: { USD: [yr(2025, 8e9)] } }, NoninterestIncome: { units: { USD: [yr(2025, 2e9)] } }, RevenueFromContractWithCustomerExcludingAssessedTax: { units: { USD: [yr(2025, 0.9e9)] } } } };
+    expect(pickRevenue(facts, "annual")!.rows.at(-1)!.val).toBe(10e9);
+  });
+  it("hides everything when net income is above revenue, and only the margin line when the loss dwarfs revenue", () => {
+    const row = (label: string, revenue: number, netIncome: number) => ({ label, date: "2025-12-31", revenue, netIncome, margin: Math.round((netIncome / revenue) * 1000) / 10 });
+    expect(incomeCheck([row("'25", 3.0e9, 9.9e9)])).toMatchObject({ hide: "all" });
+    expect(incomeCheck([row("'25", 1e6, -50e6)])).toMatchObject({ hide: "margin" });
+    expect(incomeCheck([row("'25", 100, 20), row("'24", 100, -80)])).toBeNull();
+  });
+});
+

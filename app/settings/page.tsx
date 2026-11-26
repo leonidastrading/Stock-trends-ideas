@@ -1,4 +1,5 @@
 import SetupNotice from "@/components/SetupNotice";
+import { watchedHealth } from "@/lib/scout/health";
 import { SCOUT } from "@/config/scout";
 import { hasDatabase } from "@/lib/db";
 import { envStatus } from "@/lib/env-status";
@@ -103,6 +104,19 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 const st = x?.status ?? "not checked yet";
                 return <tr key="options"><td>Options pricing (Alpaca)</td><td><span className={`tag ${st.split(" ")[0]}`}>{st}</span></td><td className="small secondary">For the "how to trade it" note only: at-the-money implied volatility 20–60 days out vs the stock&apos;s 20-day realized volatility. Indicative, 15-minute-delayed feed; not evidence, never tracked.</td><td className="small">{x ? toEt(new Date(x.checkedAt)).date : "—"}</td><td className="small muted">{x?.detail ?? ""}</td></tr>;
               })()}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="card">
+        <h2>Source health (everything else a page relies on)</h2>
+        <p className="small secondary">Each reader and background job reports here when it runs. &quot;down&quot;: it failed, with the reason. &quot;stale&quot;: it has not reported for longer than it should. Home lists every one that is down or stale.</p>
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>Source</th><th>Status</th><th>What relies on it</th><th>Last report</th><th>Detail</th></tr></thead>
+            <tbody>
+              {watchedHealth(health, new Date()).map((w) => <tr key={w.source}><td>{w.label}</td><td><span className={`tag ${w.status === "stale" ? "down" : w.status.split(" ")[0]}`}>{w.status}</span></td><td className="small secondary">{w.about}</td><td className="small">{w.checkedAt ? etLabelAgo(w.checkedAt, true) : "—"}</td><td className="small muted">{(w.detail ?? "").slice(0, 160)}</td></tr>)}
             </tbody>
           </table>
         </div>

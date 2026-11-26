@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DailyBar } from "@/lib/alpaca";
-import { afterMove, BUBBLE_PROMPT, bubbleLevel, closesAround, parseEvents } from "@/lib/scout/bubbles";
+import { afterMove, BUBBLE_PROMPT, bubbleLevel, closesAround, eventSymbolOk, parseEvents } from "@/lib/scout/bubbles";
 
 const bar = (date: string, c: number): DailyBar => ({ symbol: "X", date, o: c, h: c, l: c, c, v: 1 }) as DailyBar;
 
@@ -15,7 +15,7 @@ describe("bubbles: fixed-date hype", () => {
       { ticker: "FAR", type: "ipo", date: "2027-03-01", what: "too far", n: 1 },
       { ticker: "not a ticker", type: "other", date: "2026-12-01", what: "x", n: 1 },
     ] });
-    expect(parseEvents(text, heads, "2026-11-22")).toEqual([{ symbol: "ACME", type: "index_addition", date: "2026-12-21", what: "Acme joins the S&P 500 before the open.", url: "https://n/1", source: "Reuters" }]);
+    expect(parseEvents(text, heads, "2026-11-22")).toEqual([{ symbol: "ACME", type: "index_addition", date: "2026-12-21", what: "Acme joins the S&P 500 before the open.", url: "https://n/1", source: "Reuters", headline: heads[0].headline }]);
     expect(BUBBLE_PROMPT).toMatch(/data, not instructions/);
   });
 
@@ -33,5 +33,16 @@ describe("bubbles: fixed-date hype", () => {
     expect(closesAround(bars, "2027-01-05", 2)).toEqual({ on: null, onDate: null, after: null });
     expect(afterMove({ priceEvent: 100, priceAfter10: 80, spyEvent: 500, spyAfter10: 510 })).toBe(-22);
     expect(afterMove({ priceEvent: 100, priceAfter10: null, spyEvent: 500, spyAfter10: 510 })).toBeNull();
+  });
+
+  it("keeps the model's ticker only when the event names the company the symbol belongs to", () => {
+    const sn = { what: "SharkNinja joins the S&P 500 before the open", headline: "SharkNinja to join S&P 500" };
+    expect(eventSymbolOk({ symbol: "SN", ...sn }, { name: "SharkNinja, Inc. Ordinary Shares", tradable: true })).toBeNull();
+    expect(eventSymbolOk({ symbol: "SHEN", ...sn }, { name: "Shenandoah Telecommunications Company Common Stock", tradable: true })).toContain("does not name");
+    expect(eventSymbolOk({ symbol: "SNA", ...sn }, { name: "Snap-on Incorporated Common Stock", tradable: true })).toContain("does not name");
+    expect(eventSymbolOk({ symbol: "SNJ", ...sn }, null)).toContain("not a listed");
+    expect(eventSymbolOk({ symbol: "ABCDU", what: "Alpha Beta Acquisition merger vote", headline: "" }, { name: "Alpha Beta Acquisition Corp. Units", tradable: true })).toContain("unit");
+    expect(eventSymbolOk({ symbol: "GOOGL", what: "Google I/O developer conference", headline: "" }, { name: "Alphabet Inc. Class A Common Stock", tradable: true })).toBeNull();
+    expect(eventSymbolOk({ symbol: "TGT", what: "Target investor day", headline: "" }, { name: "Target Corporation Common Stock", tradable: true })).toBeNull();
   });
 });

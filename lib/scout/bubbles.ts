@@ -10,6 +10,7 @@
  * against SPY), so the tab keeps a forward record of how often the hype really topped on the day, instead of
  * relying on the famous examples that are famous because they worked.
  */
+import { BRAND_ALIASES, mentionsCompany, unitWarrantRight } from "./company-match";
 import { z } from "zod";
 import { LIGHT_MODEL } from "@/config/scout";
 import type { DailyBar } from "../alpaca";
@@ -77,7 +78,21 @@ export function parseHype(text: string, headlines: Array<{ headline: string; url
   });
 }
 
-export interface FoundEvent { symbol: string; type: EventType; date: string; what: string; url: string | null; source: string }
+export interface FoundEvent { symbol: string; type: EventType; date: string; what: string; url: string | null; source: string; /** The headline the event was read from. */ headline?: string }
+
+/**
+ * Pure: is this the stock the event is about? The model names a ticker from a headline; it is kept only when the
+ * symbol trades, is the company's stock (not a unit, warrant or right) and the event's text names the company the
+ * symbol belongs to. SharkNinja's index addition had been listed under SN, SHEN, SHRK, SNA and SNJ.
+ */
+export function eventSymbolOk(e: Pick<FoundEvent, "symbol" | "what" | "headline">, asset: { name: string; tradable: boolean } | null): string | null {
+  if (!asset || !asset.tradable) return `${e.symbol} is not a listed, tradable symbol`;
+  const kind = unitWarrantRight(e.symbol, asset.name);
+  if (kind) return `${e.symbol} is a ${kind} ("${asset.name}"), not a company's stock`;
+  const text = `${e.what} ${e.headline ?? ""}`;
+  if (!mentionsCompany(text, asset.name, { loose: true }) && !(BRAND_ALIASES[e.symbol] ?? []).some((b) => text.includes(b))) return `${e.symbol} is "${asset.name}", which the event does not name`;
+  return null;
+}
 
 /** Pure: the model's events, cleaned: a real-looking ticker, a date inside the window, one per stock, type and date. */
 export function parseEvents(text: string, headlines: Array<{ headline: string; url: string; source: string }>, today: string, horizonDays = BUBBLES.horizonDays): FoundEvent[] {
@@ -88,7 +103,7 @@ export function parseEvents(text: string, headlines: Array<{ headline: string; u
     if (!e.date || !/^\d{4}-\d{2}-\d{2}$/.test(e.date) || e.date <= today || e.date > addDays(today, horizonDays)) continue;
     const h = headlines[Math.round(e.n) - 1];
     const k = `${symbol}|${e.type}|${e.date}`;
-    if (!out.has(k)) out.set(k, { symbol, type: e.type, date: e.date, what: e.what.trim().slice(0, 300), url: h?.url ?? null, source: h?.source || "news" });
+    if (!out.has(k)) out.set(k, { symbol, type: e.type, date: e.date, what: e.what.trim().slice(0, 300), url: h?.url ?? null, source: h?.source || "news", headline: h?.headline });
   }
   return [...out.values()];
 }
@@ -130,7 +145,7 @@ const toRow = (r: Record<string, unknown>): BubbleRow => ({
 });
 
 export async function bubbleRows(days = 120): Promise<BubbleRow[]> {
-  return (await q(`SELECT * FROM bubble_events WHERE event_date >= (now() - ($1::int * interval '1 day'))::date ORDER BY event_date, symbol`, [days])).map(toRow);
+  return (await q(`SELECT * FROM bubble_events WHERE event_date >= (now() - ($1::int * interval '1 day'))::date AND dropped IS NULL ORDER BY event_date, symbol`, [days])).map(toRow);
 }
 
 /** News searches for upcoming fixed-date events, read by the light model. */
@@ -166,7 +181,14 @@ export async function runBubbles(deps: ResearchDeps): Promise<string> {
   if ((await store.spendOn(today)).cost < settings.dailyCapUsd) {
     // The light model: reading headlines into dates is bulk work (and not part of the scored version).
     const r = await newsEvents(deps, today, LIGHT_MODEL).catch((e) => { notes.push(`news read failed: ${e instanceof Error ? e.message.slice(0, 80) : e}`); return { events: [] as FoundEvent[], hype: [] as HypeStory[], costUsd: null }; });
-    found.push(...r.events);
+    // The model's ticker for each headline is checked against what the symbol is before the event is listed.
+    const off: string[] = [];
+    for (const e of r.events) {
+      const asset = deps.data.getAsset ? await deps.data.getAsset(e.symbol).catch(() => undefined) : undefined;
+      const why = asset === undefined ? null : eventSymbolOk(e, asset);
+      if (why) off.push(why); else found.push(e);
+    }
+    if (off.length) notes.push(`${off.length} events left out (wrong or unconfirmed ticker): ${off.slice(0, 6).join("; ")}`);
     hype.push(...r.hype);
   } else notes.push("news read skipped (daily AI cap)");
 
@@ -210,6 +232,18 @@ export async function runBubbles(deps: ResearchDeps): Promise<string> {
       [f.symbol, f.type, f.date, f.what, f.url, f.source, m.price, m.run30, spy30, m.stage, m.score, m.perHour, m.z, level],
     );
     kept++;
+  }
+
+  // Events listed before tickers were checked: those still ahead are checked once, and a wrong one is taken off the page (the row is kept).
+  if (deps.data.getAsset && (await store.tryLock("bubbles:recheck", 24 * 60).catch(() => false))) {
+    const ahead = (await q(`SELECT * FROM bubble_events WHERE event_date >= $1 AND dropped IS NULL AND source NOT IN ('FDA calendar') AND event_type <> 'earnings'`, [addDays(today, -30)])).map(toRow);
+    let n = 0;
+    for (const r of ahead) {
+      const asset = await deps.data.getAsset(r.symbol).catch(() => undefined);
+      const why = asset === undefined ? null : eventSymbolOk({ symbol: r.symbol, what: r.what }, asset);
+      if (why) { await q(`UPDATE bubble_events SET dropped = $2 WHERE id = $1`, [r.id, why]); n++; }
+    }
+    if (n) notes.push(`${n} earlier events taken off the page (wrong ticker)`);
   }
 
   // After the date: the event-day close, then 5 and 10 sessions later, against SPY (filled once each).

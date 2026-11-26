@@ -45,7 +45,7 @@ export async function GET(request: Request) {
     // Filing changes, crowding for open cards and the supply-chain read-through, each in its own time limit.
     await (async () => {
       const { JOBS, startJob } = await import("@/lib/scout/jobs");
-      for (const [name, j] of Object.entries(JOBS)) await startJob(new URL(request.url).origin, `/api/cron/job/${name}`, `lock:job:${name}`, j.everyMin);
+      for (const [name, j] of Object.entries(JOBS)) await startJob(new URL(request.url).origin, `/api/cron/job/${name}`, `lock:job:${name}${"rev" in j ? `:r${j.rev}` : ""}`, j.everyMin);
     })().catch((err) => console.error(`jobs start failed: ${err instanceof Error ? err.message : String(err)}`));
     // Reddit first (new posts, a little backfill), then once a day yesterday's rumor subreddits, then the catch-up queue.
     const { ingestReddit, readRedditRumors } = await import("@/lib/sources/arctic");

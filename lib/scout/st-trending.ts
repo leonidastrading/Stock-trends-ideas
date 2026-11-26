@@ -4,6 +4,7 @@
  * plus the market's top headlines at that moment. Each snapshot is kept, so the tab can show how the list's stocks
  * did after they trended. No AI.
  */
+import { listingOf } from "./company-match";
 import type { MarketData, NewsItem } from "../alpaca";
 import { query as q } from "../db";
 import { getJson } from "../http";
@@ -16,16 +17,16 @@ export type Slot = (typeof ST_SLOTS)[number]["key"];
 export interface StItem { rank: number; symbol: string; name: string | null; exchange: string | null; sector: string | null; watchers: number | null; summary: string | null; price: number | null; headlines: Array<{ headline: string; url: string; source: string; at: string }> }
 export interface StSnapshot { id: number; date: string; slot: Slot; takenAt: string; market: Array<{ headline: string; url: string; source: string; at: string }>; items: StItem[] }
 
-/** Pure: not a US-listed stock or ETF (a currency pair, gold, a crypto pair, an index): no scout chart or card. */
-export const notStock = (i: Pick<StItem, "symbol" | "exchange">) => /^(FX|FOREX|CRYPTO|INDEX|INDICES|FUTURES)$/i.test(i.exchange ?? "") || /\./.test(i.symbol);
+/** Pure: not a US-listed stock or ETF (a foreign listing such as AC.TSX, a currency pair, gold, crypto, an index): no scout chart or card. */
+export const notStock = (i: Pick<StItem, "symbol" | "exchange">) => listingOf(i.symbol, i.exchange).kind !== "us";
 
-/** Pure: the TradingView symbol for a currency pair, gold or silver, or a crypto pair. */
-export function tvForNonStock(i: Pick<StItem, "symbol" | "exchange">): string {
-  const s = i.symbol.toUpperCase();
-  if (/^X(AU|AG|PT|PD)USD$/.test(s)) return `OANDA:${s}`;
-  if (/^[A-Z]{3}\.X$/.test(s)) return `COINBASE:${s.slice(0, 3)}USD`;
-  if (/^(FX|FOREX)$/i.test(i.exchange ?? "") && /^[A-Z]{6}$/.test(s)) return `FX:${s}`;
-  return s;
+/** Pure: the TradingView symbol for a foreign listing ("TSX:AC"), a currency pair, gold or silver, or a crypto pair; null when there is none to chart. */
+export const tvForNonStock = (i: Pick<StItem, "symbol" | "exchange">): string | null => listingOf(i.symbol, i.exchange).tv;
+
+/** Pure: where a non-US item is listed, in words ("listed on TSX", "a currency pair", "crypto"). */
+export function listedWhere(i: Pick<StItem, "symbol" | "exchange">): string {
+  const l = listingOf(i.symbol, i.exchange);
+  return l.kind === "foreign" ? `listed on ${l.exchange ?? "an exchange outside the US"}, not a US symbol` : l.kind === "crypto" ? "crypto" : l.kind === "currency" ? "a currency pair or metal" : "not a stock";
 }
 
 /** Pure: the slot to take now: the latest one whose time has come today and is not taken yet (a late first run takes only the later slot). */

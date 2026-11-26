@@ -69,9 +69,11 @@ export function listResult(e: ListEntry, priceNow: number | null, spyNow: number
 
 const day = (v: unknown) => (v ? (v instanceof Date ? v.toISOString() : String(v)).slice(0, 10) : null);
 const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+/** The entry on today's prices: as recorded, times any split since (the recorded price is kept in the table). */
+const adjusted = (r: Record<string, unknown>) => (num(r.entry_price) === null ? null : Math.round(num(r.entry_price)! * Number(r.split_factor ?? 1) * 1e4) / 1e4);
 const toEntry = (r: Record<string, unknown>): ListEntry => ({
   symbol: String(r.symbol), eventDate: day(r.event_date)!, eventKind: String(r.event_kind ?? ""), headline: String(r.headline ?? ""), url: (r.url as string) ?? null,
-  listedAt: new Date(r.listed_at as string).toISOString(), entryDate: day(r.entry_date), entryPrice: num(r.entry_price), spyEntry: num(r.spy_entry), basis: r.basis as Basis,
+  listedAt: new Date(r.listed_at as string).toISOString(), entryDate: day(r.entry_date), entryPrice: adjusted(r), spyEntry: num(r.spy_entry), basis: r.basis as Basis,
   exitBy: day(r.exit_by), exitDate: day(r.exit_date), exitPrice: num(r.exit_price), spyExit: num(r.spy_exit),
 });
 
@@ -121,6 +123,12 @@ export async function updateListBook(data: MarketData, now = new Date()): Promis
   const [scan, seen] = await Promise.all([store.cacheGet<{ setups: DriftSetup[] }>("drift"), store.cacheGet<Record<string, string>>("drift:first-seen")]);
   const added = await recordListings(scan?.data?.setups ?? [], seen?.data ?? {}, { data, now, today: toEt(now).date });
   const settled = await settleList(data, now);
+  // A split since an entry (checked hourly): the entry is put on today's prices.
+  if (await store.tryLock("drift-list:splits", 60).catch(() => false)) {
+    const { adjustBookForSplits } = await import("./price-sanity");
+    const notes = await adjustBookForSplits(data, { table: "drift_list", key: "event_date" }, toEt(now).date).catch(() => []);
+    if (notes.length) console.log(`drift list splits: ${notes.join("; ")}`);
+  }
   const open = await q(`SELECT symbol, entry_price, basis FROM drift_list WHERE exit_date IS NULL ORDER BY listed_at DESC`).catch(() => []);
   return `${added} new, ${settled.entered} entered at an open, ${settled.closed} closed · ${open.length} open (${open.slice(0, 14).map((r) => `${r.symbol} ${r.entry_price === null ? "waits for the open" : `$${Number(r.entry_price).toFixed(2)}${r.basis === "minute bar" ? " 1-min" : ""}`}`).join(", ")})`;
 }

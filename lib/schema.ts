@@ -751,6 +751,9 @@ CREATE TABLE IF NOT EXISTS drift_list (
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (symbol, event_date)
 );
+ALTER TABLE bubble_events ADD COLUMN IF NOT EXISTS dropped text;
+ALTER TABLE drift_list ADD COLUMN IF NOT EXISTS split_factor double precision NOT NULL DEFAULT 1;
+ALTER TABLE upgrade_list ADD COLUMN IF NOT EXISTS split_factor double precision NOT NULL DEFAULT 1;
 -- The pre-earnings screen: one row per stock and report date, the warning signs seen before the report and the reaction after.
 CREATE TABLE IF NOT EXISTS pre_earnings (
   symbol text NOT NULL,

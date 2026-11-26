@@ -195,7 +195,7 @@ export default function CardFundamentals({ symbol }: { symbol: string }) {
   return (
     <div ref={box} className="card-fund">
       <div className="card-fund-head">
-        <h3>Financials <span className="small muted">{symbol}{data && !data.error ? ` · ${[...new Set([data.income.length ? data.incomeSource : null, data.eps.length ? data.epsSource : null].filter(Boolean))].join(" and ")}` : ""}{data?.currency && data.currency !== "USD" && data.income.length ? ` · amounts in ${data.currency}` : ""}</span></h3>
+        <h3>Financials <span className="small muted">{symbol}{data && !data.error ? ` · ${[...new Set([data.income.length ? data.incomeSource : null, data.eps.length ? data.epsSource : null].filter(Boolean))].join(" and ")}` : ""}</span>{data?.currency && data.currency !== "USD" && data.income.length ? <span className="tag warn" style={{ marginLeft: 6 }} title="The company reports in this currency. Amounts are shown as reported and are not converted to dollars.">in {data.currency}, not dollars</span> : null}</h3>
         <span className="filter-links small">
           <button type="button" className={`chip ${period === "annual" ? "active" : ""}`} onClick={() => setPeriod("annual")}>Annual</button>
           <button type="button" className={`chip ${period === "quarter" ? "active" : ""}`} onClick={() => setPeriod("quarter")}>Quarterly</button>
@@ -203,8 +203,9 @@ export default function CardFundamentals({ symbol }: { symbol: string }) {
       </div>
       {!data ? <p className="small muted">Loading financials…</p> : data.error && !data.income.length && !data.eps.length ? <p className="small muted">{/fund or ETF/.test(data.error) ? `${symbol} is ${data.error.replace(/^a /, "a ")}.` : `Financials not available: ${data.error}`}</p> : (
         <div className="fund-grid">
-          {data.income.length > 0 && <div><div className="small"><b>Revenue and net income</b></div><IncomeBars rows={data.income} /><div className="viz-legend small"><span><i className="sw viz-s1" />Revenue</span><span><i className="sw viz-s2" />Net income</span></div></div>}
-          {data.income.length > 0 && <div><div className="small"><b>Net margin</b> <span className="muted">(net income ÷ revenue)</span></div><MarginLine rows={data.income} /></div>}
+          {data.check && <p className="small warn" style={{ gridColumn: "1 / -1", margin: 0 }}>{data.check.note}</p>}
+          {data.income.length > 0 && data.check?.hide !== "all" && <div><div className="small"><b>Revenue and net income</b>{data.currency && data.currency !== "USD" ? <span className="muted"> ({data.currency})</span> : null}</div><IncomeBars rows={data.income} /><div className="viz-legend small"><span><i className="sw viz-s1" />Revenue</span><span><i className="sw viz-s2" />Net income</span></div></div>}
+          {data.income.length > 0 && !data.check && <div><div className="small"><b>Net margin</b> <span className="muted">(net income ÷ revenue)</span></div><MarginLine rows={data.income} /></div>}
           {data.eps.length > 0 && <div><div className="small"><b>EPS</b> <span className="muted">{done.length ? `beat the estimate ${beats} of the last ${done.length} quarters` : ""}</span></div><EpsDots rows={data.eps} /><div className="viz-legend small"><span><i className="sw viz-dot1 round" />Actual</span><span><i className="sw viz-ring round" />Estimate</span></div></div>}
         </div>
       )}

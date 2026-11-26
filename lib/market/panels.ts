@@ -113,7 +113,9 @@ export function buzzScore(i: { chatterZ: number | null; news: number | null; new
 }
 
 export async function buzzPanel(): Promise<BuzzRow[]> {
-  const rows = await store.buzzInputs();
+  const { plainUsSymbol } = await import("../scout/company-match");
+  // US-listed symbols only (the news feed and Stocktwits also carry Toronto, Korean, crypto and currency symbols).
+  const rows = (await store.buzzInputs()).filter((r) => plainUsSymbol(r.symbol));
   return rows
     .map((r) => ({ symbol: r.symbol, ...buzzScore({ chatterZ: r.history.length ? spikeScore(r.history, r.perHour)?.z ?? null : null, news: r.news, newsAvg: r.newsAvg, trendingRank: r.trendingRank }) }))
     .filter((r) => r.score > 0)

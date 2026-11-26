@@ -7,13 +7,14 @@
  * - the Hacker News front page (what technologists are reading).
  * (Reddit refuses cloud servers and Amazon's Movers & Shakers is drawn by script, so neither is here.)
  */
+import { decodeEntities } from "../entities";
 import { getText } from "../http";
 
 const UA = { "user-agent": "Mozilla/5.0 (compatible; research-reader/1.0)" };
 
 export interface Signal { feed: "google_trends" | "wikipedia" | "polymarket" | "hacker_news"; text: string }
 
-const dec = (s: string) => s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").trim();
+const dec = (s: string) => decodeEntities(s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")).trim();
 
 /** Pure: Google Trends trending-search RSS items: the search, its traffic, and the headlines behind it. */
 export function parseTrends(xml: string): Signal[] {

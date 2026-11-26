@@ -7,6 +7,7 @@
  * Key: an api.data.gov key (REGULATIONS_GOV_API_KEY, else FEC_API_KEY, which is the same kind of key); the shared
  * DEMO_KEY allows only a few requests an hour.
  */
+import { mentionsCompany, mentionsDrug } from "../scout/company-match";
 import { getText } from "../http";
 import type { Lookup, RecordRow } from "./world-records";
 
@@ -105,8 +106,11 @@ export async function recentPetitions(env: NodeJS.ProcessEnv, since: string, tod
   return out;
 }
 
-/** Pure: the stocks a petition is about, by company or drug names that appear in its request or petitioner. */
-export function matchSymbols(p: Pick<Petition, "request" | "petitioner">, names: Array<{ symbol: string; words: string[] }>): string[] {
-  const text = `${p.request ?? ""} ${p.petitioner}`.toLowerCase();
-  return names.filter((n) => n.words.some((w) => w.length >= 4 && new RegExp(`\\b${w.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(text))).map((n) => n.symbol);
+/**
+ * Pure: the stocks a petition is about: it has to name the company or one of its drugs (see company-match.ts; one
+ * word shared with the company's name is not a match).
+ */
+export function matchSymbols(p: Pick<Petition, "request" | "petitioner">, names: Array<{ symbol: string; company?: string | null; drugs?: string[] }>): string[] {
+  const text = `${p.request ?? ""} ${p.petitioner}`;
+  return [...new Set(names.filter((n) => (n.company && mentionsCompany(text, n.company)) || (n.drugs ?? []).some((d) => mentionsDrug(text, d))).map((n) => n.symbol))];
 }

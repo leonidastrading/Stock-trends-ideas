@@ -181,7 +181,10 @@ export async function runTrack(now = new Date()) {
       return { status: "skipped" as const, reason: "Alpaca keys not set" };
     }
     const started = Date.now();
-    const r = await updateTracks(data, now);
+    const r = await updateTracks(data, now).then(
+      async (x) => { await import("./health").then(({ reportHealth }) => reportHealth("market_prices", true, `${x.barsWritten} daily bars written`)).catch(() => undefined); return x; },
+      async (e) => { await import("./health").then(({ reportHealth }) => reportHealth("market_prices", false, e instanceof Error ? e.message : String(e))).catch(() => undefined); throw e; },
+    );
     // The day after a catalyst: read what happened and push the verdict.
     const reviews = await runReviews({ data, callModel: callResearchModel, now }).catch((err) => [{ cardId: 0, error: err instanceof Error ? err.message : String(err) }]);
     const pushed = await pushReviews(reviews as Array<{ cardId: number; verdict?: string }>).catch((err) => `push failed: ${err instanceof Error ? err.message : String(err)}`);

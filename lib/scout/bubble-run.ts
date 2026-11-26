@@ -5,6 +5,7 @@
  * the stock is building or in mania, and the theme summary for the page. After a run is first listed, the stock's
  * move 10 and 20 sessions later against SPY is filled in, so the tab shows how hype runs actually ended.
  */
+import { plainUsSymbol, unitWarrantRight } from "./company-match";
 import type { DailyBar } from "../alpaca";
 import { query as q } from "../db";
 import { addDays, toEt } from "../time";
@@ -32,7 +33,9 @@ const toMover = (r: Record<string, unknown>): MoverRow => ({
 });
 
 export async function moverRows(days = 120): Promise<MoverRow[]> {
-  return (await q(`SELECT * FROM bubble_movers WHERE last_seen > now() - ($1::int * interval '1 day') ORDER BY last_seen DESC`, [days])).map(toMover);
+  // Rows listed from the gainers or trending lists before units, warrants and foreign listings were kept out are not shown.
+  return (await q(`SELECT * FROM bubble_movers WHERE last_seen > now() - ($1::int * interval '1 day') ORDER BY last_seen DESC`, [days])).map(toMover)
+    .filter((r) => !/top gainers|trending/i.test(r.source ?? "") || (plainUsSymbol(r.symbol) && !unitWarrantRight(r.symbol)));
 }
 
 export async function themeSummary(): Promise<{ data: ThemeSummary[]; updatedAt: string } | null> {
@@ -53,8 +56,11 @@ export async function runMovers(deps: ResearchDeps, hype: HypeStory[], trending:
   const tag = new Map<string, { theme: string | null; why: string | null; url: string | null; source: string }>();
   for (const [theme, syms] of Object.entries(THEME_BASKETS)) for (const s of syms) tag.set(s, { theme, why: null, url: null, source: "theme basket" });
   for (const h of hype) for (const s of h.tickers) tag.set(s, { theme: h.theme, why: h.why, url: h.url, source: h.source });
-  for (const s of trending) if (!tag.has(s)) tag.set(s, { theme: null, why: null, url: null, source: "Stocktwits trending" });
-  const gainers = data.getMovers ? (await data.getMovers(25).catch(() => ({ gainers: [] }))).gainers.filter((g) => g.price >= PARABOLA.minPrice).map((g) => g.symbol) : [];
+  // Trending and top-gainer lists carry foreign listings and SPAC units, warrants and rights: only US common stocks and funds go on.
+  const { commonStocksOnly } = await import("./company-match");
+  const nameOf = data.getAsset ? (sym: string) => data.getAsset!(sym).then((a) => a?.name ?? null) : null;
+  for (const s of await commonStocksOnly(trending, nameOf)) if (!tag.has(s)) tag.set(s, { theme: null, why: null, url: null, source: "Stocktwits trending" });
+  const gainers = data.getMovers ? await commonStocksOnly((await data.getMovers(25).catch(() => ({ gainers: [] }))).gainers.filter((g) => g.price >= PARABOLA.minPrice).map((g) => g.symbol), nameOf) : [];
   for (const s of gainers) if (!tag.has(s)) tag.set(s, { theme: null, why: null, url: null, source: "top gainers" });
   const symbols = [...tag.keys()].slice(0, MOVERS.maxSymbols);
 

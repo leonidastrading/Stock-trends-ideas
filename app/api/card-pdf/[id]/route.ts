@@ -39,7 +39,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const pdf = await cardPdf({
     card, track, review, about: about?.about ?? null, sectorLabel: SECTOR_LABEL[card.sector] ?? card.sector.replace(/_/g, " "), companyName: info?.name ?? null, source: from.tag,
     bars: mine.map((b) => ({ date: b.date, c: b.c, o: b.o, h: b.h, l: b.l, v: b.v })),
-    fundamentals: fund && (fund.income.length || fund.eps.length) ? { period, income: fund.income, eps: fund.eps, source: [fund.incomeSource, fund.epsSource].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).join(" and ") || null } : null, result: r ? { ...r, vsSpy: vsSpy(card.direction, r) } : null,
+    fundamentals: fund && (fund.income.length || fund.eps.length) ? { period, income: fund.check?.hide === "all" ? [] : fund.check ? fund.income.map((r) => ({ ...r, margin: null })) : fund.income, eps: fund.eps, note: [fund.check?.note, fund.currency && fund.currency !== "USD" && fund.income.length ? `Amounts are in ${fund.currency}, as the company reports them (not converted to dollars).` : null].filter(Boolean).join(" ") || null, source: [fund.incomeSource, fund.epsSource].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).join(" and ") || null } : null, result: r ? { ...r, vsSpy: vsSpy(card.direction, r) } : null,
     siteUrl: process.env.DASHBOARD_URL?.replace(/\/$/, "") ?? new URL(request.url).origin, now,
   });
   return new NextResponse(Buffer.from(pdf), { headers: { "content-type": "application/pdf", "content-disposition": `attachment; filename="${cardPdfName(card)}"`, "cache-control": "no-store" } });

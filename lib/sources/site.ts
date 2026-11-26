@@ -3,6 +3,7 @@
  * (advertised in the page, or at a usual path), otherwise the article links on the page.
  * Public pages only, no logins, no bot-challenge workarounds.
  */
+import { decodeEntities } from "../entities";
 import { getText } from "../http";
 
 export interface Article { url: string; title: string; published: string | null; summary: string }
@@ -29,11 +30,7 @@ export function cleanSiteUrl(raw: string): string | null {
   return u.toString();
 }
 
-const decode = (s: string) =>
-  s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
-    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
-    .replace(/&quot;/g, '"').replace(/&apos;|&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
+const decode = (s: string) => decodeEntities(s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1"));
 
 /** Pure: HTML to plain text (scripts, styles and tags out, whitespace squeezed). */
 export function htmlText(html: string): string {

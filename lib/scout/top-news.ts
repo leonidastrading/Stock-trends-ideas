@@ -6,6 +6,7 @@
  * NEWSFILTER_API_KEY is set), which the ticker-tagged feed misses or ranks low. Until a pick exists (or when the AI is off or over
  * its cap) the rule-based ranking stands in.
  */
+import { decodeEntities } from "../entities";
 import { z } from "zod";
 import { LIGHT_MODEL } from "@/config/scout";
 import type { FeedItem } from "./newsfeed";
@@ -119,7 +120,7 @@ const GOOGLE_FEEDS: Array<[string, string]> = [
   ["business", "https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=en-US&gl=US&ceid=US:en"],
   ["world", "https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-US&gl=US&ceid=US:en"],
 ];
-const decode = (s: string) => s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").trim();
+const decode = (s: string) => decodeEntities(s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")).trim();
 
 /** Pure: a Google News RSS page as feed items ("Headline - Outlet" split into headline and source), newest kept to 24 hours. */
 export function parseGoogleNews(xml: string, now: Date): FeedItem[] {

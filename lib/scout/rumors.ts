@@ -5,6 +5,7 @@
  * is checked against the mainstream news stream (has anything like it been reported?). Nothing is researched
  * automatically: a rumor goes to research only when Vadim presses the button, and then scores as its own player.
  */
+import { decodeEntities } from "../entities";
 import { z } from "zod";
 import type { MarketData, NewsItem } from "../alpaca";
 import { toEt } from "../time";
@@ -33,7 +34,7 @@ const asDate = (v: unknown): string | null => {
   if (typeof v === "number" && v > 1e9) return `${new Date(v < 1e12 ? v * 1000 : v).toISOString().slice(0, 16).replace("T", " ")} UTC`;
   return typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 16).replace("T", " ") : typeof v === "string" ? v.slice(0, 40) : null;
 };
-const decodeHtml = (s: string) => s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;|&#x27;/g, "'");
+const decodeHtml = (s: string) => decodeEntities(s);
 
 /**
  * Pure: a JSON dump (a Reddit listing or thread, a forum export, a scraper's array of posts, or JSON lines) as plain

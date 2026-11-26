@@ -9,6 +9,7 @@
  * New rumors are checked the moment they are read: a claim a credible outlet had already reported before the scout read it
  * is not a rumor but news ("already news"); it leaves the Rumors list and shows on the News tab instead.
  */
+import { decodeEntities } from "../entities";
 import { z } from "zod";
 import { query as q } from "../db";
 import { getText } from "../http";
@@ -59,7 +60,7 @@ const UA = { "user-agent": "Mozilla/5.0 (compatible; research-reader/1.0)", acce
 /** Pure: Google News RSS items. */
 export function parseGoogleNews(xml: string): Evidence[] {
   const tag = (s: string, n: string) => s.match(new RegExp(`<${n}[^>]*>([\\s\\S]*?)</${n}>`, "i"))?.[1]?.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").trim() ?? "";
-  const dec = (s: string) => s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'");
+  const dec = (s: string) => decodeEntities(s);
   return [...xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)].map((m) => {
     const it = m[1];
     const t = Date.parse(tag(it, "pubDate"));

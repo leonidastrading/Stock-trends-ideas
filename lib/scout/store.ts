@@ -267,6 +267,8 @@ export interface Track {
   entryPriceRaw?: number | null;
   /** Splits since the entry (2-for-1 = 0.5); 1 when none. */
   splitFactor?: number;
+  /** Corrections added after the card was written (a wrong link taken off); the card's own text is never edited. */
+  corrections?: string | null;
   /** Set when the prices disagree for a reason that is not a split: left out of the points until checked. */
   priceCheck?: string | null;
 }
@@ -280,11 +282,13 @@ const toTrack = (r: Row): Track => ({
   excluded: r.excluded ?? null,
   invalidatedAt: iso(r.invalidated_at) ?? null, invalidatedNote: r.invalidated_detail ?? null,
   cardAt: iso(r.card_at) ?? null,
+  corrections: r.corrections ?? null,
 });
 
 const TRACK_SELECT = `SELECT t.*, (SELECT e.detail FROM track_events e WHERE e.card_id = t.card_id AND e.kind = 'excluded' ORDER BY e.id LIMIT 1) AS excluded,
   (SELECT e.at FROM track_events e WHERE e.card_id = t.card_id AND e.kind = 'invalidated' ORDER BY e.id LIMIT 1) AS invalidated_at,
   (SELECT e.detail FROM track_events e WHERE e.card_id = t.card_id AND e.kind = 'invalidated' ORDER BY e.id LIMIT 1) AS invalidated_detail,
+  (SELECT string_agg(e.detail, ' ' ORDER BY e.id) FROM track_events e WHERE e.card_id = t.card_id AND e.kind = 'correction') AS corrections,
   (SELECT c.created_at FROM cards c WHERE c.id = t.card_id) AS card_at FROM tracks t`;
 
 export async function insertTrack(t: { cardId: number; symbol: string; sectorEtf: string; direction: "long" | "short"; cardDate: string; deadlineDate: string }): Promise<void> {
@@ -313,6 +317,11 @@ export async function applySplit(cardId: number, ratio: number): Promise<void> {
   await q(`UPDATE tracks SET split_factor = split_factor * $2, price_check = NULL WHERE card_id = $1`, [cardId, ratio]);
 }
 
+/** The splits since the entry, as measured from the bars (the raw entry is kept). */
+export async function setSplitFactor(cardId: number, factor: number): Promise<void> {
+  await q(`UPDATE tracks SET split_factor = $2 WHERE card_id = $1`, [cardId, factor]);
+}
+
 export async function setPriceCheck(cardId: number, note: string | null): Promise<void> {
   await q(`UPDATE tracks SET price_check = $2 WHERE card_id = $1`, [cardId, note]);
 }
@@ -325,7 +334,7 @@ export async function setTapped(cardId: number, response: unknown): Promise<void
   await q(`UPDATE tracks SET tapped_at = coalesce(tapped_at, now()), swing_response = $2 WHERE card_id = $1`, [cardId, JSON.stringify(response)]);
 }
 
-export async function addTrackEvent(cardId: number, kind: "invalidated" | "sent_to_swing" | "send_failed" | "excluded" | "tracked_from_listing" | "listing_not_followed" | "split", detail: string | null): Promise<void> {
+export async function addTrackEvent(cardId: number, kind: "invalidated" | "sent_to_swing" | "send_failed" | "excluded" | "tracked_from_listing" | "listing_not_followed" | "split" | "correction", detail: string | null): Promise<void> {
   await q(`INSERT INTO track_events (card_id, kind, detail) VALUES ($1, $2, $3)`, [cardId, kind, detail]);
 }
 

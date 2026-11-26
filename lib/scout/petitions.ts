@@ -13,22 +13,16 @@ import * as store from "./store";
 
 export interface PetitionWatch { at: string; recent: Petition[]; shortSellers: Petition[]; shortSellersAt: string | null; error: string | null }
 
-const GENERIC = new Set(["inc", "corp", "corporation", "company", "holdings", "group", "therapeutics", "pharmaceuticals", "pharma", "biosciences", "bio", "medical", "health", "the", "class", "common", "stock", "ordinary", "shares", "limited", "ltd", "plc", "international", "technologies", "systems"]);
-
-/** Pure: the words a company or drug is known by ("TransMedics Group Inc" → "TransMedics"). */
-export function nameWords(name: string): string[] {
-  return name.replace(/\([^)]*\)/g, " ").split(/[\s,./]+/).map((w) => w.replace(/[^\w-]/g, "")).filter((w) => w.length >= 4 && !GENERIC.has(w.toLowerCase())).slice(0, 2);
-}
-
-async function knownNames(): Promise<Array<{ symbol: string; words: string[] }>> {
+/** The companies and drugs the scout knows: stocks on cards (by their listed name) and the Pharma tab's FDA calendar. */
+async function knownNames(): Promise<Array<{ symbol: string; company?: string | null; drugs?: string[] }>> {
   const briefs = await store.cardBriefsSince(180).catch(() => []);
   const syms = [...new Set(briefs.flatMap((b) => [b.primaryTicker, ...b.tickers]))];
   const info = await store.symbolInfo(syms).catch(() => new Map());
-  const out: Array<{ symbol: string; words: string[] }> = [];
-  for (const s of syms) { const n = (info.get(s) as { name?: string | null } | undefined)?.name; if (n) out.push({ symbol: s, words: nameWords(n) }); }
+  const out: Array<{ symbol: string; company?: string | null; drugs?: string[] }> = [];
+  for (const s of syms) { const n = (info.get(s) as { name?: string | null } | undefined)?.name; if (n) out.push({ symbol: s, company: n }); }
   const fda = await store.cacheGet<import("../sources/pharma").FdaEvent[]>("pharma:fda").catch(() => null);
-  for (const e of fda?.data ?? []) if (e.symbol) out.push({ symbol: e.symbol, words: [...nameWords(e.company), ...e.drug.split(/[\s,/()]+/).filter((w) => w.length >= 5 && /^[A-Za-z][a-z-]+$/.test(w)).slice(0, 2)] });
-  return out.filter((n) => n.words.length);
+  for (const e of fda?.data ?? []) if (e.symbol) out.push({ symbol: e.symbol, company: e.company, drugs: e.drug ? [e.drug] : [] });
+  return out;
 }
 
 /** One run: recent petitions (daily), short sellers' petitions (weekly). Returns a log line. */
@@ -44,7 +38,8 @@ export async function runPetitionWatch(env: NodeJS.ProcessEnv = process.env, now
   } catch (e) {
     error = `recent petitions: ${(e instanceof Error ? e.message : String(e)).slice(0, 120)}`;
   }
-  let shortSellers = prev?.shortSellers ?? [];
+  // The short sellers' list is refreshed weekly; its links are matched again on every run (the matcher can change).
+  let shortSellers = withSyms(prev?.shortSellers ?? []);
   let shortSellersAt = prev?.shortSellersAt ?? null;
   if (!shortSellersAt || Date.now() - Date.parse(shortSellersAt) > 7 * 86400_000) {
     try {
@@ -58,8 +53,32 @@ export async function runPetitionWatch(env: NodeJS.ProcessEnv = process.env, now
   }
   const watch: PetitionWatch = { at: now.toISOString(), recent, shortSellers, shortSellersAt, error };
   await store.cachePut("regs:petitions", watch);
+  const corrected = await correctLinks(prev, watch).catch(() => "");
   const pushed = await alerts(prev, watch, env, fetchImpl).catch(() => 0);
-  return `petitions: ${recent.length} FDA citizen petitions in 30 days (${recent.filter((p) => p.symbols.length).length} on known stocks), ${shortSellers.length} by short sellers${pushed ? `, ${pushed} alerts` : ""}${error ? ` · ${error}` : ""}`;
+  return `petitions: ${recent.length} FDA citizen petitions in 30 days (${recent.filter((p) => p.symbols.length).length} on known stocks), ${shortSellers.length} by short sellers${pushed ? `, ${pushed} alerts` : ""}${corrected}${error ? ` · ${error}` : ""}`;
+}
+
+/**
+ * Links the last run had and this one does not (a petition matched to a stock on one shared word) are wrong links
+ * taken off. A card on such a stock that speaks of a petition keeps its text and gets a correction note.
+ */
+async function correctLinks(prev: PetitionWatch | null, now: PetitionWatch): Promise<string> {
+  if (!prev) return "";
+  const kept = new Map([...now.recent, ...now.shortSellers].map((p) => [p.docketId, new Set(p.symbols)]));
+  const removed: Array<{ docket: string; symbol: string }> = [];
+  for (const p of [...prev.recent, ...prev.shortSellers]) for (const s of p.symbols ?? []) if (kept.has(p.docketId) && !kept.get(p.docketId)!.has(s) && !removed.some((r) => r.docket === p.docketId && r.symbol === s)) removed.push({ docket: p.docketId, symbol: s });
+  if (!removed.length) return "";
+  const cards = await store.cardsSince(120).catch(() => []);
+  let notes = 0;
+  for (const r of removed) {
+    for (const c of cards.filter((x) => x.primaryTicker === r.symbol && /citizen petition|petition/i.test(JSON.stringify(x.card)))) {
+      if (!(await store.tryLock(`petition-correction:${c.id}:${r.docket}`, 60 * 24 * 3650).catch(() => false))) continue;
+      await store.addTrackEvent(c.id, "correction", `FDA citizen petition ${r.docket} was linked to ${r.symbol} by mistake (one word of the company's name appeared in it). It does not concern ${r.symbol}; any use of it in this card is wrong. The card's text is kept as written.`).catch(() => undefined);
+      notes++;
+    }
+  }
+  console.log(`petitions: ${removed.length} wrong links removed (${removed.slice(0, 40).map((r) => `${r.docket}→${r.symbol}`).join(", ")}); ${notes} correction notes on cards`);
+  return `, ${removed.length} wrong links removed, ${notes} correction notes`;
 }
 
 async function alerts(prev: PetitionWatch | null, now: PetitionWatch, env: NodeJS.ProcessEnv, fetchImpl?: typeof fetch): Promise<number> {

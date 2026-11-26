@@ -9,13 +9,14 @@
  *   site blocks servers.
  * - Federal court dockets (CourtListener) need a free API key and are not read yet.
  */
+import { decodeEntities } from "../entities";
 import { getText } from "../http";
 import { sponsorMatcher } from "./pharma";
 
 const UA = { "user-agent": "Mozilla/5.0 (compatible; trend-scout research)" };
 const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
 
-const decode = (s: string) => s.replace(/&amp;/g, "&").replace(/&#39;|&#x27;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+const decode = (s: string) => decodeEntities(s);
 
 /** Pure: "December 7, 2026" → "2026-12-07". */
 export function isoFromWords(s: string): string | null {

@@ -31,7 +31,8 @@ export const CROWDING = { minBaselineDays: 10, lookbackDays: 90, trimZ: 3, trimR
 export interface CrowdingParts {
   attention: { perHour: number; baseline: number | null; z: number | null; days: number; bullishShare: number | null } | null;
   news: { stories30d: number; baseline30d: number | null; ratio: number | null } | null;
-  search: { v4: number; v52: number; ratio: number | null } | null;
+  /** `unusable`: the company's name is also an ordinary word or acronym, so no search reading is taken. */
+  search: { v4: number; v52: number; ratio: number | null; unusable?: boolean } | null;
   extension: { close: number; sma200: number; pctAbove: number } | null;
   run: { move30: number | null; move5: number | null; offHigh20: number | null } | null;
   coverage: { analysts: number | null; band: string | null } | null;
@@ -128,6 +129,12 @@ async function searchPart(symbol: string, fetchImpl?: typeof fetch, allowFetch =
   if (cached && Date.now() - Date.parse(cached.updatedAt) < 7 * 86400_000) return cached.data;
   if (!allowFetch) return cached?.data ?? null;
   const info = (await store.symbolInfo([symbol]).catch(() => new Map())).get(symbol) as { name?: string | null } | undefined;
+  // A name that is one short acronym or one ordinary word measures the word, not the company: no reading.
+  if (info?.name && !(await import("./company-match")).searchableName(info.name)) {
+    const none = { v4: 0, v52: 0, ratio: null, unusable: true };
+    await store.cachePut(key, none).catch(() => undefined);
+    return none;
+  }
   const term = (info?.name ?? "").replace(/\b(inc|corp|corporation|co|ltd|plc|holdings?|group|class [a-z]|common stock|ordinary shares)\b\.?/gi, "").replace(/[,.]+/g, " ").replace(/\s+/g, " ").trim() || `${symbol} stock`;
   try {
     const { interestOverTime, interestSummary } = await import("../sources/googletrends");
@@ -209,7 +216,7 @@ export function crowdingLine(r: Pick<CrowdingRow, "score" | "stage" | "measuredO
   const bits = [
     p.attention ? `Stocktwits ${p.attention.perHour}/h${p.attention.z !== null ? ` (${p.attention.z > 0 ? "+" : ""}${p.attention.z}σ vs baseline)` : ` (baseline building: ${p.attention.days} days)`}${p.attention.bullishShare !== null ? `, ${Math.round(p.attention.bullishShare * 100)}% bullish` : ""}` : null,
     p.news ? `news ${p.news.stories30d} stories/30d vs usual ${p.news.baseline30d ?? "?"}` : null,
-    p.search?.ratio !== null && p.search?.ratio !== undefined ? `Google searches ×${p.search.ratio} vs 12 months` : null,
+    p.search?.unusable ? "Google searches not usable (the name is also an ordinary word or acronym)" : p.search?.ratio !== null && p.search?.ratio !== undefined ? `Google searches ×${p.search.ratio} vs 12 months` : null,
     p.extension ? `${p.extension.pctAbove > 0 ? "+" : ""}${p.extension.pctAbove}% vs 200-day average` : null,
     p.run?.move30 !== null && p.run?.move30 !== undefined ? `${p.run.move30 > 0 ? "+" : ""}${p.run.move30}% in 30 days` : null,
     p.coverage?.analysts !== null && p.coverage?.analysts !== undefined ? `${p.coverage.analysts} analysts (${p.coverage.band} coverage)` : null,

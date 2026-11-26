@@ -23,7 +23,7 @@ import { after } from "next/server";
 import { marketDataFromEnv } from "@/lib/alpaca";
 import { quote, sessionLabel } from "@/lib/market/quotes";
 import { hasDatabase } from "@/lib/db";
-import { namesMatch, notCommon } from "@/lib/scout/identity";
+import { correctedTickers, namesMatch, notCommon } from "@/lib/scout/identity";
 import * as store from "@/lib/scout/store";
 import type { Feedback as FeedbackRow, StoredCard, StoredReview, Track } from "@/lib/scout/store";
 import { addDays, daysBetween, fmtEtAgo, toEt, dayAgo } from "@/lib/time";
@@ -158,6 +158,8 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
         {/* No headline here: it nearly always repeated the thesis just below (the title still names the card in lists and links). */}
         {hasDatabase() && <Suspense fallback={null}><CompanyAbout symbol={c.primaryTicker} sector={c.sector} /></Suspense>}
         <div className={`card-thesis card-thesis-${c.direction}`}><span className="card-thesis-label">{c.direction === "long" ? "▲" : "▼"} Thesis</span> {thesis}</div>
+        {/* A card logged before corrected symbols were also rewritten in its text: the text is kept as written, with the correction said beside it. */}
+        {correctedTickers(c.gateNotes).filter((x) => new RegExp(`(?<![A-Za-z0-9])${x.from.replace(/[.]/g, "\\.")}(?![A-Za-z0-9])`).test(thesis)).map((x) => <div key={x.from} className="small warn"><b>Correction:</b> the thesis says {x.from}; the company trades as {x.to}, which is the stock this card tracks.</div>)}
         {/* Every score as a percentage (the 0-10 ratings x 10); tap the row for what they mean. "lateness" is shown as "early" (100% = nobody is talking about it yet). */}
         <details className="scores-details">
           <summary className="scores">
@@ -192,6 +194,9 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
         {k.unknowns.length > 0 && <><dt>Unknowns</dt><dd>{k.unknowns.join("; ")}</dd></>}
         {c.gateNotes.length > 0 && <><dt>Gate notes</dt><dd className="small secondary">{c.gateNotes.join(" · ")}</dd></>}
         {track && <><dt>Paper track</dt><dd className="small">
+          {track?.corrections && <div className="small warn"><b>Correction:</b> {track.corrections}</div>}
+          {track?.priceCheck && <div className="small warn" title="Left out of the Scoreboard's points until the price passes the check."><b>Price unverified:</b> {track.priceCheck}.</div>}
+          {!track?.priceCheck && track && !track.exitDate && result && q?.changePct != null && Math.abs(q.changePct) > 40 && <div className="small muted" title="A move this large is checked against the whole market's prices and for a split before it counts."><b>Price unverified:</b> the stock shows a {pct(q.changePct)} move today; the result below waits for the price check.</div>}
           {result && <div className={`paper-result ${result.ret >= 0 ? "pos" : "neg"}`}><b>{result.closed ? "Result" : "So far"}: {pct(result.ret * 100)}</b>{result.spy !== null && <span className="muted"> · SPY {pct(result.spy * 100)} · </span>}{result.spy !== null && <b className={vsSpy(c.direction, result)! >= 0 ? "pos" : "neg"}>{pct(vsSpy(c.direction, result)! * 100)} vs SPY</b>}<span className="muted"> · {c.direction === "short" ? "short" : "long"}, {result.days} day{result.days === 1 ? "" : "s"}{result.closed ? "" : " (live price)"}</span></div>}
           {trackLine(track)}</dd></>}
         {review && <><dt>After the catalyst</dt><dd className="small"><b className={VERDICT[review.verdict]?.[1] ?? ""}>{VERDICT[review.verdict]?.[0] ?? review.verdict}</b> <span className="muted">({fmtEtAgo(review.createdAt)}{review.moveSinceEntryPct !== null ? `; trade ${review.moveSinceEntryPct >= 0 ? "+" : ""}${review.moveSinceEntryPct}% since entry` : ""})</span> — {review.summary}{review.evidence.length ? <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>{review.evidence.map((e, i) => <li key={i} className="muted">{e.date} [{e.source}] {e.headline}</li>)}</ul> : null}</dd></>}

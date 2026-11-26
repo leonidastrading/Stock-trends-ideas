@@ -72,7 +72,7 @@ export default async function ScoreboardPage() {
 
       {tracks.some((t) => t.priceCheck) && (
         <section className="card small warn">
-          <b>Left out of the points until the prices are checked:</b> {tracks.filter((t) => t.priceCheck).map((t, i) => <span key={t.cardId}>{i ? "; " : ""}<a href={`/cards/${t.cardId}`}>card #{t.cardId}</a> ({t.priceCheck})</span>)}. The stored prices and a fresh download disagree for a reason that is not a stock split.
+          <b>Price unverified, left out of the points:</b> {tracks.filter((t) => t.priceCheck).map((t, i) => <span key={t.cardId}>{i ? "; " : ""}<a href={`/cards/${t.cardId}`}>card #{t.cardId}</a> ({t.priceCheck})</span>)}. A recorded entry has to sit inside the range the stock traded in that day, and a close more than 40% from the one before it has to agree with the whole market&apos;s close; these calls are &quot;price unverified&quot; until they do.
         </section>
       )}
       {tracks.some((t) => (t.splitFactor ?? 1) !== 1) && (

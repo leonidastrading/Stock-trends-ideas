@@ -55,3 +55,23 @@ export function checkTicker(symbol: string, company: string | null, asset: Asset
   if (company && !namesMatch(company, asset.name)) return { symbol, company, action: "unconfirmed", note: `could not confirm ${symbol} is ${company}: ${nowIs}` };
   return { symbol, company, action: "ok", note: null };
 }
+
+/**
+ * Pure: a card's text with a corrected ticker written the new way ("Short ERJ" → "Short EMBJ"), used before the card
+ * is logged, so the thesis does not keep the symbol the card no longer tracks. Whole symbols only; a symbol of one
+ * or two letters is replaced only where it is written as a ticker ("$X", "(X)", "long X", "short X", "NYSE: X").
+ */
+export function renameTickerInText<T>(value: T, from: string, to: string): T {
+  if (!from || from === to) return value;
+  const f = from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const whole = new RegExp(`(?<![A-Za-z0-9.$])${f}(?![A-Za-z0-9])`, "g");
+  const asTicker = new RegExp(`(\\$|\\(|\\b(?:[Ll]ong|[Ss]hort|LONG|SHORT)\\s+|\\b(?:NYSE|NASDAQ|Nasdaq)\\s*:\\s*)${f}(?![A-Za-z0-9])`, "g");
+  const fix = (s: string) => (from.length >= 3 ? s.replace(asTicker, `$1${to}`).replace(whole, to) : s.replace(asTicker, `$1${to}`));
+  const walk = (v: unknown): unknown => (typeof v === "string" ? fix(v) : Array.isArray(v) ? v.map(walk) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, k === "url" || k === "symbol" ? x : walk(x)])) : v);
+  return walk(value) as T;
+}
+
+/** Pure: the symbols a card's gate notes say were corrected ("ticker corrected ERJ → EMBJ: ..."), old to new. */
+export function correctedTickers(gateNotes: string[]): Array<{ from: string; to: string }> {
+  return gateNotes.flatMap((n) => { const m = /ticker corrected ([A-Z.]{1,7}) → ([A-Z.]{1,7})/.exec(n); return m ? [{ from: m[1], to: m[2] }] : []; });
+}

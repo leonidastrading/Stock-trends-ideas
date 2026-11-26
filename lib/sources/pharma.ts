@@ -8,6 +8,7 @@
  *   is when the last patient's main measurement is taken; results are usually announced weeks to months later.
  * Pure parsers here; fetching is light (about 8 calendar pages and one API call a day).
  */
+import { decodeEntities } from "../entities";
 import { getText } from "../http";
 
 export interface FdaEvent { company: string; symbol: string | null; otherSymbols: string[]; drug: string; when: string; date: string | null; month: string | null; event: string; outcome: string; status: string; note: string; detailUrl: string | null }
@@ -15,7 +16,7 @@ export interface TrialReadout { nct: string; title: string; sponsor: string; sym
 
 const UA = { "user-agent": "Mozilla/5.0 (compatible; trend-scout research)" };
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
-const text = (s: string) => s.replace(/<br\s*\/?>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&#39;|&rsquo;|’/g, "'").replace(/&quot;/g, '"').replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+const text = (s: string) => s.replace(/<br\s*\/?>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&[#a-z0-9]+;/gi, (e) => decodeEntities(e)).replace(/’/g, "'").replace(/\s+/g, " ").trim();
 
 /** Pure: an RTTNews date ("02/28/2027", "Feb 2027", "Q4 2026", "1H 2027") as an exact date and/or the month it falls in or ends by. */
 export function parseWhen(raw: string): { date: string | null; month: string | null } {

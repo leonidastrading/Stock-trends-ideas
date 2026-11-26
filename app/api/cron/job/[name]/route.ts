@@ -43,12 +43,15 @@ export async function GET(request: Request, ctx: { params: Promise<{ name: strin
         break;
       }
     }
+    // Each job's state goes on the health panel (Settings) and on Home when it is not reporting.
+    await import("@/lib/scout/health").then(({ reportHealth, saysFailed }) => reportHealth(`job:${name}`, !saysFailed(result!), result!)).catch(() => undefined);
     // The finished study answers every 5 minutes: not worth a log line each time.
     if (!/^(rating|panel) study: (done|waiting)/.test(result!)) console.log(result!);
     return NextResponse.json({ status: "ok", result: result! });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`job ${name} failed: ${msg}`);
+    await import("@/lib/scout/health").then(({ reportHealth }) => reportHealth(`job:${name}`, false, msg)).catch(() => undefined);
     return NextResponse.json({ status: "error", error: msg }, { status: 500 });
   }
 }

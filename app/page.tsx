@@ -43,11 +43,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
 /** Sources not reporting, and a scan still running. */
 async function Notices() {
   const [health, runs] = await Promise.all([store.allHealth(), store.recentRuns(30)]);
-  const down = health.filter((h) => h.status === "down" || h.status === "missing");
+  // Every source a page relies on that is not reporting, the background jobs included (see lib/scout/health.ts).
+  const down = (await import("@/lib/scout/health")).notReporting(health, new Date());
   const running = runs.find((r) => r.action === "daily" && r.status === "running");
   return (
     <>
-      {down.length > 0 && <p className="small warn">Sources not reporting: {down.map((h) => `${h.source} (${h.status})`).join(", ")}. See Settings.</p>}
+      {down.length > 0 && <p className="small warn">Sources not reporting: {down.join(", ")}. See <a href="/settings">Settings</a>.</p>}
       {running && <p className="small warn">A scan started at {etLabelAgo(running.startedAt, true)} is still running; refresh in a few minutes.</p>}
     </>
   );

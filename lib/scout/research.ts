@@ -341,5 +341,9 @@ export async function verifyTickers(card: Card, deps: ResearchDeps): Promise<{ c
     kept.push(t);
   }
   if (!kept.length) return { card, notes, noValidTicker: true };
-  return { card: { ...card, tickers: kept }, notes, noValidTicker: false };
+  // A corrected symbol is written the new way in the card's text too, so the thesis does not name a symbol the card no longer tracks.
+  const { renameTickerInText, correctedTickers } = await import("./identity");
+  let fixed: Card = { ...card, tickers: kept };
+  for (const c of correctedTickers(notes)) fixed = { ...renameTickerInText(fixed, c.from, c.to), tickers: kept };
+  return { card: fixed, notes, noValidTicker: false };
 }

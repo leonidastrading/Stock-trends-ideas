@@ -6,7 +6,7 @@ import Ticker from "@/components/Ticker";
 import { tvSymbol } from "@/config/links";
 import { marketDataFromEnv } from "@/lib/alpaca";
 import { hasDatabase } from "@/lib/db";
-import { notStock, ST_SLOTS, stSnapshots, tvForNonStock, type StSnapshot } from "@/lib/scout/st-trending";
+import { listedWhere, notStock, ST_SLOTS, stSnapshots, tvForNonStock, type StSnapshot } from "@/lib/scout/st-trending";
 import * as store from "@/lib/scout/store";
 import { fmtEtAgo } from "@/lib/time";
 
@@ -65,8 +65,8 @@ export default async function StocktwitsPage({ searchParams }: { searchParams: P
             </div>
             <div style={{ margin: "6px 0" }}><b>Why it&apos;s trending:</b> {i.summary ?? <span className="muted">no summary from Stocktwits</span>}</div>
             {i.headlines.length > 0 && <ul className="small">{i.headlines.map((h) => <li key={h.url}><a href={h.url} target="_blank" rel="noreferrer">{h.headline}</a> <span className="muted">· {h.source} · {fmtEtAgo(h.at)}</span></li>)}</ul>}
-            {notStock(i) ? <div className="small muted" style={{ margin: "6px 0" }}>Not a US-listed stock, so no scout card or scout chart: a US fund tracks it if you want a trade (gold: GLD; Australian dollar: FXA; euro: FXE; yen: FXY; bitcoin: IBIT).</div> : <div className="small" style={{ margin: "6px 0" }}>{cards.length ? <>Scout cards: <CardChips cards={cards} max={6} /> </> : null}<ResearchButton symbol={i.symbol} term={`stocktwits: ${i.symbol} trending ${snap.date}`.slice(0, 80)} observation={`${i.symbol} (${i.name ?? ""}) is #${i.rank} on Stocktwits' trending list (${snap.date}, ${slotLabel(snap.slot)} ET). Stocktwits says it is trending because: ${i.summary ?? "no summary"}. Recent headlines: ${i.headlines.map((h) => h.headline).join(" | ")}. Research whether there is a trade: what is real versus chatter, what is already priced, and whether the attention is early or late.`} kind="event" from={{ label: "Stocktwits", url: "/stocktwits" }} /></div>}
-            <StockChart symbol={i.symbol} tvSymbol={notStock(i) ? tvForNonStock(i) : tvSymbol(i.symbol, i.exchange)} height={420} tvOnly={notStock(i)} />
+            {notStock(i) ? <div className="small muted" style={{ margin: "6px 0" }}>Not a US-listed stock ({listedWhere(i)}), so no scout card or scout chart{tvForNonStock(i) ? "" : " and no chart for this listing"}. A US fund may track it if you want a trade (gold: GLD; Australian dollar: FXA; euro: FXE; yen: FXY; bitcoin: IBIT).</div> : <div className="small" style={{ margin: "6px 0" }}>{cards.length ? <>Scout cards: <CardChips cards={cards} max={6} /> </> : null}<ResearchButton symbol={i.symbol} term={`stocktwits: ${i.symbol} trending ${snap.date}`.slice(0, 80)} observation={`${i.symbol} (${i.name ?? ""}) is #${i.rank} on Stocktwits' trending list (${snap.date}, ${slotLabel(snap.slot)} ET). Stocktwits says it is trending because: ${i.summary ?? "no summary"}. Recent headlines: ${i.headlines.map((h) => h.headline).join(" | ")}. Research whether there is a trade: what is real versus chatter, what is already priced, and whether the attention is early or late.`} kind="event" from={{ label: "Stocktwits", url: "/stocktwits" }} /></div>}
+            {(!notStock(i) || tvForNonStock(i)) && <StockChart symbol={i.symbol} tvSymbol={notStock(i) ? tvForNonStock(i)! : tvSymbol(i.symbol, i.exchange)} height={420} tvOnly={notStock(i)} />}
           </section>
         );
       })}

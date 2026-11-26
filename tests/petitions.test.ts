@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { docRows, matchSymbols, petitionFrom, regsKey } from "@/lib/sources/regulations";
-import { nameWords, petitionLine } from "@/lib/scout/petitions";
+import { petitionLine } from "@/lib/scout/petitions";
 
 describe("FDA citizen petitions (regulations.gov)", () => {
   it("a petition's state from its docket: final, interim, or none (and past the 180 days)", () => {
@@ -18,12 +18,12 @@ describe("FDA citizen petitions (regulations.gov)", () => {
   });
 
   it("matches petitions to stocks by company and drug names", () => {
-    expect(nameWords("TransMedics Group, Inc.")).toEqual(["TransMedics"]);
-    expect(nameWords("Soleno Therapeutics Inc")).toEqual(["Soleno"]);
-    const names = [{ symbol: "TMDX", words: nameWords("TransMedics Group, Inc.") }, { symbol: "SLNO", words: ["Soleno", "VYKAT"] }, { symbol: "ABVX", words: ["Abivax", "obefazimod"] }];
+    const names = [{ symbol: "TMDX", company: "TransMedics Group, Inc." }, { symbol: "SLNO", company: "Soleno Therapeutics Inc", drugs: ["VYKAT XR (diazoxide choline) extended-release tablets"] }, { symbol: "ABVX", company: "Abivax SA", drugs: ["obefazimod"] }, { symbol: "SE", company: "Sea Limited American Depositary Shares" }, { symbol: "AAL", company: "American Airlines Group Inc." }];
     expect(matchSymbols({ request: "Request that the FDA suspend Pre-Market Approval of TransMedics OCS devices", petitioner: "Scorpion Capital" }, names)).toEqual(["TMDX"]);
     expect(matchSymbols({ request: "Requests that the FDA voluntarily recall VYKAT XR from the US Market", petitioner: "Scorpion Capital LLC" }, names)).toEqual(["SLNO"]);
     expect(matchSymbols({ request: "Withdraw approval of an unrelated drug", petitioner: "Someone" }, names)).toEqual([]);
+    // One word shared with a company's name is not a match (the mifepristone petition was linked to Sea, American Airlines and others).
+    expect(matchSymbols({ request: "Restore the in-person dispensing requirement for mifepristone", petitioner: "American College of Pro-Life Obstetricians and Gynecologists" }, names)).toEqual([]);
   });
 
   it("rows link to the document; the key falls back to the FEC key, then the demo key", () => {

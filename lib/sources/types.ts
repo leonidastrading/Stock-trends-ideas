@@ -35,8 +35,11 @@ export interface ProbeContext {
   fetchImpl?: typeof fetch;
   /** Company names by ticker, when the caller has them (else a source looks them up itself). */
   names?: Record<string, string>;
-  /** Set when the term is a company's name standing in for a bare ticker: a source should measure the company, not the words. */
-  subject?: "company";
+  /**
+   * "company": the term is a company's name standing in for a ticker; a source should measure the company, not the words.
+   * "unusable": the term is a ticker whose company name is also an ordinary word or acronym; the search sources are not asked.
+   */
+  subject?: "company" | "unusable";
 }
 
 export interface Source {

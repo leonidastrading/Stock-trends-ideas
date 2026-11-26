@@ -9,6 +9,7 @@ import { SECTOR_KEYS, SECTORS } from "@/config/scout";
 import { UNIVERSE } from "@/config/universe";
 import type { MarketData } from "../alpaca";
 import { addDays, toEt } from "../time";
+import { agree, entryVerdict, jumped, sanityBars, splitFactorSince, splitWords } from "./price-sanity";
 import * as store from "./store";
 import type { DailyBarRow, Track } from "./store";
 
@@ -31,53 +32,58 @@ export const firstBarAfter = (bars: DailyBarRow[] | undefined, date: string) => 
 export const firstBarFrom = (bars: DailyBarRow[] | undefined, date: string) => bars?.find((b) => b.date >= date);
 export const barOn = (bars: DailyBarRow[] | undefined, date: string) => bars?.find((b) => b.date === date);
 
-/** Common split ratios (forward and reverse), as fresh price / stored price. */
-export const SPLIT_RATIOS = [2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30, 40, 50, 100, 1.5, 2.5].flatMap((r) => [1 / r, r]);
-
 /**
- * Pure: comparing a fresh split-adjusted close with the stored close for the same day. "same" within 2%; "split"
- * with the ratio when it is a standard split ratio within 3%; otherwise "mismatch" (bad or changed data).
+ * Splits and bad prices, before anything is measured (see price-sanity.ts). For each track that has entered, the
+ * whole market's bars on its entry day are read as traded and as adjusted for splits today:
+ * - a split since the entry sets the track's factor (the recorded entry is kept) and rewrites the stock's stored
+ *   history on the adjusted prices;
+ * - an entry outside the range the stock traded in that day marks the track "price unverified";
+ * - a stored close more than 40% from the one before it has to agree with the whole market's close that day, or the
+ *   track is marked "price unverified".
+ * A marked track is left out of the points until it passes. A closed track is measured on its exit day's prices.
  */
-export function splitCheck(fresh: number, stored: number): { kind: "same" } | { kind: "split"; ratio: number } | { kind: "mismatch"; ratio: number } {
-  const r = fresh / stored;
-  if (Math.abs(r - 1) <= 0.02) return { kind: "same" };
-  const near = SPLIT_RATIOS.find((s) => Math.abs(r / s - 1) <= 0.03);
-  return near ? { kind: "split", ratio: near } : { kind: "mismatch", ratio: Math.round(r * 1000) / 1000 };
-}
-
-/**
- * Stored prices are fetched once and only the last few days are re-fetched, so a split leaves the stored history
- * with old prices before it and new ones after, and an entry recorded before it no longer compares (a 5-for-1 split
- * looked like an 80% crash). For each open track, the fresh split-adjusted close on its entry day is compared with
- * the stored one: a split rewrites the stock's stored history and scales the track's entry; any other disagreement
- * marks the track for a price check (left out of the points).
- */
-export async function reconcileSplits(data: MarketData, open: Track[], today: string): Promise<string[]> {
+export async function reconcileSplits(data: MarketData, tracks: Track[], today: string): Promise<string[]> {
   const notes: string[] = [];
-  const entered = open.filter((t) => t.entryDate);
+  const entered = tracks.filter((t) => t.entryDate && (t.entryPriceRaw ?? t.entryPrice) && !t.excluded);
   if (!entered.length) return notes;
   const syms = [...new Set(entered.map((t) => t.symbol))];
   const earliest = entered.map((t) => t.entryDate!).sort()[0];
-  const fresh = await data.getDailyBars(syms, earliest, today).catch(() => null);
+  const fresh = await sanityBars(data, syms, earliest, today).catch(() => null);
   if (!fresh) return notes;
-  const stored = groupBars(await store.loadBars(syms, earliest, today));
+  const stored = groupBars(await store.loadBars(syms, addDays(earliest, -7), today));
   const rewritten = new Set<string>();
   for (const t of entered) {
-    const f = fresh.find((b) => b.symbol === t.symbol && b.date === t.entryDate);
-    const s = barOn(stored.get(t.symbol), t.entryDate!);
-    if (!f || !s) continue;
-    const c = splitCheck(f.c, s.c);
-    if (c.kind === "same") { if (t.priceCheck) await store.setPriceCheck(t.cardId, null); continue; }
-    if (c.kind === "split") {
-      if (!rewritten.has(t.symbol)) { await store.upsertBars(fresh.filter((b) => b.symbol === t.symbol)); rewritten.add(t.symbol); }
-      await store.applySplit(t.cardId, c.ratio);
-      await store.addTrackEvent(t.cardId, "split", `${t.symbol}: prices now ${c.ratio > 1 ? `${c.ratio}x` : `1/${Math.round(1 / c.ratio)}`} of the stored ones on ${t.entryDate} (a split); entry put on the adjusted prices, raw entry kept`);
-      notes.push(`card #${t.cardId} ${t.symbol}: split ${c.ratio}`);
-    } else if (!t.priceCheck) {
-      const note = `${t.symbol} on ${t.entryDate}: fresh close ${f.c} vs stored ${s.c} (x${c.ratio}), not a standard split`;
-      await store.setPriceCheck(t.cardId, note);
-      notes.push(`card #${t.cardId} price check: ${note}`);
+    const raw = fresh.raw.get(t.symbol), adj = fresh.adj.get(t.symbol);
+    const on = (bars: typeof raw, d: string) => bars?.find((b) => b.date === d);
+    const exitRaw = t.exitDate ? on(raw, t.exitDate) : undefined, exitAdj = t.exitDate ? on(adj, t.exitDate) : undefined;
+    const basis = exitRaw && exitAdj ? splitFactorSince(exitRaw.c, exitAdj.c) : 1;
+    // Today's bar is still being made (and the whole market's is 15 minutes behind): an entry made today is checked tomorrow.
+    if (t.entryDate === today) continue;
+    const recorded = t.entryPriceRaw ?? t.entryPrice!;
+    const v = entryVerdict(recorded, on(raw, t.entryDate!), on(adj, t.entryDate!), basis);
+    if (!v) continue;
+    let problem: string | null = v.kind === "unverified" ? `${t.symbol}: ${v.note}` : null;
+    if (v.kind === "ok" && Math.abs(v.factor / (t.splitFactor ?? 1) - 1) > 0.02) {
+      // Finished days only: today's bar is still being made.
+      if (!rewritten.has(t.symbol) && adj) { await store.upsertBars(adj.filter((b) => b.date < today)); rewritten.add(t.symbol); }
+      await store.setSplitFactor(t.cardId, v.factor);
+      const now$ = Math.round(recorded * v.factor * 100) / 100;
+      if (t.exitDate && adj) await store.setDrawdown(t.cardId, maxDrawdownPct(t.direction, recorded * splitFactorSince(on(raw, t.entryDate!)!.c, on(adj, t.entryDate!)!.c), adj, t.entryDate!, t.exitDate));
+      await store.addTrackEvent(t.cardId, "split", `${t.symbol}: a ${splitWords(v.factor)} split since the entry on ${t.entryDate}; the entry of $${recorded} as traded is $${now$} on ${t.exitDate ? "the exit day's" : "today's"} prices (the recorded entry is kept)`);
+      notes.push(`card #${t.cardId} ${t.symbol}: ${splitWords(v.factor)} split, entry $${recorded} -> $${now$}`);
     }
+    // An open call's latest stored close: a move of more than 40% in a day has to agree with the whole market's close.
+    if (!problem && !t.exitDate && !rewritten.has(t.symbol)) {
+      const mine = stored.get(t.symbol) ?? [];
+      const last = mine.at(-1), prev = mine.at(-2);
+      if (last && prev && jumped(prev.c, last.c)) {
+        const tape = on(adj, last.date);
+        if (!tape) problem = `${t.symbol}: the close of $${last.c} on ${last.date} is ${Math.round((last.c / prev.c - 1) * 100)}% from the close before it and is not confirmed yet`;
+        else if (!agree(last.c, tape.c)) problem = `${t.symbol}: the stored close of $${last.c} on ${last.date} is ${Math.round((last.c / prev.c - 1) * 100)}% from the close before it, and the whole market closed at $${tape.c}`;
+      }
+    }
+    if (problem && problem !== t.priceCheck) { await store.setPriceCheck(t.cardId, problem); notes.push(`card #${t.cardId} price unverified: ${problem}`); }
+    else if (!problem && t.priceCheck) { await store.setPriceCheck(t.cardId, null); notes.push(`card #${t.cardId} ${t.symbol}: price confirmed`); }
   }
   return notes;
 }
@@ -175,8 +181,14 @@ export async function updateTracks(data: MarketData, now: Date): Promise<TrackRe
 
   let open = tracks.filter((t) => !t.exitDate);
   if (!open.length) return report;
-  // Splits since entry (or prices that no longer agree) before anything is measured.
-  const splitNotes = await reconcileSplits(data, open, et.date).catch((e) => [`split check failed: ${e instanceof Error ? e.message : e}`]);
+  // Splits since entry and prices that fail the check, before anything is measured: open calls every half hour, calls
+  // closed in the last week with them, and every closed call once.
+  const everyClosed = await store.tryLock("price-sanity:closed:1", 60 * 24 * 3650).catch(() => false);
+  const toCheck = (await store.tryLock("price-sanity", 30).catch(() => true)) || everyClosed
+    ? tracks.filter((t) => !t.exitDate || everyClosed || t.exitDate >= addDays(et.date, -7))
+    : [];
+  const splitNotes = await reconcileSplits(data, toCheck, et.date).catch((e) => [`split check failed: ${e instanceof Error ? e.message : e}`]);
+  if (toCheck.length) console.log(`price check: ${toCheck.length} calls checked (${toCheck.filter((t) => !t.exitDate).length} open)${everyClosed ? ", every closed call included" : ""}: ${splitNotes.length ? splitNotes.join("; ").slice(0, 1500) : "nothing to adjust"}`);
   if (splitNotes.length) {
     report.notes.push(...splitNotes);
     const fresh = new Map((await store.allTracks()).map((t) => [t.cardId, t]));

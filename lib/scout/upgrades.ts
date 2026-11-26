@@ -84,7 +84,8 @@ const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
 const toUpgrade = (r: Record<string, unknown>): Upgrade => ({
   symbol: String(r.symbol), day: day(r.day)!, brokers: (r.brokers as string[]) ?? [], to: (r.to_rating as string) ?? null, from: (r.from_rating as string) ?? null, topBroker: !!r.top_broker,
   headline: String(r.headline ?? ""), url: (r.url as string) ?? null, newsAt: new Date(r.news_at as string).toISOString(), listedAt: new Date(r.listed_at as string).toISOString(), prevClose: num(r.prev_close),
-  entryDate: day(r.entry_date), entryPrice: num(r.entry_price), spyEntry: num(r.spy_entry), basis: r.basis as Upgrade["basis"],
+  // The entry on today's prices: as recorded, times any split since (the recorded price is kept in the table).
+  entryDate: day(r.entry_date), entryPrice: num(r.entry_price) === null ? null : Math.round(num(r.entry_price)! * Number(r.split_factor ?? 1) * 1e4) / 1e4, spyEntry: num(r.spy_entry), basis: r.basis as Upgrade["basis"],
   exitBy: day(r.exit_by), exitDate: day(r.exit_date), exitPrice: num(r.exit_price), spyExit: num(r.spy_exit),
 });
 
@@ -127,6 +128,12 @@ export async function runUpgrades(data: MarketData | null, now = new Date()): Pr
   for (const u of found.filter((x) => have.has(`${x.symbol}|${x.day}`))) await q(`UPDATE upgrade_list SET brokers = (SELECT ARRAY(SELECT DISTINCT unnest(brokers || $3::text[]))), top_broker = top_broker OR $4 WHERE symbol = $1 AND day = $2`, [u.symbol, u.day, u.brokers, u.topBroker]).catch(() => undefined);
   await store.cachePut("upgrades:last", { at: now.toISOString() }).catch(() => undefined);
   const settled = await settle(data, now);
+  // A split since an entry (checked hourly): the entry is put on today's prices.
+  if (await store.tryLock("upgrades:splits", 60).catch(() => false)) {
+    const { adjustBookForSplits } = await import("./price-sanity");
+    const notes = await adjustBookForSplits(data, { table: "upgrade_list", key: "day" }, toEt(now).date).catch(() => []);
+    if (notes.length) console.log(`upgrades splits: ${notes.join("; ")}`);
+  }
   const open = Number((await q(`SELECT count(*) AS n FROM upgrade_list WHERE exit_date IS NULL`))[0]?.n ?? 0);
   // How far back the headlines read actually reach (the stream gives the newest 1,000), and the latest listings by name.
   const oldest = news.reduce((m, n) => (n.ts < m ? n.ts : m), now.toISOString());

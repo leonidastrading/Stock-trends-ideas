@@ -9,7 +9,23 @@ const HOST = "https://financialmodelingprep.com";
 
 export interface IncomeRow { label: string; date: string; revenue: number | null; netIncome: number | null; margin: number | null }
 export interface EpsRow { label: string; date: string; actual: number | null; estimate: number | null }
-export interface Fundamentals { symbol: string; period: "annual" | "quarter"; income: IncomeRow[]; eps: EpsRow[]; error: string | null; incomeSource?: string; epsSource?: string; currency?: string | null }
+/** A failed check on the income statement: what to leave undrawn, and why. */
+export interface IncomeCheck { hide: "all" | "margin"; note: string }
+export interface Fundamentals { symbol: string; period: "annual" | "quarter"; income: IncomeRow[]; eps: EpsRow[]; error: string | null; incomeSource?: string; epsSource?: string; currency?: string | null; check?: IncomeCheck | null }
+
+/**
+ * Pure: does the income statement pass a sanity check? Net income above revenue (a net margin over 100%) nearly
+ * always means "revenue" is one line of the company's revenue and not the total (MetLife showed $3.0B of revenue and
+ * a 329% margin): nothing is drawn. A loss of more than five times revenue (below -500%) makes a margin line
+ * meaningless: the line is left out and the bars stay.
+ */
+export function incomeCheck(rows: IncomeRow[]): IncomeCheck | null {
+  const over = rows.filter((r) => r.margin !== null && r.margin > 100);
+  if (over.length) return { hide: "all", note: `The income statement failed a check: net income is more than revenue in ${over.map((r) => r.label).join(", ")} (a net margin of ${Math.max(...over.map((r) => r.margin!))}%). The revenue figure is probably one line of the company's revenue, not the total, so the charts are not shown.` };
+  const under = rows.filter((r) => r.margin !== null && r.margin < -500);
+  if (under.length) return { hide: "margin", note: `Net margin is below -500% in ${under.map((r) => r.label).join(", ")} (the loss is more than five times revenue), so a margin line would say nothing and is not shown.` };
+  return null;
+}
 
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v)) ? Number(v) : null);
 
@@ -46,7 +62,35 @@ export function parseEarnings(rows: unknown, today: string, past = 4): EpsRow[] 
 // ------------------------------------------------- free fallbacks: the SEC's XBRL facts and Finnhub's EPS history
 
 type Fact = { start?: string; end: string; val: number; form?: string; fp?: string; filed?: string };
-const REVENUE = ["RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues", "SalesRevenueNet", "RevenueFromContractWithCustomerIncludingAssessedTax", "Revenue"];
+const REVENUE = ["Revenues", "RevenuesNetOfInterestExpense", "RevenueFromContractWithCustomerExcludingAssessedTax", "SalesRevenueNet", "RevenueFromContractWithCustomerIncludingAssessedTax", "Revenue"];
+/** A bank that reports no total: interest and dividend income plus non-interest income is its revenue. */
+const BANK_PARTS = [["InterestAndDividendIncomeOperating", "InterestIncomeOperating"], ["NoninterestIncome"]];
+
+/**
+ * Pure: total revenue for the period. A company tags several revenue lines; a bank or insurer's "revenue from
+ * contracts with customers" is only its fees, a fraction of the total. Of the lines with recent data, the largest in
+ * the latest period is the total. A bank with no total line gets interest income plus non-interest income.
+ */
+export function pickRevenue(facts: Record<string, Record<string, { units?: Record<string, Fact[]> }>>, period: "annual" | "quarter"): { unit: string; rows: Fact[] } | null {
+  const cands: Array<{ unit: string; rows: Fact[] }> = [];
+  const series = (name: string) => {
+    const found: Array<{ unit: string; rows: Fact[] }> = [];
+    for (const tax of ["us-gaap", "ifrs-full"]) for (const [unit, rows] of Object.entries(facts[tax]?.[name]?.units ?? {})) if (Array.isArray(rows) && rows.length && !unit.includes("/")) found.push({ unit, rows });
+    return found;
+  };
+  for (const n of REVENUE) cands.push(...series(n));
+  const [interest, other] = BANK_PARTS.map((names) => names.flatMap(series)[0] ?? null);
+  if (interest && other && interest.unit === other.unit) {
+    const sum: Fact[] = [];
+    for (const a of interest.rows) { const b = other.rows.find((x) => x.end === a.end && x.start === a.start); if (b) sum.push({ ...a, val: a.val + b.val }); }
+    if (sum.length) cands.push({ unit: interest.unit, rows: sum });
+  }
+  const scored = cands.map((c) => { const last = periodFacts(c.rows, period).at(-1); return last ? { c, end: last.end, val: last.val } : null; }).filter((x): x is NonNullable<typeof x> => !!x);
+  if (!scored.length) return pickFacts(facts, REVENUE);
+  const newest = scored.reduce((m, x) => (x.end > m ? x.end : m), "");
+  const recent = scored.filter((x) => Date.parse(newest) - Date.parse(x.end) <= 200 * 86400_000);
+  return recent.sort((a, b) => b.val - a.val)[0].c;
+}
 const NET_INCOME = ["NetIncomeLoss", "ProfitLossAttributableToOwnersOfParent", "ProfitLoss", "NetIncomeLossAvailableToCommonStockholdersBasic"];
 
 /** Pure: one concept's facts (US GAAP or IFRS, any currency): the series with the latest data, and its unit. */
@@ -74,7 +118,7 @@ export function periodFacts(rows: Fact[], period: "annual" | "quarter", n = 5): 
 
 /** Pure: revenue and net income facts into chart rows (matched by period end). */
 export function secIncome(facts: Record<string, Record<string, { units?: Record<string, Fact[]> }>>, period: "annual" | "quarter"): { rows: IncomeRow[]; currency: string | null } {
-  const rev = pickFacts(facts, REVENUE), ni = pickFacts(facts, NET_INCOME);
+  const rev = pickRevenue(facts, period), ni = pickFacts(facts, NET_INCOME);
   if (!rev && !ni) return { rows: [], currency: null };
   const r = rev ? periodFacts(rev.rows, period) : [], nRows = ni ? periodFacts(ni.rows, period, 12) : [];
   const base = r.length ? r : periodFacts(ni!.rows, period);
@@ -128,7 +172,7 @@ async function get(path: string, key: string, fetchImpl: typeof fetch): Promise<
 /** The income statement and EPS history for one stock, cached a day. Errors are returned, not thrown. */
 export async function fundamentals(symbol: string, period: "annual" | "quarter", today: string, env: NodeJS.ProcessEnv = process.env, fetchImpl: typeof fetch = fetch): Promise<Fundamentals> {
   const key = env.FMP_API_KEY?.trim() ?? "";
-  const cacheKey = `fmp:${symbol}:${period}`;
+  const cacheKey = `fmp3:${symbol}:${period}`;
   const hit = await store.cacheGet<Fundamentals>(cacheKey).catch(() => null);
   if (hit && Date.now() - Date.parse(hit.updatedAt) < 24 * 3600_000 && !hit.data.error) return hit.data;
   const s = encodeURIComponent(symbol);
@@ -138,7 +182,9 @@ export async function fundamentals(symbol: string, period: "annual" | "quarter",
     tryAll([`/stable/income-statement?symbol=${s}&period=${period}&limit=5`, `/api/v3/income-statement/${s}?period=${period}&limit=5`]),
     tryAll([`/stable/earnings?symbol=${s}&limit=12`, `/api/v3/historical/earning_calendar/${s}?limit=12`]),
   ]) : [null, null];
-  let income = parseIncome(inc, period), eps = parseEarnings(earn, today), incomeSource = "Financial Modeling Prep", epsSource = "Financial Modeling Prep", currency: string | null = "USD";
+  // The currency the company reports in (Sony reports in yen): amounts are shown as reported, never converted.
+  const reported = Array.isArray(inc) ? String((inc[0] as Record<string, unknown>)?.reportedCurrency ?? "").toUpperCase() : "";
+  let income = parseIncome(inc, period), eps = parseEarnings(earn, today), incomeSource = "Financial Modeling Prep", epsSource = "Financial Modeling Prep", currency: string | null = /^[A-Z]{3}$/.test(reported) ? reported : "USD";
   let fund = false;
   // FMP's free plan covers only some stocks (402 for the rest): the SEC's XBRL facts for the statements, Finnhub for EPS.
   if (!income.length) {
@@ -153,7 +199,7 @@ export async function fundamentals(symbol: string, period: "annual" | "quarter",
     epsSource = "Finnhub";
   }
   const error = income.length || eps.length ? null : fund ? "a fund or ETF: no income statement or earnings" : (errors[0] ?? "no data found");
-  const out: Fundamentals = { symbol, period, income, eps, error, incomeSource, epsSource, currency };
+  const out: Fundamentals = { symbol, period, income, eps, error, incomeSource, epsSource, currency, check: incomeCheck(income) };
   if (!out.error) await store.cachePut(cacheKey, out).catch(() => undefined);
   return out;
 }

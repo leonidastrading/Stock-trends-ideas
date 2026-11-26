@@ -3,6 +3,7 @@
  * public archive at trumpstruth.org, which republishes every post within minutes as an RSS feed of the
  * latest 100 (checked from Vercel's network on 2026-11-15).
  */
+import { decodeEntities } from "../entities";
 import { getText } from "../http";
 
 export const TRUTH_FEED = "https://trumpstruth.org/feed";
@@ -10,7 +11,7 @@ export const TRUTH_FEED = "https://trumpstruth.org/feed";
 export interface TruthPost { id: string; url: string; at: string; text: string; repost: boolean }
 
 const decode = (s: string) => s.replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, " ")
-  .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'").replace(/&nbsp;/g, " ").replace(/[ \t]+/g, " ").trim();
+  .replace(/&[#a-z0-9]+;/gi, (e) => decodeEntities(e)).replace(/[ \t]+/g, " ").trim();
 
 /** Pure: the posts in the feed, newest first. */
 export function parseTruthFeed(xml: string): TruthPost[] {

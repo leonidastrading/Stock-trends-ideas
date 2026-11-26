@@ -55,7 +55,8 @@ export function parseHouseIndex(xml: string): HouseFiling[] {
     const filed = usDate(tag(b, "FilingDate"));
     const docId = tag(b, "DocID");
     if (!filed || !/^\d+$/.test(docId)) continue;
-    const member = [tag(b, "First"), tag(b, "Last"), tag(b, "Suffix")].filter(Boolean).join(" ");
+    // The clerk's index sometimes carries a stray word in the first-name field ("Robert For" Onder): a name does not end in "For".
+    const member = [tag(b, "First").replace(/\s+(?:for|aka|dba)$/i, ""), tag(b, "Last"), tag(b, "Suffix")].filter(Boolean).join(" ");
     out.push({ docId, member, stateDst: tag(b, "StateDst"), filed, year: Number(tag(b, "Year")) || Number(filed.slice(0, 4)) });
   }
   return out;
