@@ -52,7 +52,7 @@ export default async function EarningsPage() {
   return (
     <>
       <h1>Drift</h1>
-      <div className="toolbar"><span className="filter-links small"><a className="chip" href="/drift">Down drift (bad news)<TabNew tab="drift" /></a><a className="chip active" href="/earnings">Earnings drift (up)</a></span></div>
+      <div className="toolbar"><span className="filter-links small"><a className="chip" href="/drift">Down drift (bad news)<TabNew tab="drift" /></a><a className="chip active" href="/earnings">Earnings drift (up)</a><a className="chip" href="/upgrades">Upgrades (up)</a></span></div>
       <details className="card section">
         <summary><b>How this works</b> <span className="small muted">big earnings beats that keep drifting up for ~60 trading days</span></summary>
         <div className="small secondary">

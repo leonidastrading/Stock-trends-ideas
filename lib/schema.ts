@@ -708,6 +708,30 @@ CREATE TABLE IF NOT EXISTS evidence_archive (
   saved_at timestamptz,
   attempts integer NOT NULL DEFAULT 0
 );
+-- Broker upgrades to a buy rating, each a paper long from the moment it appeared (no card, no AI).
+CREATE TABLE IF NOT EXISTS upgrade_list (
+  symbol text NOT NULL,
+  day date NOT NULL,
+  brokers text[] NOT NULL DEFAULT '{}',
+  to_rating text,
+  from_rating text,
+  top_broker boolean NOT NULL DEFAULT false,
+  headline text NOT NULL DEFAULT '',
+  url text,
+  news_at timestamptz NOT NULL,
+  listed_at timestamptz NOT NULL,
+  prev_close double precision,
+  entry_date date,
+  entry_price double precision,
+  spy_entry double precision,
+  basis text NOT NULL DEFAULT 'open',
+  exit_by date,
+  exit_date date,
+  exit_price double precision,
+  spy_exit double precision,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (symbol, day)
+);
 -- The Drift list's own paper book: every setup is a paper short from the moment it first appeared on the page (no card, no AI).
 CREATE TABLE IF NOT EXISTS drift_list (
   symbol text NOT NULL,

@@ -49,6 +49,12 @@ export function openEntry(listedAt: string, bars: Bar[]): { date: string; price:
   return bar && bar.o > 0 ? { date: bar.date, price: bar.o } : null;
 }
 
+/** Pure: the bars an entry may use: today's only once the session has opened (a bar that shows up before the bell has no open yet). */
+export function openedBars<T extends { date: string }>(bars: T[], now: Date): T[] {
+  const et = toEt(now);
+  return bars.filter((b) => b.date < et.date || (b.date === et.date && et.minutes >= 9 * 60 + 31));
+}
+
 /** Pure: the exit, once the hold is up: the close of the first finished session on or after the exit day. */
 export function timeExit(exitBy: string, bars: Bar[], today: string): { date: string; price: number } | null {
   const bar = bars.find((b) => b.date >= exitBy && b.date < today);
@@ -133,7 +139,7 @@ export async function settleList(data: MarketData, now: Date): Promise<{ entered
   for (const e of due) {
     const bars = of(e.symbol);
     if (!e.entryDate) {
-      const x = openEntry(e.listedAt, bars);
+      const x = openEntry(e.listedAt, openedBars(bars, now));
       if (!x) continue;
       await q(`UPDATE drift_list SET entry_date = $3, entry_price = $4, spy_entry = $5, exit_by = $6 WHERE symbol = $1 AND event_date = $2 AND entry_date IS NULL`, [e.symbol, e.eventDate, x.date, x.price, spy.find((b) => b.date === x.date)?.o ?? null, addDays(x.date, DRIFT_LIST.holdDays)]);
       entered++;

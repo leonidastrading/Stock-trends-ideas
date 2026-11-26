@@ -67,7 +67,7 @@ export default async function DriftPage({ searchParams }: { searchParams: Promis
   return (
     <>
       <h1>Drift</h1>
-      <div className="toolbar"><span className="filter-links small"><a className="chip active" href="/drift">Down drift (bad news)</a><a className="chip" href="/earnings">Earnings drift (up)<TabNew tab="earnings" /></a></span></div>
+      <div className="toolbar"><span className="filter-links small"><a className="chip active" href="/drift">Down drift (bad news)</a><a className="chip" href="/earnings">Earnings drift (up)<TabNew tab="earnings" /></a><a className="chip" href="/upgrades">Upgrades (up)</a></span></div>
       <details className="card section">
         <summary><b>How this page works</b> <span className="small muted">stocks still falling days after bad news</span></summary>
         <div className="small secondary">

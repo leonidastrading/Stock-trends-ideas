@@ -18,6 +18,7 @@ export const JOBS = {
   fdaletters: { everyMin: 360, about: "Pharma: the FDA's published rejection letters (openFDA), with what it faulted; a new one on your stocks is pushed" },
   panelwatch: { everyMin: 120, about: "Pharma: the advisory panel's vote (from the latest 10-Q or 10-K) and the crowd, for stocks with an FDA decision coming" },
   panelstudy: { everyMin: 360, about: "the FDA panel-vote study: prices each vote on file (about a minute), again weekly" },
+  upgrades: { everyMin: 15, about: "Drift: broker upgrades to a buy rating, each a paper long from the moment it appears (no card)" },
   driftlist: { everyMin: 10, about: "Drift: a paper short for every setup from the moment it first appeared on the list (no card), and the entries and exits that are due" },
   preearnings: { everyMin: 60, about: "Calendar: warning signs on stocks reporting in the next five sessions (slide, unexplained drop, filing change, short idea, fall through takeover talk), and the reaction after each report" },
   ratingstudy: { everyMin: 5, about: "the downgrade study (2019 to mid-2025): reads the news history in 4-minute passes until done, then does nothing" },

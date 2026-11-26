@@ -16,7 +16,7 @@ const LINKS: Array<{ href: string; label: string; badge?: string; also?: string[
  * Pages that sit under another tab, with their own "new" count: the Drift tab's second page is the earnings view.
  * Opening one page marks only that page as seen, so the menu keeps its count for the other until you open it.
  */
-const PAGE_OF: Record<string, { href: string; tab: string }> = { "/earnings": { href: "/drift", tab: "earnings" } };
+const PAGE_OF: Record<string, { href: string; tab: string }> = { "/earnings": { href: "/drift", tab: "earnings" }, "/upgrades": { href: "/drift", tab: "upgrades" } };
 const KEY = SEEN_KEY;
 const readPrev = (): Record<string, string> => { try { return JSON.parse(localStorage.getItem(PREV_KEY) ?? "{}"); } catch { return {}; } };
 const POLL_MS = 90_000;
