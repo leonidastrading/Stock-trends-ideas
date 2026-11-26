@@ -14,6 +14,15 @@ export const KIND_LABEL: Record<Kind, string> = {
   event: "event",
 };
 
+/** What each kind of idea means, in a sentence (the hover text on a card's kind tag; not sent to the model). */
+export const KIND_ABOUT: Record<Kind, string> = {
+  consumer: "Consumer: a change in what people buy, use or search for, seen before it shows in a company's sales.",
+  platform: "Platform: a shift on a big platform or technology (an app store, a cloud, an AI model) that helps or hurts companies built on it.",
+  second_order: "Second-order: the trade is one step away from the news, in a supplier, customer or rival of the company the headlines are about.",
+  rerating: "Re-rating: the company itself has not changed much, but investors may come to value it differently (a higher or lower price for the same earnings), because of how they see its growth, risk or business.",
+  event: "Event: one dated piece of news (a deal, a ruling, a result, an executive leaving) and the stock's reaction to it.",
+};
+
 export const SCOUT = {
   defaultModel: "claude-opus-5-5",
   defaultEffort: "medium" as const,

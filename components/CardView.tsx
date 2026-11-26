@@ -1,4 +1,4 @@
-import { KIND_LABEL, SCOUT, type Kind } from "@/config/scout";
+import { KIND_ABOUT, KIND_LABEL, SCOUT, type Kind } from "@/config/scout";
 import CardSignals from "@/components/CardSignals";
 import CardNews from "@/components/CardNews";
 import CardFundamentals from "@/components/CardFundamentals";
@@ -104,7 +104,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
           <a className="tag card-number" href={`/cards/${c.id}`} title="Link to this card">#{c.id}</a>
           <span className={`tag ${c.status}`}>{c.status.replace("_", " ")}</span>
           {c.status === "not_promoted" && track && <span className="tag late" title="Not promoted when written because the stock did not trade yet; the paper track started at the next open after it listed (scored with the late cards)">tracked from listing</span>}
-          <span className="tag">{KIND_LABEL[c.kind as Kind] ?? c.kind}</span>
+          <span className="tag" title={KIND_ABOUT[c.kind as Kind] ?? "The kind of idea"} style={{ cursor: "help" }}>{KIND_LABEL[c.kind as Kind] ?? c.kind}</span>
           <a className="tag source-tag" href={fromUrl} target={/^https?:/.test(fromUrl) ? "_blank" : undefined} rel="noreferrer" title={`${from.note} · ${c.origin === "human" ? "human-originated" : "found by the scout"} · click to open`}>{from.tag} ↗</a>
           <span className="small muted" title={`card #${c.id} · ${c.model} · version ${c.versionId}`}>{fmtEtAgo(c.createdAt)}</span>
         </div>
