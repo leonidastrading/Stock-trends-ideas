@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useStoredState } from "./useStoredState";
 import type { EpsRow, Fundamentals, IncomeRow } from "@/lib/sources/fmp";
 
 /** Money in short form: 23.4B, 812M, -45M. */
@@ -171,7 +172,8 @@ function EpsDots({ rows }: { rows: EpsRow[] }) {
 export default function CardFundamentals({ symbol }: { symbol: string }) {
   const box = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
-  const [period, setPeriod] = useState<"annual" | "quarter">("annual");
+  // Remembered in this browser, for every card: the choice survives a refresh.
+  const [period, setPeriod] = useStoredState<"annual" | "quarter">("fundamentals-period", "annual");
   const [data, setData] = useState<Fundamentals | null>(null);
   useEffect(() => {
     const el = box.current;
