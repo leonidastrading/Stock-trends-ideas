@@ -22,7 +22,7 @@ export default async function ResearchPage() {
   const requests = [...logged, ...fromCandidates(cands, first)].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const byId = new Map(cards.map((c) => [c.id, c]));
   const track = new Map(tracks.map((t) => [t.cardId, t]));
-  const running = requests.some((r) => r.status === "running" && !isStale(r, now));
+  const running = requests.some((r) => (r.status === "running" && !isStale(r, now)) || (r.status === "queued" && now.getTime() - Date.parse(r.createdAt) < 90 * 60_000));
 
   const result = (c: store.StoredCard) => {
     const t = track.get(c.id);
@@ -57,7 +57,8 @@ export default async function ResearchPage() {
                   <td className="small">{r.tickers.length > 0 && <>{r.tickers.map((t, i) => <span key={t}>{i ? ", " : ""}<Ticker symbol={t} /></span>)} · </>}{r.term}</td>
                   <td className="small">{r.fromUrl ? <a href={r.fromUrl}>{r.fromLabel ?? "link"}</a> : r.fromLabel ?? "—"}</td>
                   <td className="small">
-                    {r.status === "running" ? (stale ? <span className="neg">did not finish (the server stopped it); try again</span> : <span className="warn">researching… a minute or two</span>)
+                    {r.status === "queued" ? <span className="muted">waiting its turn: researched one after another, about a minute each</span>
+                      : r.status === "running" ? (stale ? <span className="neg">did not finish (the server stopped it); try again</span> : <span className="warn">researching… a minute or two</span>)
                       : c ? result(c)
                       : r.cardId ? <a href={`/cards/${r.cardId}`}>card #{r.cardId}{r.cardStatus ? ` (${r.cardStatus.replace("_", " ")})` : ""}</a>
                       : <span className={r.status === "rejected" ? "muted" : "neg"}><LinkedText text={r.reason ?? r.status} /></span>}

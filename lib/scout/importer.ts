@@ -91,6 +91,12 @@ export function importObservation(it: ImportItem, label: string): string {
   return bits.join("").slice(0, 2000);
 }
 
+/** One import item as the research step takes it (the same for an item researched now and one that waits in the queue). */
+export function importResearchInput(it: ImportItem, label: string) {
+  const tickers = it.tickers.map(normalizeTicker).filter((t): t is string => !!t).slice(0, 5);
+  return { origin: (it.source === "site" ? "scout" : "human") as "scout" | "human", term: importTerm(it), kindHint: it.kind as Kind, tickersHint: tickers, observation: importObservation(it, label) };
+}
+
 export interface ImportResult { term: string; outcome: string; cardId?: number; reason?: string }
 
 /** Research the items, a few at a time. */
@@ -102,10 +108,10 @@ export async function runImport(all: ImportItem[], deps: ResearchDeps, label: st
   const worker = async () => {
     while (next < items.length) {
       const it = items[next++];
-      const tickers = it.tickers.map(normalizeTicker).filter((t): t is string => !!t).slice(0, 5);
+      const input = importResearchInput(it, label), tickers = input.tickersHint;
       let r: ResearchOutcome;
       try {
-        const go = () => researchCandidate({ origin: it.source === "site" ? "scout" : "human", term: importTerm(it), kindHint: it.kind as Kind, tickersHint: tickers, observation: importObservation(it, label) }, deps);
+        const go = () => researchCandidate(input, deps);
         if (from) {
           // Asked for on the Research tab (an uploaded document): each idea is listed there with its result.
           const { tracked } = await import("./research-requests");

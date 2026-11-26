@@ -76,8 +76,11 @@ export async function drainQueue(deps: ResearchDeps & { data: MarketData | null 
     try {
       if (item.kind === "research") {
         const { researchCandidate } = await import("./research");
-        const r = await researchCandidate({ ...(item.payload as ResearchInput), queued: true }, deps);
+        // `requestId`: an idea from a document uploaded on the Research tab; its line there gets the result.
+        const { requestId, ...input } = item.payload as ResearchInput & { requestId?: number };
+        const r = await researchCandidate({ ...input, queued: true }, deps);
         if (r.outcome === "capped") { await tried(item.id, r.reason); break; }
+        if (requestId) await import("./research-requests").then(({ finishRequest }) => finishRequest(requestId, r.outcome === "card" ? { outcome: "card", cardId: r.card.id, status: r.card.status } : { outcome: r.outcome, reason: r.reason })).catch(() => undefined);
         await finish(item.id, r.outcome === "card" ? `card #${r.card.id}: ${r.card.status}` : `${r.outcome}: ${r.reason}`);
       } else if (item.kind === "rumor_doc") {
         const p = item.payload as { text: string; source: string };

@@ -66,10 +66,11 @@ export default function ResearchForm() {
     setIdea(""); setTickers(""); setFiles([]); setSteps([]);
     if (input.current) input.current.value = "";
     const found: Array<{ term: string; tickers: string[] }> = j.extracted ?? [];
+    const queued: Array<{ term: string; tickers: string[] }> = j.queued ?? [];
     setState({
       ok: true,
       msg: found.length
-        ? `Found ${j.found > found.length ? `${j.found} ideas in ${name}; researching the first ${found.length}` : `${found.length} idea${found.length === 1 ? "" : "s"} in ${name}; researching ${found.length === 1 ? "it" : "each"}`}: ${found.map((f) => (f.tickers.length ? `${f.tickers[0]} (${f.term})` : f.term)).join("; ")}.${j.cut ? " The document is long: only its first 60,000 characters were read." : ""} Results appear below over the next few minutes.`
+        ? `Found ${queued.length ? `${found.length + queued.length} ideas in ${name}; researching ${found.length} now, the other ${queued.length} wait in line and follow one after another (${queued.map((f) => f.tickers[0] ?? f.term).join(", ")})` : j.found > found.length ? `${j.found} ideas in ${name}; researching the first ${found.length}` : `${found.length} idea${found.length === 1 ? "" : "s"} in ${name}; researching ${found.length === 1 ? "it" : "each"}`}: ${found.map((f) => (f.tickers.length ? `${f.tickers[0]} (${f.term})` : f.term)).join("; ")}.${j.cut ? " The document is long: only its first 60,000 characters were read." : ""} Results appear below over the next few minutes.`
         : `Started${doc ? `, with ${name} attached${doc.length > RESEARCH_DOC.attachChars ? ` (its first ${RESEARCH_DOC.attachChars.toLocaleString("en-US")} characters)` : ""}` : ""}. It takes a minute or two; the result appears below.`,
     });
     router.refresh();
@@ -128,7 +129,7 @@ export default function ResearchForm() {
         <button className="primary" type="submit" disabled={working}>{state === "reading" ? "Reading the document…" : state === "busy" ? (files.length && !idea.trim() && !tickers.trim() ? "Finding the ideas in it…" : "Starting…") : "Research it"}</button>
         {typeof state === "object" && <span className={`small ${state.ok ? "pos" : "neg"}`}>{state.msg}</span>}
       </div>
-      <p className="small muted" style={{ margin: "6px 0 0" }}>Upload, drop or paste a document (PDF, Word, PowerPoint, Excel, text, images, a zip of them). With a ticker or an idea, it is read as material for that one research. On its own, the scout pulls out up to 6 ideas and researches each.</p>
+      <p className="small muted" style={{ margin: "6px 0 0" }}>Upload, drop or paste a document (PDF, Word, PowerPoint, Excel, text, images, a zip of them). With a ticker or an idea, it is read as material for that one research. On its own, the scout pulls out its ideas (one per stock for a list or survey of stocks, up to 24) and researches each: six at once, the rest one after another.</p>
       {steps.length > 0 && (working || steps.some((s) => s.state === "failed" || s.state === "skipped")) && (
         <ul className="small" style={{ margin: "6px 0 0", paddingLeft: 18, maxHeight: 160, overflow: "auto" }}>
           {steps.map((s, i) => (

@@ -9,7 +9,8 @@ import type { Candidate } from "./store";
 
 export interface ResearchRequest {
   id: number; createdAt: string; finishedAt: string | null; term: string; tickers: string[]; fromLabel: string | null; fromUrl: string | null;
-  status: "running" | "card" | "rejected" | "error"; cardId: number | null; cardStatus: string | null; reason: string | null;
+  /** "queued": waiting its turn (a long document's later ideas are researched one after another). */
+  status: "queued" | "running" | "card" | "rejected" | "error"; cardId: number | null; cardStatus: string | null; reason: string | null;
 }
 
 export type ResearchResult = { cardId?: number; status?: string; outcome: string; reason?: string };
@@ -23,8 +24,8 @@ const toReq = (r: Record<string, unknown>): ResearchRequest => ({
   status: r.status as ResearchRequest["status"], cardId: r.card_id === null || r.card_id === undefined ? null : Number(r.card_id), cardStatus: (r.card_status as string) ?? null, reason: (r.reason as string) ?? null,
 });
 
-export async function startRequest(m: { term: string; tickers?: string[]; from?: { label: string; url?: string | null } | null }): Promise<number> {
-  const r = await q(`INSERT INTO research_requests (term, tickers, from_label, from_url) VALUES ($1, $2, $3, $4) RETURNING id`, [m.term.slice(0, 200), (m.tickers ?? []).slice(0, 8), m.from?.label?.slice(0, 60) ?? null, m.from?.url?.slice(0, 400) ?? null]);
+export async function startRequest(m: { term: string; tickers?: string[]; from?: { label: string; url?: string | null } | null }, status: "running" | "queued" = "running"): Promise<number> {
+  const r = await q(`INSERT INTO research_requests (term, tickers, from_label, from_url, status) VALUES ($1, $2, $3, $4, $5) RETURNING id`, [m.term.slice(0, 200), (m.tickers ?? []).slice(0, 8), m.from?.label?.slice(0, 60) ?? null, m.from?.url?.slice(0, 400) ?? null, status]);
   return Number(r[0].id);
 }
 

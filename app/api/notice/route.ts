@@ -12,8 +12,10 @@ export const maxDuration = 300;
 
 /** Longer than this, the text is treated as a pasted page or article: the ideas are pulled out of it first. */
 const PASTE_CHARS = 1500;
-/** The most ideas researched from one uploaded document. */
+/** An uploaded document: this many ideas are researched at once (inside this call's 5 minutes, three at a time)... */
 const UPLOAD_IDEAS = 6;
+/** ...and up to this many in all: the rest wait in line and are researched one after another, straight after. */
+const UPLOAD_IDEAS_MAX = 24;
 
 const schema = z.object({
   observation: z.string().trim().min(5).max(200_000),
@@ -45,15 +47,31 @@ export async function POST(request: Request) {
     if ((observation.length > PASTE_CHARS || doc) && !direct) {
       const deps = defaultDeps();
       const { ideasFrom } = await import("@/lib/scout/inbox");
-      const { items } = await ideasFrom(observation, doc ? `document Vadim uploaded: ${doc}` : "text pasted into I noticed something", deps);
+      const { items } = await ideasFrom(observation, doc ? `document Vadim uploaded: ${doc}` : "text pasted into I noticed something", deps, doc ? UPLOAD_IDEAS_MAX : 12);
       if (!items.length) return NextResponse.json({ ok: false, errors: [`No tradeable ideas found in the ${doc ? "document" : "pasted text"}. Add a sentence saying what you noticed, or name the tickers.`] }, { status: 422 });
-      // An upload is researched inside this call's 5 minutes, three at a time: six ideas at most.
-      const mine = items.slice(0, doc ? UPLOAD_IDEAS : 12).map((it) => ({ ...it, source: "you" as const, kind: kind ?? it.kind, tickers: tickers?.length ? [...new Set([...tickers, ...it.tickers])].slice(0, 8) : it.tickers }));
+      const { importResearchInput } = await import("@/lib/scout/importer");
+      const { mergeSameStock } = await import("@/lib/scout/dedupe");
+      const all = mergeSameStock(items.slice(0, doc ? UPLOAD_IDEAS_MAX : 12).map((it) => ({ ...it, source: "you" as const, kind: kind ?? it.kind, tickers: tickers?.length ? [...new Set([...tickers, ...it.tickers])].slice(0, 8) : it.tickers })));
       const label = `${doc ? `uploaded ${doc.slice(0, 60)}` : "pasted"} ${new Date().toISOString().slice(0, 10)}`;
+      // An upload: the first six are researched inside this call's 5 minutes, three at a time; the rest wait in line.
+      const mine = doc ? all.slice(0, UPLOAD_IDEAS) : all, later = doc ? all.slice(UPLOAD_IDEAS) : [];
+      const from = { label: "Uploaded document", url: "/research" };
+      if (later.length) {
+        const { startRequest } = await import("@/lib/scout/research-requests");
+        const { enqueue } = await import("@/lib/scout/catchup");
+        for (const it of later) {
+          const input = importResearchInput(it, label);
+          const requestId = await startRequest({ term: input.term, tickers: input.tickersHint, from }, "queued").catch(() => undefined);
+          await enqueue("research", `upload:${label}:${input.term.toLowerCase()}:${input.tickersHint.join(",")}`, { ...input, requestId });
+        }
+      }
+      const origin = new URL(request.url).origin;
       after(async () => {
-        await runImportJob(mine, label, deps, doc ? { label: "Uploaded document", url: "/research" } : undefined).catch((err) => console.error(`pasted import failed: ${err instanceof Error ? err.message : String(err)}`));
+        await runImportJob(mine, label, deps, doc ? from : undefined).catch((err) => console.error(`pasted import failed: ${err instanceof Error ? err.message : String(err)}`));
+        // The ideas in line start as soon as the first six are done (day or night), in calls of their own.
+        if (later.length) await import("@/lib/scout/jobs").then(({ startJob }) => startJob(origin, "/api/cron/catchup", "lock:catchup:kick", 1)).catch(() => undefined);
       });
-      return NextResponse.json({ ok: true, extracted: mine.map((m) => ({ term: m.term, tickers: m.tickers, direction: m.direction ?? null })), found: items.length, cut: observation.length > 60_000 }, { status: 202 });
+      return NextResponse.json({ ok: true, extracted: mine.map((m) => ({ term: m.term, tickers: m.tickers, direction: m.direction ?? null })), queued: later.map((m) => ({ term: m.term, tickers: m.tickers })), found: items.length, cut: observation.length > 60_000 }, { status: 202 });
     }
     const { tracked } = await import("@/lib/scout/research-requests");
     const label = term || observation.split(/[.!?\n]/)[0].slice(0, 80);
