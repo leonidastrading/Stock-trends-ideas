@@ -28,6 +28,7 @@ const SORTS = [
   { value: "newest", label: "Date", fwd: "Newest first", rev: "Oldest first" },
   { value: "confidence", label: "Confidence", fwd: "Highest first", rev: "Lowest first" },
   { value: "catalyst", label: "Catalyst date", fwd: "Soonest first", rev: "Latest first" },
+  { value: "short", label: "Short interest", fwd: "Highest first", rev: "Lowest first" },
 ];
 /** Earlier links: the reversed orders used to be sorts of their own. */
 const OLD_SORTS: Record<string, string> = { oldest: "newest", confidence_low: "confidence" };
@@ -136,9 +137,12 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   // A catalyst still to come, else none (those go last in either order).
   const due = (c: { catalystDate: string | null }) => (c.catalystDate && c.catalystDate >= today ? c.catalystDate : null);
   const flip = rev ? -1 : 1;
+  // % of float short (the same number the Short interest filter uses); cards without one go last in either order.
+  const si = (c: { id: number }) => shortPct(profiles.get(c.id)) ?? null;
   const rows = base.filter((c) => passes(c) || c.id === wantedId).sort((a, b) =>
     sort === "newest" ? flip * b.createdAt.localeCompare(a.createdAt)
       : sort === "confidence" ? flip * (b.card.confidence - a.card.confidence || b.rankScore - a.rankScore)
+      : sort === "short" ? (si(a) !== null && si(b) !== null ? flip * (si(b)! - si(a)!) : Number(si(a) === null) - Number(si(b) === null)) || b.rankScore - a.rankScore
       : sort === "catalyst" ? (due(a) && due(b) ? flip * due(a)!.localeCompare(due(b)!) : Number(!due(a)) - Number(!due(b))) || b.rankScore - a.rankScore
         : flip * (STATUS_RANK[a.status] - STATUS_RANK[b.status] || b.rankScore - a.rankScore || b.createdAt.localeCompare(a.createdAt)));
   const wanted = Number(sp.card);
