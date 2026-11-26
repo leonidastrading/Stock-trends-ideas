@@ -108,6 +108,8 @@ export interface Story {
   attention?: Attention[];
   /** Measured by code: how much today's headlines repeat the ticker's previous stories (0 new … 1 repeated). */
   staleness?: number | null;
+  /** The company's own words, read by the scout: a material 8-K (handed to the desk the moment it is filed) or the press release behind an early read. */
+  primary?: { what: string; url: string; text: string };
   /** Set when the story was taken early: a shock headline with the stock already moving this much (%) since the last close. */
   fastMove?: number;
   /** Headlines with an institution acting that are newer than the desk's last read of the story (what a new stage needs). */
@@ -257,6 +259,8 @@ Classify every story before choosing trades, because the classification decides 
 - Default play: follow new, fundamental news, more so when it is bad, complex, or about a small or opaque company (bad news drifts for weeks to months; good news less); fade stale, flow-driven and no-news moves (they tend to reverse within days to a week). Transparent, binary news (trial results, partnerships, earnings) is priced almost at once: little drift to harvest.
 - Horizons that match the evidence: read-throughs to suppliers and peers about 5 trading days; bad-news drift weeks to months; flow trades out at the flow date; fades of stale or no-news moves about a week.
 
+Some stories come straight from the company's own words: an SEC filing (an 8-K) handed to you the moment it was filed, or a press release, with its text. That is primary news. Outlets may not have written about it yet, so thin coverage is not a reason to skip it and a low headline count means you are early, not that it is unimportant. Say what the document itself states (who is leaving and when, whether a successor is named, what is restated, impaired or ended) and nothing beyond it; check the price move you are shown to see how much the market has already taken; and skip it when the document is routine (a planned retirement with a named successor, a small charge) rather than force a trade.
+
 Stories come in stages. The first headline is rarely the whole story: once an institution acts (a board hires outside investigators, a congressional committee asks for a briefing, a regulator or prosecutor opens a case, an executive resigns), the matter has to go somewhere, and every reporter starts digging. A board that hires a former prosecutor does not clear anyone in a week. When you are shown earlier stages of a story, treat the new one as a fresh catalyst on an old story: ask who has to act next (the board, Congress, export-control or other regulators, prosecutors, reporters), what that next step would do to the price, and whether the move so far has priced it. The cleanest entry is usually right after the first institution acts, before most of the move; by the late stages options are expensive.
 
 Then the trades:
@@ -335,6 +339,7 @@ export function buildStoryPrompt(stories: Story[], date: string, preferences: st
   if (preferences) L.push(`\n${preferences}`);
   for (const s of stories) {
     L.push(`\n## ${s.key} — ${s.symbols.length ? s.symbols.join(", ") : "macro"}: ${s.stories} headlines, ${s.mainstream} mainstream, ${s.shockHits} with shock wording${s.takeover ? ", takeover or sale talk reported (not a signed deal)" : ""}${s.fastMove !== undefined ? `, read early because the stock is ${s.fastMove > 0 ? "+" : ""}${s.fastMove}% since its last close on a shock headline (the coverage is still thin: check the headline is real and about this company)` : ""}${s.escalation.length ? `, institutions acting: ${s.escalation.slice(0, 6).join(", ")}` : ""}`);
+    if (s.primary) L.push(`Primary source, read by the scout (${s.primary.what}): "${s.primary.text.slice(0, 2600)}"`);
     if (s.talkLog?.length) L.push(`Takeover reports on ${s.key} in the last 30 days, oldest first: ${s.talkLog.join(" | ")}`);
     if (s.premium) L.push(s.premium);
     if (s.earnings) L.push(s.earnings);
@@ -454,6 +459,18 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
     const moves = Object.fromEntries(look.map((k) => { const q = (snaps as Record<string, { price: number; prevClose: number | null }>)[k]; return [k, q?.prevClose ? (q.price / q.prevClose - 1) * 100 : null]; }));
     stories.push(...fastMovers(items, have, moves));
   } catch { /* the usual path still runs */ }
+  // The company's own filing is the news: a material 8-K goes to the desk the moment it is filed, with its text.
+  try {
+    const filed = await import("./primary").then(({ primaryFilings }) => primaryFilings(items, deps));
+    if (filed.size) {
+      const all = detectStories(items, { minMainstream: 0, minStories: 0, maxStories: 400 });
+      for (const [sym, read] of filed) {
+        let st = stories.find((x) => x.key === sym);
+        if (!st) { st = all.find((x) => x.key === sym) ?? { key: sym, label: sym, symbols: [sym], stories: 1, mainstream: 0, shockHits: 0, escalationHits: 0, escalation: [], latest: deps.now.toISOString(), headlines: [] }; stories.push(st); }
+        st.primary = read;
+      }
+    }
+  } catch (err) { console.warn(`primary filings: ${err instanceof Error ? err.message : String(err)}`); }
   const readToday = new Set(events.filter((e) => e.etDate === et.date).map((e) => e.key));
   const storyCounts = await store.tickerCounts(stories.filter((s) => !s.key.startsWith("macro:")).map((s) => s.key), addDays(et.date, -6), et.date);
   for (const s of stories) {
@@ -476,7 +493,8 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
   // A new stage (an institution acted) or a building story (coverage growing every day) skips the 3-day cooldown, once a day per story.
   // Growing coverage only counts when it carries new facts; stale re-reporting is a fade, not a reason to look again.
   const again = (s: Story) => !!s.stage || (!!s.history?.length && !!s.coverage?.building && (s.staleness ?? 0) < STALE_FROM);
-  const fresh = stories.filter((s) => (again(s) ? !readToday.has(s.key) : ![...recent].some((t) => t.startsWith(`story: ${s.key.toLowerCase()} `))));
+  // A filing handed over by the scout is new by definition (each is opened once), whatever was read about the stock before.
+  const fresh = stories.filter((s) => (s.primary ? true : again(s) ? !readToday.has(s.key) : ![...recent].some((t) => t.startsWith(`story: ${s.key.toLowerCase()} `))));
   if (!fresh.length) {
     report.error = `all ${stories.length} stories were researched in the last ${STORY_COOLDOWN_DAYS} days`;
     return report;
@@ -489,7 +507,7 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
 
   let triage: StoryTriage | null = null;
   const preferences = preferencesText(await store.recentFeedback());
-  fresh.sort((a, b) => Number(!!b.stage) * 2 + Number(again(b)) - (Number(!!a.stage) * 2 + Number(again(a)))); // new stages, then building stories, first
+  fresh.sort((a, b) => Number(!!b.primary) * 4 + Number(!!b.stage) * 2 + Number(again(b)) - (Number(!!a.primary) * 4 + Number(!!a.stage) * 2 + Number(again(a)))); // filings, then new stages, then building stories, first
   const chosen = fresh.slice(0, max);
   for (const s of chosen) {
     const ev = s.history?.length ? events.filter((e) => e.key === s.key && (e.people.length || e.company)).at(-1) : undefined;
@@ -518,6 +536,12 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
     } catch {
       /* the story is still read without the price line */
     }
+  }
+  // A story taken early on a wire press release: the release itself, not only its headline.
+  for (const st of chosen.filter((x) => x.fastMove !== undefined && !x.primary)) {
+    const wire = items.filter((n) => n.symbols.includes(st.key) && /globenewswire|pr newswire/i.test(n.source) && n.url).sort((a, b) => b.ts.localeCompare(a.ts))[0];
+    const text = wire ? await import("./primary").then(({ releaseText }) => releaseText(wire.url, deps.fetchImpl)).catch(() => null) : null;
+    if (wire && text) st.primary = { what: `press release on ${wire.source}: "${wire.headline.slice(0, 140)}"`, url: wire.url, text };
   }
   // What each story's stocks have already done: the desk is asked whether the reaction is smaller than the story, and it
   // named a short on a buyer that had jumped 8% on its own deal because it could not see the price (SNY, card #377).
@@ -561,7 +585,7 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
       const stages = (story.history?.length ? `\nEarlier stages:\n${story.history.map((e) => `- ${e.date} (stage ${e.stage}): ${e.summary}`).join("\n")}${story.stage ? `\nToday is stage ${story.stage}: ${story.escalation.slice(0, 6).join(", ")}.` : ""}` : "")
         + (story.coverage ? `\n${story.symbols[0] ?? story.key} ${story.coverage.line}.` : "")
         + (story.attention ?? []).map((x) => `\nPublic attention: ${x.line}.`).join("");
-      const context = `Story: ${t.summary}${stages}\nDesk classification: ${t.novelty} news, ${t.nature}, ${t.complexity}${story.staleness !== undefined ? `; ${stalenessLabel(story.staleness)}` : ""}.\nProposed trade (${trade.role}, ${trade.play === "fade" ? "a fade: betting the move reverses" : "a follow: riding the information"}): ${trade.direction} ${trade.ticker}, horizon ${trade.horizon_days} days.\nThesis: ${trade.thesis}\nWhy the market may still misprice it: ${trade.why_not_priced}\nInvalidation: ${trade.invalidation}\nHeadlines:\n${story.headlines.map((h) => `- [${h.source}] ${h.headline}`).join("\n")}`;
+      const context = `Story: ${t.summary}${stages}\nDesk classification: ${t.novelty} news, ${t.nature}, ${t.complexity}${story.staleness !== undefined ? `; ${stalenessLabel(story.staleness)}` : ""}.\nProposed trade (${trade.role}, ${trade.play === "fade" ? "a fade: betting the move reverses" : "a follow: riding the information"}): ${trade.direction} ${trade.ticker}, horizon ${trade.horizon_days} days.\nThesis: ${trade.thesis}\nWhy the market may still misprice it: ${trade.why_not_priced}\nInvalidation: ${trade.invalidation}\nHeadlines:\n${story.headlines.map((h) => `- [${h.source}] ${h.headline}`).join("\n")}${story.primary ? `\nThe company's own document, read by the scout (${story.primary.what}; ${story.primary.url}). Treat it as the primary source for what happened; it is the company's account, so check it against the other evidence: "${story.primary.text.slice(0, 4500)}"` : ""}`;
       const r = await researchCandidate({ origin: "scout", term: storyTerm(termKey, trade.ticker), kindHint: "event", tickersHint: [trade.ticker], observation: null, trigger: storyTrigger(story, et.date, trade.role), context, proposedDirection: trade.direction }, deps);
       report.researched.push(r.outcome === "card" ? { term: storyTerm(termKey, trade.ticker), outcome: `card: ${r.card.status}`, cardId: r.card.id } : { term: storyTerm(termKey, trade.ticker), outcome: r.outcome, reason: r.reason });
       if (r.outcome === "capped") report.error = r.reason; // queued; the rest are queued too
