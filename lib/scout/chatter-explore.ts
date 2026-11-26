@@ -14,7 +14,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CHATTER, CHATTER_UNIVERSE } from "@/config/chatter";
 import type { DailyBar } from "../alpaca";
-import { eventOutcome, isControlDay, type Outcome, spikeScore } from "./chatter";
+import { eventOutcome, isControlDay, type Outcome, spikeScore, universeBenchmark } from "./chatter";
 
 export interface ExploreFile { source: string; fetched: string; series: Record<string, Array<[string, number]>>; failed?: unknown[] }
 
@@ -74,5 +74,6 @@ export function exploreEvents(series: Record<string, Array<[string, number]>>): 
 /** Outcomes for the look-back events from stored bars. The score is end-of-day, so entry is the next open. */
 export function exploreOutcomes(events: ExploreEvent[], bars: Map<string, DailyBar[]>): Array<ExploreEvent & { outcome: Outcome | null }> {
   const etf = new Map(CHATTER_UNIVERSE.map((u) => [u.symbol, u.etf]));
-  return events.map((e) => ({ ...e, outcome: eventOutcome(e.date, bars.get(e.symbol) ?? [], bars.get("SPY") ?? [], bars.get(etf.get(e.symbol) ?? "") ?? []) }));
+  const universe = universeBenchmark(bars, CHATTER_UNIVERSE.map((u) => u.symbol));
+  return events.map((e) => ({ ...e, outcome: eventOutcome(e.date, bars.get(e.symbol) ?? [], bars.get("SPY") ?? [], bars.get(etf.get(e.symbol) ?? "") ?? [], undefined, universe) }));
 }

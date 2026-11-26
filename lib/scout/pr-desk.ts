@@ -18,7 +18,7 @@ export const HOT3 = ["positive", "significant", "statistically significant", "pr
 export const HOT2 = ["approval", "approves", "approved", "fast track", "orphan drug", "clearance", "acquires", "acquisition", "merger", "contract", "completes", "promising", "achieves", "record revenue", "launches", "patent", "strategic", "order", "selected"];
 export const SINKERS = ["offering", "priced", "pricing of", "registered direct", "at-the-market", "warrants", "reverse stock split", "reverse split", "delisting", "deficiency", "going concern", "bankruptcy", "chapter 11", "discontinue", "fails to", "failed to", "terminates", "resigns"];
 
-export const PR = { maxPerRun: 120, sharesPerRun: 15, fillPerRun: 4, smallSharesM: 20 };
+export const PR = { maxPerRun: 120, sharesPerRun: 15, fillPerRun: 10, closesPerRun: 60, smallSharesM: 20 };
 
 export interface Scored { stars: number; hot: string[]; sinkers: string[]; earnings: boolean }
 
@@ -140,17 +140,37 @@ async function sharesOut(symbol: string, env: NodeJS.ProcessEnv): Promise<number
   return v;
 }
 
-/** One pass (every minute): log new headlines in the windows, then fill in a few outcomes. */
+/** Pure: one item per release when the wire and the stream both carry it (same stock, same opening words); the earliest stays. */
+export function sameReleaseOnce(items: NewsItem[]): NewsItem[] {
+  const seen = new Map<string, NewsItem>();
+  for (const n of items.slice().sort((a, b) => a.ts.localeCompare(b.ts))) {
+    const k = `${n.symbols[0]}|${n.headline.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60)}`;
+    if (!seen.has(k)) seen.set(k, n);
+  }
+  return [...seen.values()];
+}
+
+/**
+ * One pass: log new headlines in the windows, then fill in outcomes. Called by the scheduler every few minutes (and
+ * each minute while the News tab is open), under a lock so two calls never log the same minute twice.
+ */
 export async function runPrDesk(deps: { data: MarketData | null; now: Date; env?: NodeJS.ProcessEnv }): Promise<string> {
   const { data, now } = deps;
   if (!data) return "pr desk: no market data";
   const env = deps.env ?? process.env;
   const et = toEt(now);
+  if (!(await store.tryLock("lock:prdesk", 1).catch(() => true))) return "pr desk: another pass is running";
   let logged = 0;
   if (inWindow(et.date, et.minutes)) {
     const cursor = (await store.cacheGet<string>("prdesk:cursor").catch(() => null))?.data;
     const from = new Date(Math.max(cursor ? Date.parse(cursor) : 0, now.getTime() - 20 * 60_000));
-    const news = (await data.getNews([], from, now, 200).catch(() => [] as NewsItem[])).filter(isCompanyItem).slice(0, PR.maxPerRun);
+    // The news stream, and the wires themselves (GlobeNewswire, PR Newswire), read directly: a release is on the wire before
+    // an aggregator carries it. The same release from both is logged once.
+    const [stream, wires] = await Promise.all([
+      data.getNews([], from, now, 200).catch(() => [] as NewsItem[]),
+      import("../sources/wires").then(({ fastNews }) => fastNews(env)).then((xs) => xs.filter((n) => /GlobeNewswire|PR Newswire/.test(n.source) && Date.parse(n.ts) >= from.getTime())).catch(() => [] as NewsItem[]),
+    ]);
+    const news = sameReleaseOnce([...wires, ...stream].filter(isCompanyItem)).slice(0, PR.maxPerRun);
     await store.cachePut("prdesk:cursor", now.toISOString()).catch(() => undefined);
     if (news.length) {
       const syms = [...new Set(news.map((n) => n.symbols[0]))];
@@ -162,6 +182,8 @@ export async function runPrDesk(deps: { data: MarketData | null; now: Date; env?
         const shares = sc.stars >= 3 && shareCalls++ < PR.sharesPerRun ? await sharesOut(s, env) : null;
         // Old news told again? The stock's own headlines over the 3 days before (hot and flagged ones only).
         const old = flagged && oldChecks++ < 6 ? await priorVersion(data, s, n.headline, n.ts).catch(() => null) : null;
+        // Already logged from the other source (the wire and the stream carry the same release under different ids).
+        if ((await q(`SELECT 1 FROM pr_watch WHERE symbol = $1 AND published_at > $2::timestamptz - interval '3 hours' AND left(lower(headline), 60) = left(lower($3), 60) LIMIT 1`, [s, n.ts, n.headline])).length) continue;
         const r = await q(
           `INSERT INTO pr_watch (news_id, symbol, published_at, seen_at, headline, url, source, stars, hot, sinkers, earnings, shares_out_m, prev_close, price_seen, vol_seen, earlier_at, earlier_headline, earlier_source)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) ON CONFLICT (news_id) DO NOTHING RETURNING id`,
@@ -174,23 +196,30 @@ export async function runPrDesk(deps: { data: MarketData | null; now: Date; env?
   // Outcomes: minute prices once an hour has passed, closes once the sessions are done (a few rows a minute).
   let filled = 0;
   if (data.getMinuteBars) {
-    const due = await q(`SELECT id, symbol, published_at, seen_at FROM pr_watch WHERE p60 IS NULL AND seen_at < now() - interval '65 minutes' AND seen_at > now() - interval '5 days' ORDER BY seen_at LIMIT $1`, [PR.fillPerRun]);
+    // Newest first, so a backlog never keeps today's rows waiting; older rows are still filled for 20 days.
+    const due = await q(`SELECT id, symbol, published_at, seen_at FROM pr_watch WHERE p60 IS NULL AND seen_at < now() - interval '80 minutes' AND seen_at > now() - interval '20 days' ORDER BY seen_at DESC LIMIT $1`, [PR.fillPerRun]);
     for (const r of due) {
       const pub = Date.parse(r.published_at as string), seen = Date.parse(r.seen_at as string);
-      const bars = await data.getMinuteBars(String(r.symbol), new Date(Math.min(pub, seen) - 5 * 60_000), new Date(seen + 66 * 60_000)).catch(() => [] as MinuteBar[]);
+      // The whole market's bars (free once 15 minutes old): one small exchange's prints are no price for a thin stock.
+      const bars = await data.getMinuteBars(String(r.symbol), new Date(Math.min(pub, seen) - 20 * 60_000), new Date(seen + 66 * 60_000), "sip").catch(() => null);
+      if (!bars) continue; // the feed did not answer: tried again on a later pass
       const after = bars.filter((b) => Date.parse(b.t) >= seen);
-      await q(`UPDATE pr_watch SET price_pub = $2, p15 = $3, p60 = $4, high60 = $5, vol60 = $6 WHERE id = $1`, [r.id, priceAt(bars, pub), priceAt(bars, seen + 15 * 60_000), priceAt(bars, seen + 60 * 60_000) ?? -1, after.length ? Math.max(...after.map((b) => b.h)) : null, after.reduce((x, b) => x + b.v, 0)]);
+      await q(`UPDATE pr_watch SET price_pub = $2, p15 = $3, p60 = $4, high60 = $5, vol60 = $6, price_tape = $7 WHERE id = $1`, [r.id, priceAt(bars, pub), priceAt(bars, seen + 15 * 60_000), priceAt(bars, seen + 60 * 60_000) ?? -1, after.length ? Math.max(...after.map((b) => b.h)) : null, after.reduce((x, b) => x + b.v, 0), bars.length ? priceAt(bars, seen) : null]);
       filled++;
     }
   }
-  const closes = await q(`SELECT id, symbol, seen_at FROM pr_watch WHERE next_close IS NULL AND seen_at < now() - interval '30 hours' AND seen_at > now() - interval '10 days' ORDER BY seen_at LIMIT $1`, [PR.fillPerRun]);
-  for (const r of closes) {
-    const d = toEt(new Date(r.seen_at as string)).date;
-    const bars = await data.getDailyBars([String(r.symbol)], d, addDays(d, 8)).catch(() => [] as DailyBar[]);
-    const { day, next } = sessionDay(new Date(r.seen_at as string).toISOString(), bars);
-    if (!next) continue;
-    await q(`UPDATE pr_watch SET day_open = $2, day_close = $3, next_close = $4 WHERE id = $1`, [r.id, day?.o ?? null, day?.c ?? null, next.c]);
-    filled++;
+  // That session's close and the next close, for every row old enough, in one request (they used to be filled four a
+  // minute and only for ten days, so most rows never got them).
+  const closes = await q(`SELECT id, symbol, seen_at FROM pr_watch WHERE next_close IS NULL AND seen_at < now() - interval '30 hours' AND seen_at > now() - interval '45 days' ORDER BY seen_at DESC LIMIT $1`, [PR.closesPerRun]);
+  if (closes.length) {
+    const first = closes.map((r) => toEt(new Date(r.seen_at as string)).date).sort()[0];
+    const all = await data.getDailyBars([...new Set(closes.map((r) => String(r.symbol)))], first, toEt(now).date, { feed: "sip" }).catch(() => [] as DailyBar[]);
+    for (const r of closes) {
+      const { day, next } = sessionDay(new Date(r.seen_at as string).toISOString(), all.filter((b) => b.symbol === r.symbol && b.date < toEt(now).date));
+      if (!next) continue;
+      await q(`UPDATE pr_watch SET day_open = $2, day_close = $3, next_close = $4 WHERE id = $1`, [r.id, day?.o ?? null, day?.c ?? null, next.c]);
+      filled++;
+    }
   }
   return `pr desk: ${logged} logged, ${filled} outcomes filled`;
 }
@@ -201,13 +230,15 @@ export interface PrRow {
   dayOpen: number | null; dayClose: number | null; nextClose: number | null;
   /** An earlier headline on the same story (this one is old news told again), or null. */
   earlier: { at: string; headline: string; source: string } | null;
+  /** Whether priceSeen is from the whole market's bars (filled an hour later); false: the live price of one small exchange, not counted in the averages. */
+  tape: boolean;
 }
 
 const n = (v: unknown) => (v === null || v === undefined || Number(v) < 0 ? null : Number(v));
 export async function prRows(days = 30, limit = 1500): Promise<PrRow[]> {
   return (await q(`SELECT * FROM pr_watch WHERE seen_at > now() - ($1::int * interval '1 day') ORDER BY seen_at DESC LIMIT $2`, [days, limit])).map((r) => ({
     id: Number(r.id), symbol: String(r.symbol), publishedAt: new Date(r.published_at as string).toISOString(), seenAt: new Date(r.seen_at as string).toISOString(), headline: String(r.headline), url: (r.url as string) || null, source: String(r.source ?? ""),
-    stars: Number(r.stars), hot: (r.hot as string[]) ?? [], sinkers: (r.sinkers as string[]) ?? [], earnings: !!r.earnings, sharesOutM: n(r.shares_out_m), prevClose: n(r.prev_close), priceSeen: n(r.price_seen), volSeen: n(r.vol_seen),
+    stars: Number(r.stars), hot: (r.hot as string[]) ?? [], sinkers: (r.sinkers as string[]) ?? [], earnings: !!r.earnings, sharesOutM: n(r.shares_out_m), prevClose: n(r.prev_close), priceSeen: n(r.price_tape) ?? n(r.price_seen), tape: n(r.price_tape) !== null, volSeen: n(r.vol_seen),
     pricePub: n(r.price_pub), p15: n(r.p15), p60: n(r.p60), high60: n(r.high60), vol60: n(r.vol60), dayOpen: n(r.day_open), dayClose: n(r.day_close), nextClose: n(r.next_close),
     earlier: r.earlier_at ? { at: new Date(r.earlier_at as string).toISOString(), headline: String(r.earlier_headline ?? ""), source: String(r.earlier_source ?? "") } : null,
   }));
@@ -227,7 +258,8 @@ export function groupStats(rows: PrRow[]): Array<{ group: PrGroup; n: number; m1
   const move = (a: number | null, b: number | null) => (a && b ? (b / a - 1) * 100 : null);
   const avg = (xs: Array<number | null>) => { const v = xs.filter((x): x is number => x !== null); return v.length ? Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 10) / 10 : null; };
   return (["hot_small", "hot", "old_news", "plain", "earnings", "sinker"] as PrGroup[]).map((g) => {
-    const xs = rows.filter((r) => prGroup(r) === g && r.priceSeen);
+    // Only rows priced from the whole market's bars: a thin stock's live price on one exchange can be minutes old.
+    const xs = rows.filter((r) => prGroup(r) === g && r.priceSeen && r.tape);
     const closes = xs.map((r) => move(r.priceSeen, r.dayClose)).filter((x): x is number => x !== null);
     return { group: g, n: xs.length, m15: avg(xs.map((r) => move(r.priceSeen, r.p15))), m60: avg(xs.map((r) => move(r.priceSeen, r.p60))), mClose: avg(closes), mNext: avg(xs.map((r) => move(r.priceSeen, r.nextClose))), upClose: closes.length ? Math.round((closes.filter((x) => x > 0).length / closes.length) * 100) : null };
   });

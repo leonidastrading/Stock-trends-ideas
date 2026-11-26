@@ -165,8 +165,8 @@ export async function pollInbox(deps: ResearchDeps, max = 1, fetchImpl: typeof f
   if (!(await store.tryLock("lock:inbox", 10))) return { ...report, error: "another check is reading the inbox right now" };
   try {
     const r = await readNew(cfg, deps, max, fetchImpl, deliver, deadline, report);
-    // New documents: rewrite the summary at the top of the Inbox tab.
-    if (r.read.some((x) => !x.error)) r.digest = await import("./inbox-digest").then(({ refreshInboxDigest }) => refreshInboxDigest(deps, fetchImpl)).catch((err) => `summary failed: ${err instanceof Error ? err.message : String(err)}`);
+    // The summary at the top of the Inbox tab is rewritten twice a day (9:00 AM and 4:15 PM ET), not after every file.
+    r.digest = await import("./inbox-digest").then(({ refreshInboxDigestIfDue }) => refreshInboxDigestIfDue(deps, fetchImpl)).catch((err) => `summary failed: ${err instanceof Error ? err.message : String(err)}`);
     return r;
   } finally {
     await store.unlock("lock:inbox").catch(() => undefined);

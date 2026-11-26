@@ -3,6 +3,7 @@
  * separate lists, ranked by what is breaking, important and recent. Rewritten after new documents are read
  * (one model call); shown at the top of the Inbox tab. Ideas link to the scout's card when it made one.
  */
+import { LIGHT_MODEL } from "@/config/scout";
 import { addDays, daysBetween, etLabel, toEt } from "../time";
 import type { ResearchDeps } from "./research";
 import * as store from "./store";
@@ -72,6 +73,34 @@ export function itemMeta(x: { source: string; date: string; importance: number }
   return parts.filter(Boolean).join(" · ");
 }
 
+/** The summary is rewritten twice a day, at these New York times (minutes after midnight): before the open and after the close. */
+export const DIGEST_SLOTS = [9 * 60, 16 * 60 + 15];
+
+/**
+ * Pure: is a rewrite due? Once the morning or the afternoon time has come and the last summary is older than it,
+ * provided a document has arrived since that summary. It used to be rewritten after every new file (a dozen times a
+ * day on the full model); the "Refresh summary" button still rewrites it at any time.
+ */
+export function digestDue(now: Date, lastDigestAt: string | null, newestDocAt: string | null): boolean {
+  if (!newestDocAt) return false;
+  if (!lastDigestAt) return true;
+  if (newestDocAt <= lastDigestAt) return false;
+  const et = toEt(now);
+  const slot = DIGEST_SLOTS.filter((m) => et.minutes >= m).at(-1);
+  if (slot === undefined) return false;
+  // The slot's moment today, as a time: the last summary has to be from before it.
+  const slotAt = now.getTime() - (et.minutes - slot) * 60000;
+  return Date.parse(lastDigestAt) < slotAt;
+}
+
+/** Rewrite the summary when a rewrite is due (twice a day); says what it did. */
+export async function refreshInboxDigestIfDue(deps: ResearchDeps, fetchImpl: typeof fetch = fetch): Promise<string> {
+  const [last, docs] = await Promise.all([store.latestInboxDigest<Digest>().catch(() => null), store.inboxDocsSince(addDays(toEt(deps.now).date, -DIGEST_DAYS)).catch(() => [])]);
+  const newest = docs.map((d) => d.readAt).sort().at(-1) ?? null;
+  if (!digestDue(deps.now, last?.createdAt ?? null, newest)) return "summary: next rewrite at 9:00 AM or 4:15 PM ET";
+  return refreshInboxDigest(deps, fetchImpl);
+}
+
 /** Rewrite the summary from the last few days' documents. Documents read before their text was kept are fetched again from GitHub. */
 export async function refreshInboxDigest(deps: ResearchDeps, fetchImpl: typeof fetch = fetch): Promise<string> {
   const today = toEt(deps.now).date;
@@ -113,8 +142,9 @@ export async function refreshInboxDigest(deps: ResearchDeps, fetchImpl: typeof f
     ...withText.map((d) => `=== Document "${label(d.path)}" (received ${d.readAt.slice(0, 16).replace("T", " ")} UTC) ===\n${d.text!.slice(0, per)}${d.text!.length > per ? "\n[cut]" : ""}`),
     "Reply with the JSON object.",
   ].join("\n\n");
-  const reply = await deps.callModel({ model: settings.model, effort: "low", user, purpose: "inbox_digest" });
-  await store.logLlmCall({ etDate: today, model: settings.model, purpose: "inbox_digest", usage: reply.usage, costUsd: reply.costUsd, ok: true });
+  // A summary of documents is bulk reading: the cheaper model does it (and it is not part of the scored version).
+  const reply = await deps.callModel({ model: LIGHT_MODEL, effort: "low", user, purpose: "inbox_digest" });
+  await store.logLlmCall({ etDate: today, model: LIGHT_MODEL, purpose: "inbox_digest", usage: reply.usage, costUsd: reply.costUsd, ok: true });
   const digest = parseDigest(reply.text);
   await store.addInboxDigest(withText.map((d) => label(d.path)), digest, reply.costUsd);
   return `${digest.ideas.length} ideas, ${digest.news.length} news from ${withText.length} document(s)`;

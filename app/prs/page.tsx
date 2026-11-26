@@ -40,8 +40,8 @@ function Release({ r }: { r: PrRow }) {
           <div className="pr-label">Price</div>
           <div className="pr-row"><span>Previous close</span><span>{money(r.prevClose)}</span></div>
           <div className="pr-row"><span>When published</span><span>{money(r.pricePub)} <span className={cls(pct(r.prevClose, r.pricePub))}>{fmt(pct(r.prevClose, r.pricePub))}</span></span></div>
-          <div className="pr-row"><span>When the scout saw it</span><span>{money(r.priceSeen)} <span className={cls(pct(r.pricePub, r.priceSeen))}>{r.pricePub ? `${fmt(pct(r.pricePub, r.priceSeen))} from the news` : ""}</span></span></div>
-          {r.vol60 !== null && <div className="pr-row"><span>Volume, first hour after</span><span>{Math.round(r.vol60).toLocaleString("en-US")} <span className="muted">(IEX)</span></span></div>}
+          <div className="pr-row"><span>When the scout saw it</span><span>{money(r.priceSeen)}{r.tape ? "" : <span className="muted" title="One small exchange's live price; replaced by the whole market's price an hour after the headline."> (live, unconfirmed)</span>} <span className={cls(pct(r.pricePub, r.priceSeen))}>{r.pricePub ? `${fmt(pct(r.pricePub, r.priceSeen))} from the news` : ""}</span></span></div>
+          {r.vol60 !== null && <div className="pr-row"><span>Volume, first hour after</span><span>{Math.round(r.vol60).toLocaleString("en-US")} <span className="muted">(whole market)</span></span></div>}
         </div>
         <div>
           <div className="pr-label">From when the scout saw it</div>
@@ -73,6 +73,7 @@ export default async function PrsPage() {
 
       <section className="card">
         <h2>The test so far <span className="small muted">(last 30 days, from the price when the scout saw each headline)</span></h2>
+        <p className="small secondary">Prices are from the whole market&apos;s 1-minute bars, filled in an hour after each headline. {rows.filter((r) => r.tape).length} of {rows.length} headlines have them; the rest (still inside their first hour, or logged before November 27, 2026 with one small exchange&apos;s price, which is unreliable for small stocks) are left out of the averages. The wires are read directly on a schedule, whether or not the News tab is open. Study only: these averages are not on the Scoreboard.</p>
         <div className="table-wrap"><table>
           <thead><tr><th>Group</th><th className="num">Headlines</th><th className="num">+15 min</th><th className="num">+60 min</th><th className="num">Session close</th><th className="num">Next close</th><th className="num">Up at the close</th></tr></thead>
           <tbody>{stats.map((s) => <tr key={s.group}><td>{GROUP[s.group]}</td><td className="num">{s.n}</td><td className={`num ${cls(s.m15)}`}>{fmt(s.m15)}</td><td className={`num ${cls(s.m60)}`}>{fmt(s.m60)}</td><td className={`num ${cls(s.mClose)}`}>{fmt(s.mClose)}</td><td className={`num ${cls(s.mNext)}`}>{fmt(s.mNext)}</td><td className="num">{s.upClose === null ? "—" : `${s.upClose}%`}</td></tr>)}</tbody>

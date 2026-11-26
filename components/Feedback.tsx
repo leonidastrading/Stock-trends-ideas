@@ -24,8 +24,8 @@ export default function Feedback({ target, initial }: { target: string; initial?
 
   return (
     <div className="feedback">
-      <button className={vote === "up" ? "voted" : ""} disabled={busy} title="More like this" onClick={() => send("up")}>👍</button>
-      <button className={vote === "down" ? "voted" : ""} disabled={busy} title="Less like this" onClick={() => send("down")}>👎</button>
+      <button className={vote === "up" ? "voted" : ""} disabled={busy} title="More like this: the discovery and story desks see your reactions when they choose what to research" onClick={() => send("up")}>👍</button>
+      <button className={vote === "down" ? "voted" : ""} disabled={busy} title="Less like this: the discovery and story desks see your reactions when they choose what to research" onClick={() => send("down")}>👎</button>
       <button className="small" disabled={busy} onClick={() => setOpen(!open)}>{open ? "close" : "note"}</button>
       {msg && <span className="small muted">{msg}</span>}
       {open && (

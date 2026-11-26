@@ -73,3 +73,23 @@ describe("themes: a reading (PGlite, fake sources and model)", () => {
     expect(await themesIfDue({ data, callModel, now: new Date("2026-11-21T15:00:00Z"), fetchImpl })).toBe("weekend");
   });
 });
+
+import { continuingThemes } from "@/lib/scout/themes";
+
+describe("a theme that repeats is one idea continuing", () => {
+  const th = (title: string, direction: "long" | "short", tickers: string[]) => ({ title, direction, tickers }) as never;
+  it("marks the same side of the same stock within five days, and chains repeats back to the first day", () => {
+    const runs = [
+      { id: 1, etDate: "2026-11-16", themes: [th("Memory rebound", "long", ["MU", "SNDK"]), th("Short the yen", "short", ["FXY"])] },
+      { id: 2, etDate: "2026-11-18", themes: [th("Micron dip buy", "long", ["MU"]), th("Sell Micron", "short", ["MU"])] },
+      { id: 3, etDate: "2026-11-20", themes: [th("NAND still tight", "long", ["SNDK", "MU"])] },
+      { id: 4, etDate: "2026-11-30", themes: [th("Memory again", "long", ["MU"])] },
+    ];
+    const c = continuingThemes(runs);
+    expect(c.get("2:0")).toEqual({ date: "2026-11-16", title: "Memory rebound" });
+    expect(c.has("2:1")).toBe(false); // the other side is a new idea
+    expect(c.get("3:0")).toEqual({ date: "2026-11-16", title: "Memory rebound" }); // chained through Nov 18
+    expect(c.has("4:0")).toBe(false); // ten days after the last one: a new idea
+    expect(c.has("1:0")).toBe(false);
+  });
+});

@@ -661,6 +661,8 @@ CREATE INDEX IF NOT EXISTS pr_watch_seen_idx ON pr_watch (seen_at);
 ALTER TABLE pr_watch ADD COLUMN IF NOT EXISTS earlier_at timestamptz;
 ALTER TABLE pr_watch ADD COLUMN IF NOT EXISTS earlier_headline text;
 ALTER TABLE pr_watch ADD COLUMN IF NOT EXISTS earlier_source text;
+-- The price when the scout saw the headline, from the whole market's 1-minute bars (filled an hour later; the live price at the time is one small exchange's).
+ALTER TABLE pr_watch ADD COLUMN IF NOT EXISTS price_tape double precision;
 -- Stocktwits' trending ten, kept at 9 AM and 3 PM ET every day.
 CREATE TABLE IF NOT EXISTS st_snapshots (
   id serial PRIMARY KEY,

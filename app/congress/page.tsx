@@ -29,7 +29,7 @@ export default async function CongressPage({ searchParams }: { searchParams: Pro
   const member = sp.member?.trim() || null;
   const symbol = sp.symbol?.trim().toUpperCase() || null;
   const trades = all.filter((t) => (!member || t.member === member) && (!symbol || t.symbol === symbol));
-  const last30 = bySymbol(all, addDays(today, -30));
+  const last30 = bySymbol(all, addDays(today, -30), today);
   const clusters = last30.filter((a) => a.cluster);
   const members = byMember(all).map((m) => {
     const res = (perf.data ?? []).filter((r) => r.member === m.member && r.sinceFilingVsSpy !== null && daysBetween(r.filed, r.asOf ?? r.filed) >= 5);
@@ -51,7 +51,7 @@ export default async function CongressPage({ searchParams }: { searchParams: Pro
       {!filtered && (
         <section className="card">
           <h2>Bought by several members, last 30 days</h2>
-          <p className="small secondary">By filing date. A cluster is three or more members buying, or two buying at least $100k between them, with fewer members selling.</p>
+          <p className="small secondary">By filing date. A cluster is three or more members buying, or two buying at least $100k between them, with fewer members selling, counting only purchases made in the last 45 days of at least $15,001 each (small trades and ones reported months late do not make a cluster). Clusters are study-only on the Scoreboard for now.</p>
           <div className="table-wrap"><table>
             <thead><tr><th>Stock</th><th>Bought by</th><th className="num">Buys</th><th className="num">Sells</th><th className="num">Bought (est.)</th><th>Last filed</th></tr></thead>
             <tbody>

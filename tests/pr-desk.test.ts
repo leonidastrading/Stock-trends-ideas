@@ -35,7 +35,7 @@ describe("press-release desk", () => {
   });
 
   it("groups the way the method predicts, and averages the moves", () => {
-    const r = (o: Partial<PrRow>) => ({ stars: 0, sinkers: [], earnings: false, sharesOutM: null, priceSeen: 10, p15: null, p60: null, dayClose: null, nextClose: null, ...o }) as PrRow;
+    const r = (o: Partial<PrRow>) => ({ stars: 0, sinkers: [], earnings: false, sharesOutM: null, priceSeen: 10, tape: true, p15: null, p60: null, dayClose: null, nextClose: null, ...o }) as PrRow;
     expect(prGroup(r({ stars: 6, sharesOutM: 8 }))).toBe("hot_small");
     expect(prGroup(r({ stars: 6, sharesOutM: 80 }))).toBe("hot");
     expect(prGroup(r({ stars: 6, sinkers: ["offering"] }))).toBe("sinker");
@@ -109,5 +109,25 @@ describe("why a stock moved, from the web when the feeds have nothing", () => {
     const r = await webReason("NVDA", "NVIDIA Corporation Common Stock", new Date("2026-11-20T19:30:00Z"), fetchImpl);
     expect(r?.headline).toBe("Democrats open probe into Nvidia influence on US Megaspeed investigation");
     expect(r?.source).toMatch(/^Reuters · Nov 20, 4:49 AM ET/);
+  });
+});
+
+import { groupStats as gs, sameReleaseOnce } from "@/lib/scout/pr-desk";
+
+describe("press releases from the wire and the stream", () => {
+  it("logs a release once when both carry it, keeping the earliest", () => {
+    const n = (id: number, ts: string, headline: string, source: string, symbol = "ACME") => ({ id, ts, headline, summary: "", symbols: [symbol], source, url: `https://x/${id}` });
+    const out = sameReleaseOnce([
+      n(2, "2026-11-27T13:02:10Z", "Acme Announces Positive Topline Results From Phase 3 Trial", "benzinga"),
+      n(1, "2026-11-27T13:00:05Z", "Acme Announces Positive Topline Results from Phase 3 Trial", "GlobeNewswire"),
+      n(3, "2026-11-27T13:05:00Z", "Acme Announces Pricing of Public Offering", "benzinga"),
+      n(4, "2026-11-27T13:00:30Z", "Acme Announces Positive Topline Results from Phase 3 Trial", "PR Newswire", "OTHR"),
+    ]);
+    expect(out.map((x) => x.id)).toEqual([1, 4, 3]);
+  });
+  it("leaves rows priced from one small exchange out of the averages", () => {
+    const row = (tape: boolean, p60: number) => ({ stars: 6, sinkers: [], earnings: false, sharesOutM: 10, priceSeen: 10, tape, p15: null, p60, dayClose: null, nextClose: null, earlier: null }) as unknown as PrRow;
+    const hot = gs([row(true, 11), row(false, 20)]).find((g) => g.group === "hot_small")!;
+    expect(hot).toMatchObject({ n: 1, m60: 10 });
   });
 });

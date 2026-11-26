@@ -59,3 +59,19 @@ describe("the line under each summary item", () => {
     expect(shortSource("2026-11-14-discord-meetkevin-alpha-report-2026-11-10")).toBe("discord-meetkevin-alpha-report-2026-11-10");
   });
 });
+
+import { digestDue } from "@/lib/scout/inbox-digest";
+
+describe("the summary is rewritten twice a day", () => {
+  const at = (et: string) => new Date(`2026-11-27T${et}:00-05:00`);
+  it("waits for the morning or afternoon time, and for a document newer than the last summary", () => {
+    const yesterdayEvening = "2026-11-26T22:00:00.000Z", doc = at("08:10").toISOString();
+    expect(digestDue(at("08:30"), yesterdayEvening, doc)).toBe(false); // before 9:00
+    expect(digestDue(at("09:05"), yesterdayEvening, doc)).toBe(true); // the morning rewrite
+    expect(digestDue(at("11:00"), at("09:05").toISOString(), at("10:30").toISOString())).toBe(false); // already rewritten this morning
+    expect(digestDue(at("16:20"), at("09:05").toISOString(), at("10:30").toISOString())).toBe(true); // the afternoon rewrite
+    expect(digestDue(at("16:20"), at("09:05").toISOString(), at("08:10").toISOString())).toBe(false); // nothing new since
+    expect(digestDue(at("03:00"), null, doc)).toBe(true); // no summary yet
+    expect(digestDue(at("12:00"), null, null)).toBe(false);
+  });
+});

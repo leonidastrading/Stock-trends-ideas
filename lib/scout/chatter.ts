@@ -48,10 +48,34 @@ export function isControlDay(date: string, symbol: string, oneIn = CHATTER.contr
   return h % oneIn === 0;
 }
 
-export interface Outcome { entryDate: string; prior5Excess: number | null; quiet: boolean | null; excess: Record<number, number | null>; excessSector: Record<number, number | null> }
+export interface Outcome {
+  entryDate: string; prior5Excess: number | null; quiet: boolean | null; excess: Record<number, number | null>; excessSector: Record<number, number | null>;
+  /** Against the equal-weighted average of every stock in the test over the same days (the fair benchmark: the control should sit near zero against it). */
+  excessUniverse?: Record<number, number | null>;
+}
+
+/**
+ * Pure: the equal-weighted average return of the test's stocks from the open of one day to the close of another.
+ * The test's 198 stocks are not SPY: they are equal-weighted across sectors, so against SPY even random days show a
+ * gap that looks like an effect. Measured against their own average, random days (the control) should come out near
+ * zero, and only then does a gap in the spike rows mean something. Needs at least half of the stocks to have both bars.
+ */
+export function universeBenchmark(bars: Map<string, DailyBar[]>, symbols: string[]): (entryDate: string, exitDate: string) => number | null {
+  const by = new Map(symbols.map((s) => [s, new Map((bars.get(s) ?? []).map((b) => [b.date, b]))]));
+  const memo = new Map<string, number | null>();
+  return (entryDate, exitDate) => {
+    const k = `${entryDate}|${exitDate}`;
+    if (memo.has(k)) return memo.get(k)!;
+    const rs: number[] = [];
+    for (const m of by.values()) { const a = m.get(entryDate), b = m.get(exitDate); if (a && b && a.o > 0) rs.push(b.c / a.o - 1); }
+    const v = rs.length >= Math.max(1, Math.ceil(symbols.length / 2)) ? rs.reduce((x, y) => x + y, 0) / rs.length : null;
+    memo.set(k, v);
+    return v;
+  };
+}
 
 /** Pure: entry at the first open after `date`; excess over SPY / sector after N sessions (close); prior 5-session excess up to the close before `date`. */
-export function eventOutcome(date: string, sym: DailyBar[], spy: DailyBar[], etf: DailyBar[], horizons: readonly number[] = CHATTER.horizons): Outcome | null {
+export function eventOutcome(date: string, sym: DailyBar[], spy: DailyBar[], etf: DailyBar[], horizons: readonly number[] = CHATTER.horizons, universe?: (entryDate: string, exitDate: string) => number | null): Outcome | null {
   const s = sym.slice().sort((a, b) => a.date.localeCompare(b.date));
   const i = s.findIndex((b) => b.date > date);
   if (i < 0) return null;
@@ -63,18 +87,20 @@ export function eventOutcome(date: string, sym: DailyBar[], spy: DailyBar[], etf
     const a = m.get(entry.date), b = m.get(exitDate);
     return a && b ? b.c / a.o - 1 : null;
   };
-  const excess: Record<number, number | null> = {}, excessSector: Record<number, number | null> = {};
+  const excess: Record<number, number | null> = {}, excessSector: Record<number, number | null> = {}, excessUniverse: Record<number, number | null> = {};
   for (const n of horizons) {
     const j = i + n - 1;
     if (j >= s.length) {
       excess[n] = null;
       excessSector[n] = null;
+      excessUniverse[n] = null;
       continue;
     }
     const r = s[j].c / entry.o - 1;
-    const rs = bench(spyBy, s[j].date), re = bench(etfBy, s[j].date);
+    const rs = bench(spyBy, s[j].date), re = bench(etfBy, s[j].date), ru = universe ? universe(entry.date, s[j].date) : null;
     excess[n] = rs === null ? null : r - rs;
     excessSector[n] = re === null ? null : r - re;
+    excessUniverse[n] = ru === null ? null : r - ru;
   }
   // Prior: the 5 sessions ending with the close before the event date.
   let prior5Excess: number | null = null;
@@ -84,7 +110,7 @@ export function eventOutcome(date: string, sym: DailyBar[], spy: DailyBar[], etf
     const sp0 = spyBy.get(c0.date), sp5 = spyBy.get(c5.date);
     if (sp0 && sp5) prior5Excess = c0.c / c5.c - 1 - (sp0.c / sp5.c - 1);
   }
-  return { entryDate: entry.date, prior5Excess, quiet: prior5Excess === null ? null : Math.abs(prior5Excess) * 100 < CHATTER.quietPct, excess, excessSector };
+  return { entryDate: entry.date, prior5Excess, quiet: prior5Excess === null ? null : Math.abs(prior5Excess) * 100 < CHATTER.quietPct, excess, excessSector, ...(universe ? { excessUniverse } : {}) };
 }
 
 export type Group = "quiet_bullish" | "quiet_bearish" | "quiet_mixed" | "quiet_no_news" | "after_move" | "earnings" | "control";
@@ -125,19 +151,29 @@ export function stat(xs: Array<number | null>): GroupStat {
   return { n: v.length, mean: mean(v), median: sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2, hit: v.filter((x) => x > 0).length / v.length, meanAbs: mean(v.map(Math.abs)) };
 }
 
-export interface ChatterReportRow { group: Group; events: number; byHorizon: Record<number, GroupStat>; byHorizonSector: Record<number, GroupStat> }
+export interface ChatterReportRow { group: Group; events: number; byHorizon: Record<number, GroupStat>; byHorizonSector: Record<number, GroupStat>; /** Against the equal-weighted average of the test's own stocks. */ byHorizonUniverse: Record<number, GroupStat> }
+
+/** How far from zero the control row may sit (5 sessions, against the stocks' own average) and still be called near zero, and the events it needs. */
+export const CONTROL_OK = { maxAbs: 0.005, minEvents: 30 };
+
+/** Pure: is the control near zero against the stocks' own average? If not, a table's spike rows cannot be read. */
+export function controlNearZero(rows: ChatterReportRow[], horizon = 5): { ok: boolean; n: number; mean: number | null } {
+  const c = rows.find((r) => r.group === "control")?.byHorizonUniverse[horizon];
+  return { ok: !!c && c.n >= CONTROL_OK.minEvents && c.mean !== null && Math.abs(c.mean) <= CONTROL_OK.maxAbs, n: c?.n ?? 0, mean: c?.mean ?? null };
+}
 
 /** Pure: group events with outcomes into the report table. */
 export function chatterReport(events: Array<{ kind: "spike" | "control"; bullishShare: number | null; outcome: Outcome | null; nearEarnings?: boolean; news?: boolean | null }>): ChatterReportRow[] {
   const groups: Group[] = ["quiet_bullish", "quiet_bearish", "quiet_mixed", "quiet_no_news", "after_move", "earnings", "control"];
   return groups.map((g) => {
     const mine = events.filter((e) => e.outcome && groupOf(e.kind, e.bullishShare, e.outcome.quiet, e.nearEarnings, e.news ?? null) === g);
-    const byHorizon: Record<number, GroupStat> = {}, byHorizonSector: Record<number, GroupStat> = {};
+    const byHorizon: Record<number, GroupStat> = {}, byHorizonSector: Record<number, GroupStat> = {}, byHorizonUniverse: Record<number, GroupStat> = {};
     for (const n of CHATTER.horizons) {
       byHorizon[n] = stat(mine.map((e) => e.outcome!.excess[n]));
       byHorizonSector[n] = stat(mine.map((e) => e.outcome!.excessSector[n]));
+      byHorizonUniverse[n] = stat(mine.map((e) => e.outcome!.excessUniverse?.[n] ?? null));
     }
-    return { group: g, events: mine.length, byHorizon, byHorizonSector };
+    return { group: g, events: mine.length, byHorizon, byHorizonSector, byHorizonUniverse };
   });
 }
 

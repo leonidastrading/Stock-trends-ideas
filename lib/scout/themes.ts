@@ -71,6 +71,31 @@ export function parseThemes(text: string): Theme[] {
   return (j.themes ?? []).map((t) => themeSchema.safeParse(t)).filter((r) => r.success).map((r) => r.data!).filter((t) => t.tickers.length > 0).slice(0, 3);
 }
 
+/** A theme that repeats one from the last few days is the same idea continuing, not a new call. */
+export const THEME_REPEAT_DAYS = 5;
+
+/**
+ * Pure: which themes repeat an earlier one. The same direction on the same main stock (or a stock the earlier theme
+ * also named) within five days is "continuing": it is shown as such and not scored again, so one idea that stays in
+ * the sources for a week is one result, not five. Keys are "runId:index"; the value is the first run it continues.
+ */
+export function continuingThemes(runs: Array<Pick<ThemeRun, "id" | "etDate" | "themes">>): Map<string, { date: string; title: string }> {
+  const out = new Map<string, { date: string; title: string }>();
+  const seen: Array<{ date: string; direction: string; tickers: string[]; first: { date: string; title: string } }> = [];
+  for (const r of runs.slice().sort((a, b) => a.etDate.localeCompare(b.etDate) || a.id - b.id)) {
+    r.themes.forEach((t, i) => {
+      const main = t.tickers[0];
+      if (!main) return;
+      const from = addDays(r.etDate, -THEME_REPEAT_DAYS);
+      // The latest earlier idea on this stock and side; a chain of repeats stays one idea while each link is within five days.
+      const prev = seen.filter((f) => f.direction === t.direction && f.date >= from && (f.tickers.includes(main) || t.tickers.includes(f.tickers[0]))).at(-1);
+      if (prev) out.set(`${r.id}:${i}`, prev.first);
+      seen.push({ date: r.etDate, direction: t.direction, tickers: t.tickers, first: prev?.first ?? { date: r.etDate, title: t.title } });
+    });
+  }
+  return out;
+}
+
 export interface ThemeRun { id: number; createdAt: string; etDate: string; themes: Theme[]; sources: { documents: number; websites: number; stocktwits: number }; costUsd: number | null }
 
 export async function themeRuns(limit = 30): Promise<ThemeRun[]> {

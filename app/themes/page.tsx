@@ -3,7 +3,7 @@ import Ticker from "@/components/Ticker";
 import CardAsk from "@/components/CardAsk";
 import { marketDataFromEnv } from "@/lib/alpaca";
 import { hasDatabase } from "@/lib/db";
-import { guessQuoteLink, themeRuns, themeSends, type Theme, type ThemeRun } from "@/lib/scout/themes";
+import { continuingThemes, guessQuoteLink, themeRuns, themeSends, type Theme, type ThemeRun } from "@/lib/scout/themes";
 import { query as q } from "@/lib/db";
 import { swingConfigured } from "@/lib/scout/swing";
 import { fmtEtAgo } from "@/lib/time";
@@ -46,6 +46,8 @@ export default async function ThemesPage() {
   const snaps = syms.length ? await (marketDataFromEnv()?.getSnapshots?.(syms) ?? Promise.resolve({})).catch(() => ({})) : {};
   const now = Object.fromEntries(Object.entries(snaps as Record<string, { price: number }>).map(([s, v]) => [s, v.price]));
   const [latest, ...older] = runs;
+  // A theme that repeats one from the last five days is the same idea continuing: shown as such, not scored again.
+  const continuing = continuingThemes(runs);
   // Every scout card on any of a theme's stocks.
   const briefs = await store.cardBriefsSince(120).catch(() => [] as store.CardBrief[]);
   const cardsFor = (t: Theme) => briefs.filter((c) => t.tickers.some((x) => c.primaryTicker === x || c.tickers.includes(x)));
@@ -82,6 +84,7 @@ export default async function ThemesPage() {
               <span className={`theme-dir ${t.direction === "long" ? "pos" : "neg"}`}>{t.direction === "long" ? "▲ LONG" : "▼ SHORT"}</span>
               {t.tickers.map((x) => <Ticker key={x} symbol={x} className="theme-ticker" />)}
               <span className="tag">confidence {t.confidence}</span>
+              {continuing.get(`${latest.id}:${i}`) && <span className="tag warn" title={`The same idea as "${continuing.get(`${latest.id}:${i}`)!.title}". It is one idea continuing, so it is not scored again: its result is measured from the first day.`}>continuing since {continuing.get(`${latest.id}:${i}`)!.date.slice(5)}</span>}
               {s.avg !== null && <span className={`tag ${s.avg >= 0 ? "ok" : "neg"}`} title="Direction-adjusted move since it was published, averaged over its tickers">{pct(s.avg)} since {latest.etDate.slice(5)}</span>}
               <span className="small muted">posted {fmtEtAgo(latest.createdAt)}</span>
             </div>
@@ -112,11 +115,11 @@ export default async function ThemesPage() {
       {older.length > 0 && (
         <section className="card section">
           <h2>Earlier readings</h2>
-          <p className="small muted">How each day&apos;s ideas have done since (direction-adjusted, at today&apos;s prices).</p>
+          <p className="small muted">How each day&apos;s ideas have done since (direction-adjusted, at today&apos;s prices). An idea that repeats one from the last five days is marked &quot;continuing&quot;: it is one idea, counted from its first day, and its later rows are not scored again. Themes are study-only on the Scoreboard for now.</p>
           <div className="table-wrap"><table><thead><tr><th>Posted</th><th>#</th><th>Idea</th><th>Call</th><th className="num">Since</th><th>Cards</th></tr></thead>
             <tbody>{older.flatMap((r) => r.themes.map((t, i) => {
               const s = since(t, now);
-              return <tr key={`${r.id}-${i}`}><td className="small" style={{ whiteSpace: "nowrap" }}>{fmtEtAgo(r.createdAt)}</td><td>{i + 1}</td><td className="small">{t.title}</td><td className="small"><span className={t.direction === "long" ? "pos" : "neg"}>{t.direction === "long" ? "▲" : "▼"}</span> {t.tickers.map((x, k) => <span key={x}>{k ? ", " : ""}<Ticker symbol={x} /></span>)}</td><td className={`num ${s.avg === null ? "" : s.avg >= 0 ? "pos" : "neg"}`}>{pct(s.avg)}</td><td className="small">{cardsFor(t).length ? <CardChips cards={cardsFor(t)} max={4} /> : <span className="muted">—</span>}</td></tr>;
+              return <tr key={`${r.id}-${i}`}><td className="small" style={{ whiteSpace: "nowrap" }}>{fmtEtAgo(r.createdAt)}</td><td>{i + 1}</td><td className="small">{t.title}{continuing.get(`${r.id}:${i}`) ? <span className="muted"> · continuing since {continuing.get(`${r.id}:${i}`)!.date.slice(5)}, not scored again</span> : null}</td><td className="small"><span className={t.direction === "long" ? "pos" : "neg"}>{t.direction === "long" ? "▲" : "▼"}</span> {t.tickers.map((x, k) => <span key={x}>{k ? ", " : ""}<Ticker symbol={x} /></span>)}</td><td className={`num ${continuing.get(`${r.id}:${i}`) || s.avg === null ? "" : s.avg >= 0 ? "pos" : "neg"}`}>{continuing.get(`${r.id}:${i}`) ? <span className="muted">—</span> : pct(s.avg)}</td><td className="small">{cardsFor(t).length ? <CardChips cards={cardsFor(t)} max={4} /> : <span className="muted">—</span>}</td></tr>;
             }))}</tbody></table></div>
         </section>
       )}

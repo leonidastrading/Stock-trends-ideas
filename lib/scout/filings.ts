@@ -134,7 +134,7 @@ export function smartMoneySignals(buys: store.InsiderBuyRow[], congress: store.C
   }
   // Clusters in Congress alone: three or more members buying (or two with $100k+) in 30 days, fewer selling.
   const { bySymbol } = congressHelpers;
-  for (const a of bySymbol(congress, addDays(today, -30)).filter((x) => x.cluster && fresh(x.lastFiled) && !both.has(x.symbol))) {
+  for (const a of bySymbol(congress, addDays(today, -30), today).filter((x) => x.cluster && fresh(x.lastFiled) && !both.has(x.symbol))) {
     const con = recentCon.filter((t) => t.symbol === a.symbol && daysBetween(t.filed, today) <= 30);
     out.push({
       kind: "congress", symbol: a.symbol, term: `congress: ${a.symbol}`, strength: a.buyers.length >= 3 ? 2.5 : 2, direction: "long",

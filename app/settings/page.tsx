@@ -147,7 +147,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
       <section className="card">
         <h2>Your reactions</h2>
-        <p className="small secondary">Thumbs up and down from the cards and stories, newest first. The discovery and story desks see the latest 12 of each kind, with your notes, when they decide what to propose. They do not change how cards are written or gated.</p>
+        <p className="small secondary">Thumbs up and down from the cards and stories, newest first. They are used: the discovery desk and the story desk are shown the latest 12 of each kind, with your notes, every time they choose what to send to research, so a thumbs-down on a kind of idea makes them propose fewer like it. They do not change how a card is written, gated or scored once an idea is researched.</p>
         <ul className="small">{feedback.map((f) => <li key={f.id}>{f.vote === "up" ? "👍" : "👎"} {f.about}{f.note ? <span className="muted"> — “{f.note}”</span> : null}</li>)}{feedback.length === 0 && <li className="muted">None yet.</li>}</ul>
       </section>
 

@@ -93,20 +93,36 @@ const isSell = (t: { tx: string }) => t.tx === "sell" || t.tx === "partial sale"
 
 export interface SymbolActivity { symbol: string; buyers: string[]; sellers: string[]; buys: number; sells: number; buyUsd: number; sellUsd: number; lastFiled: string; cluster: boolean }
 
-/** Pure: per stock, over reports filed since `from` (when the trades became public): who bought, who sold, rough dollars (range midpoints). */
-export function bySymbol(trades: CongressTradeRow[], from: string): SymbolActivity[] {
+/** What counts toward a cluster: a purchase made in the last 45 days, of at least $15,001 (the second-lowest reporting band). */
+export const CLUSTER = { maxTradeAgeDays: 45, minAmountUsd: 15_001 };
+
+/**
+ * Pure: per stock, over reports filed since `from` (when the trades became public): who bought, who sold, rough
+ * dollars (range midpoints). A cluster is three or more members buying, or two buying at least $100k between them,
+ * with fewer members selling, counting only purchases made in the last 45 days of at least $15,001 each. (A cluster
+ * used to count any purchase in a report filed this month: Prologis was a "cluster" of $1,001 trades made up to 306
+ * days earlier.)
+ */
+export function bySymbol(trades: CongressTradeRow[], from: string, today: string = toEt(new Date()).date): SymbolActivity[] {
   const m = new Map<string, SymbolActivity>();
+  const cluster = new Map<string, { buyers: Set<string>; usd: number }>();
   for (const t of trades) {
     if (t.filed < from || t.assetType !== "stock") continue;
     const a = m.get(t.symbol) ?? { symbol: t.symbol, buyers: [], sellers: [], buys: 0, sells: 0, buyUsd: 0, sellUsd: 0, lastFiled: t.filed, cluster: false };
-    if (isBuy(t)) { a.buys++; a.buyUsd += midpoint(t); if (!a.buyers.includes(t.member)) a.buyers.push(t.member); }
+    if (isBuy(t)) {
+      a.buys++; a.buyUsd += midpoint(t); if (!a.buyers.includes(t.member)) a.buyers.push(t.member);
+      if (daysBetween(t.txDate, today) <= CLUSTER.maxTradeAgeDays && (t.amountLow ?? 0) >= CLUSTER.minAmountUsd) {
+        const c = cluster.get(t.symbol) ?? { buyers: new Set<string>(), usd: 0 };
+        c.buyers.add(t.member); c.usd += midpoint(t);
+        cluster.set(t.symbol, c);
+      }
+    }
     if (isSell(t)) { a.sells++; a.sellUsd += midpoint(t); if (!a.sellers.includes(t.member)) a.sellers.push(t.member); }
     if (t.filed > a.lastFiled) a.lastFiled = t.filed;
     m.set(t.symbol, a);
   }
   const out = [...m.values()].filter((a) => a.buys + a.sells > 0);
-  // A cluster: three or more members buying, or two buying at least $100k between them, with fewer members selling.
-  for (const a of out) a.cluster = (a.buyers.length >= 3 || (a.buyers.length >= 2 && a.buyUsd >= 100_000)) && a.sellers.length < a.buyers.length;
+  for (const a of out) { const c = cluster.get(a.symbol); a.cluster = !!c && (c.buyers.size >= 3 || (c.buyers.size >= 2 && c.usd >= 100_000)) && a.sellers.length < c.buyers.size; }
   return out.sort((x, y) => y.buyers.length - x.buyers.length || y.buyUsd - x.buyUsd);
 }
 

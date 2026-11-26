@@ -164,3 +164,26 @@ describe("news that day", () => {
     expect(hadNews("2026-09-10", "AAPL", counts, recorded)).toBeNull(); // look-back period: no stream recorded
   });
 });
+
+import { controlNearZero, universeBenchmark } from "@/lib/scout/chatter";
+
+describe("chatter against the test's own stocks", () => {
+  const bar = (symbol: string, date: string, o: number, c: number) => ({ symbol, date, o, h: Math.max(o, c), l: Math.min(o, c), c, v: 1 });
+  it("benchmarks against the equal-weighted average of the stocks, open to close", () => {
+    const bars = new Map([
+      ["A", [bar("A", "2026-11-02", 100, 101), bar("A", "2026-11-03", 101, 110)]],
+      ["B", [bar("B", "2026-11-02", 50, 50), bar("B", "2026-11-03", 50, 45)]],
+      ["C", [bar("C", "2026-11-02", 10, 10), bar("C", "2026-11-03", 10, 10.6)]],
+    ]);
+    const u = universeBenchmark(bars, ["A", "B", "C"]);
+    expect(u("2026-11-02", "2026-11-03")).toBeCloseTo((0.10 - 0.10 + 0.06) / 3, 6);
+    expect(u("2026-11-02", "2026-12-01")).toBeNull(); // no bars: no benchmark
+  });
+  it("calls the control near zero only with enough events and a small average", () => {
+    const row = (n: number, mean: number | null) => [{ group: "control" as const, events: n, byHorizon: {}, byHorizonSector: {}, byHorizonUniverse: { 5: { n, mean, median: mean, hit: 0.5, meanAbs: 0.02 } } }];
+    expect(controlNearZero(row(60, 0.002)).ok).toBe(true);
+    expect(controlNearZero(row(60, 0.012)).ok).toBe(false); // +1.2%: the yardstick is off
+    expect(controlNearZero(row(8, 0.001)).ok).toBe(false); // too few events
+    expect(controlNearZero([]).ok).toBe(false);
+  });
+});

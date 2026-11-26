@@ -92,14 +92,26 @@ describe("Congress signals", () => {
   });
 
   it("clusters: three members buying, or two with $100k+; more sellers cancel it", () => {
+    const mid = { amountLow: 15001, amountHigh: 50000 };
     const a = bySymbol([
-      T({ member: "A" }), T({ member: "B", docId: "2" }), T({ member: "C", docId: "3" }),
-      T({ member: "A", symbol: "AVGO", amountLow: 100001, amountHigh: 250000 }), T({ member: "B", symbol: "AVGO", docId: "2" }),
+      T({ member: "A", ...mid }), T({ member: "B", docId: "2", ...mid }), T({ member: "C", docId: "3", ...mid }),
+      T({ member: "A", symbol: "AVGO", amountLow: 100001, amountHigh: 250000 }), T({ member: "B", symbol: "AVGO", docId: "2", ...mid }),
       T({ member: "A", symbol: "WMT" }), T({ member: "B", symbol: "WMT", tx: "sell", docId: "2" }), T({ member: "C", symbol: "WMT", tx: "partial sale", docId: "3" }),
       T({ member: "D", symbol: "OLD", filed: "2026-09-01" }),
-    ], "2026-10-15");
+    ], "2026-10-15", "2026-11-14");
     expect(a.map((x) => [x.symbol, x.buyers.length, x.cluster])).toEqual([["MU", 3, true], ["AVGO", 2, true], ["WMT", 1, false]]);
-    expect(a[1].buyUsd).toBe(175000.5 + 8000.5);
+    expect(a[1].buyUsd).toBe(175000.5 + 32500.5);
+  });
+
+  it("a cluster needs purchases from the last 45 days of at least $15,001 each (Prologis was small trades reported 306 days late)", () => {
+    const small = { amountLow: 1001, amountHigh: 15000 }, big = { amountLow: 15001, amountHigh: 50000 }, old = { txDate: "2026-01-12", ...big };
+    const a = bySymbol([
+      T({ member: "A", symbol: "PLD", ...small }), T({ member: "B", symbol: "PLD", docId: "2", ...small }), T({ member: "C", symbol: "PLD", docId: "3", ...small }),
+      T({ member: "A", symbol: "LATE", ...old }), T({ member: "B", symbol: "LATE", docId: "2", ...old }), T({ member: "C", symbol: "LATE", docId: "3", ...old }),
+      T({ member: "A", symbol: "REAL", ...big }), T({ member: "B", symbol: "REAL", docId: "2", ...big }), T({ member: "C", symbol: "REAL", docId: "3", ...big }),
+    ], "2026-10-15", "2026-11-14");
+    expect(Object.fromEntries(a.map((x) => [x.symbol, x.cluster]))).toEqual({ PLD: false, LATE: false, REAL: true });
+    expect(a.find((x) => x.symbol === "PLD")!.buyers).toHaveLength(3); // still listed as bought by three, only not a cluster
   });
 
   it("members: trades, reports and the typical reporting delay", () => {
