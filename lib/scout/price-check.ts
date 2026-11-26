@@ -61,6 +61,36 @@ export function priceCheckText(p: PriceCheck, now: Date): string {
   return `PRICE CHECK (measured by the scout's code now; not a source): ${head}${ext}${so} The paper entry is the next open, so anything that has already moved is not the card's to gain.`;
 }
 
+/** Pure: the move in a few words, for a list of stocks ("SNY -0.4% on 2026-11-23, then +8.3% in pre-market trading to $50.80"). */
+export function moveLine(p: PriceCheck): string {
+  if (p.inSession) return `${p.symbol} ${signed(p.dayPct)} today so far, at $${p.close.toFixed(2)}`;
+  const ext = p.ext ? `, then ${signed(p.ext.pct)} in ${toEt(new Date(p.ext.at)).date > p.closeDate ? "pre-market" : "after-hours"} trading to $${p.ext.price.toFixed(2)}` : "";
+  return `${p.symbol} ${signed(p.dayPct)} on ${p.closeDate} (close $${p.close.toFixed(2)})${ext}`;
+}
+
+/**
+ * What a few stocks have done since their last close, as one line for the story desk (it is asked whether the
+ * market's reaction is smaller than the story, and cannot answer without the reaction). Null when nothing is found.
+ */
+export async function movesLine(data: MarketData | null, symbols: string[], now: Date): Promise<string | null> {
+  if (!data || !symbols.length) return null;
+  try {
+    const today = toEt(now).date;
+    const daily = await data.getDailyBars(symbols, addDays(today, -10), today, { feed: "sip", adjustment: "raw" });
+    const parts: string[] = [];
+    for (const symbol of symbols) {
+      const last = daily.filter((b) => b.symbol === symbol).sort((a, b) => a.date.localeCompare(b.date)).at(-1);
+      if (!last) continue;
+      const minute = data.getMinuteBars ? await data.getMinuteBars(symbol, new Date(`${last.date}T19:55:00Z`), now, "sip").catch(() => [] as MinuteBar[]) : [];
+      const p = priceCheck(symbol, daily, minute, now);
+      if (p) parts.push(moveLine(p));
+    }
+    return parts.length ? parts.join("; ") : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Pure: how far the stock has moved over the last week, month and quarter, against SPY. Cards kept listing this as
  * an unknown ("the price history was not measured here") although the scout has the prices.

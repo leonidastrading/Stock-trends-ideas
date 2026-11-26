@@ -115,6 +115,8 @@ export interface Story {
   /** Set by runStories for takeover talk: the talk reports of the last 30 days (oldest first) and the move since the first. */
   talkLog?: string[];
   premium?: string;
+  /** Set by runStories: what the story's stocks (and SPY) have done since their last close, measured by code. */
+  prices?: string;
   /** Time of the newest headline in the story (ISO). */
   latest: string;
   /** Newest first; `at` is the headline's full ISO timestamp. */
@@ -213,7 +215,7 @@ export const STORY_SYSTEM_PROMPT = `You are the story desk of a paper-only "tren
 Predicting the event is not the job; asking a better second question is. Before naming trades, ask of each story:
 1. What does it reveal, not just what happened? The headline may be a crime, a resignation or a scandal; the signal may be what the reaction shows: how intensely the public, customers, employees or lawmakers feel, or what the timing implies (a CEO leaving a week before earnings).
 2. Whose incentives just changed? Politicians and regulators who now have a popular target, rivals who can take share, customers who can walk, boards and prosecutors with a reason to dig. Their responses (hearings, bills, investigations, policy reversals, boycotts) arrive over weeks and the market tends to price them late. After good news, ask who is now forced to buy or sell, but treat flows with care: moves driven by flows (index changes, offerings, rebalances) tend to reverse once the flow is done, and the S&P 500 addition effect has shrunk to about nothing (most additions are migrations from the MidCap 400, whose funds sell as the S&P funds buy). What still works is small and specific: non-migration additions large against the free float, and the reversal after the effective date in small, thinly traded index additions and deletions. Short covering and underweight funds chasing a stock that truly re-rated on new fundamentals can carry a move; analysts raising targets after a rally add little.
-3. Is the market's reaction smaller than the story's intensity? A flat stock while coverage and anger keep growing is the gap to look for. A stock that already fell 15% on the day may have priced it.
+3. Is the market's reaction smaller than the story's intensity? A flat stock while coverage and anger keep growing is the gap to look for. A stock that already fell 15% on the day may have priced it. You are shown what the story's stocks have done since their last close, before the open and after the close included: use it, and say the move in your summary. The first move is the market's verdict on the news. Do not name a trade against it on a rule of thumb (\"buyers dip\", \"good news fades\"): a trade against the first move is a fade, and needs a stated reason the market is wrong.
 4. Is the company priced as one person's company? When the valuation rests on a founder-CEO, any threat to that person is a threat to the valuation, and the market tends to treat it as unlikely until it suddenly is not.
 5. What else is moving the stock right now (an inflation print, an election, a sector sell-off, downgrades)? Name it, so a result is not credited to the story alone, and compare against the stock's peers: a stock falling while its rivals rise is the story; everything falling together is the market.
 
@@ -234,6 +236,7 @@ Then the trades:
 - Reaction: who has to respond to the reaction, and what that response does to which listed companies (an industry facing a political backlash, the businesses a regulator will target, the peers a probe may spread to). Horizon in weeks, not days.
 - Private-company liquidity events (an IPO filing or pricing, a large funding round or tender offer, an acquisition): the listed winners are the companies that hold stakes, strategic investors and corporate venture arms, especially where the stake is a large share of the holder's market value. Name the holder, say roughly what the stake may be worth against its market cap if you know, and flag lock-ups and dilution as risks.
 - Takeover or sale talk (a report that a company is in talks, weighing a sale or has had an approach, with no signed deal): one credible report is the story, so judge it even when it is the only headline. Say who is the target and who the buyer, how much of the jump is already in the price, and what the talks still have to survive: a denial, a board that says no, financing, antitrust, and above all the target's own results. When you are told the target reports earnings within days, treat that as the main risk: a miss while a premium is in the price can end the talks or reset the terms, and the stock then loses the premium and the miss together. You are told what the stock has done since the first report, against the market: if it has not risen there is no premium in the price, so a short on "the premium leaking out" has nothing to earn; say so and skip, or ask whether the market is ignoring a credible bidder. A long on the target needs a reason the premium is still too small; a short needs a reason the talk is weak or the premium is at risk before a deal can be signed; the buyer usually dips. If neither holds, skip and say so.
+- A signed acquisition: the target trades near the offer, so there is little left in it. Look at the buyer's own price. When the buyer falls, the market doubts the price or the financing. When the buyer RISES on its own deal, the market is endorsing it (a good price, earnings added, a gap in its pipeline filled): never short it because \"buyers usually dip\"; the question is whether the endorsement keeps going (brokers upgrading, estimates rising), which is a long to consider or a skip, not a short.
 - For each trade: how long the repricing should take, what would prove it wrong, and why the market may still be mispricing it after the first move (forced sellers, a slow-burning investigation, an index or fund flow, a second shoe to drop, a political process that has not started yet).
 
 For every story also give "company" (the main listed company's name as Wikipedia titles it; empty for a macro story) and "people" (at most three people at the centre of the story, full names as Wikipedia titles them; empty if none), so the scout can measure public attention.
@@ -306,6 +309,7 @@ export function buildStoryPrompt(stories: Story[], date: string, preferences: st
     if (s.talkLog?.length) L.push(`Takeover reports on ${s.key} in the last 30 days, oldest first: ${s.talkLog.join(" | ")}`);
     if (s.premium) L.push(s.premium);
     if (s.earnings) L.push(s.earnings);
+    if (s.prices) L.push(`Prices (measured by the scout's code just now, 15 minutes delayed; not a source): ${s.prices}.`);
     if (s.staleness !== undefined) L.push(`Measured ${stalenessLabel(s.staleness)}.`);
     if (s.coverage) L.push(`${s.symbols[0] ?? s.key} ${s.coverage.line}.${s.coverage.building ? " What will this growing attention force to happen next?" : ""}`);
     for (const x of s.attention ?? []) L.push(`Public attention: ${x.line}.`);
@@ -349,6 +353,14 @@ export function parseStoryTriage(text: string): StoryTriage & { dropped: string[
 export const STORY_COOLDOWN_DAYS = 3;
 /** For a takeover-talk story, how far ahead the desk looks for the company's results date. */
 export const TAKEOVER_EARNINGS_DAYS = 10;
+/** Pure: the stocks a story is about: its own, then the ones its headlines name most (a buyer in a deal story), at most four. */
+export function storySymbols(s: Pick<Story, "symbols" | "headlines">, max = 4): string[] {
+  const n = new Map<string, number>();
+  for (const h of s.headlines) for (const x of h.symbols) n.set(x, (n.get(x) ?? 0) + 1);
+  const named = [...n.entries()].sort((a, b) => b[1] - a[1]).map(([x]) => x);
+  return [...new Set([...s.symbols, ...named])].filter((x) => /^[A-Z]{1,5}(\.[A-Z])?$/.test(x)).slice(0, max);
+}
+
 export const storyTerm = (key: string, ticker: string) => `story: ${key} → ${ticker}`;
 
 export interface StoriesReport {
@@ -467,6 +479,12 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
     } catch {
       /* the story is still read without the price line */
     }
+  }
+  // What each story's stocks have already done: the desk is asked whether the reaction is smaller than the story, and it
+  // named a short on a buyer that had jumped 8% on its own deal because it could not see the price (SNY, card #377).
+  for (const s of chosen) {
+    const syms = storySymbols(s);
+    if (syms.length) s.prices = (await import("./price-check").then(({ movesLine }) => movesLine(deps.data, [...syms, "SPY"], deps.now)).catch(() => null)) ?? undefined;
   }
   const prompt = buildStoryPrompt(chosen, et.date, preferences);
   let lastError = "";
