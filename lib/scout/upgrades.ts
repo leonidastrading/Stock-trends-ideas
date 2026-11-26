@@ -15,10 +15,11 @@
  */
 import type { DailyBar, MarketData, NewsItem } from "../alpaca";
 import { query as q } from "../db";
-import { addDays, toEt } from "../time";
+import { addDays, etLabel, toEt } from "../time";
 import { TOP_BROKERS } from "./drift";
 import { inSession, openedBars, openEntry, timeExit } from "./drift-list";
 import { paperResult, vsSpy } from "./paper-result";
+import * as store from "./store";
 
 export const UPGRADES = { holdDays: 84, minPrice: 5, minDollarVolume: 5e6, newsHours: 30, showDays: 12 };
 
@@ -96,18 +97,23 @@ export async function upgradeBook(days = 400): Promise<Upgrade[]> {
 export async function runUpgrades(data: MarketData | null, now = new Date()): Promise<string> {
   if (!data) return "upgrades: waiting for market data (Alpaca keys)";
   const today = toEt(now).date;
-  const news = await data.getNews([], new Date(now.getTime() - UPGRADES.newsHours * 3600_000), now, 1000);
+  // The stream gives the newest headlines first, so a fixed count can stop hours short on a busy day (the first live
+  // run reached only part of its 30 hours). Read everything since the last pass; the first pass reads the whole window.
+  const last = (await store.cacheGet<{ at: string }>("upgrades:last").catch(() => null))?.data?.at ?? null;
+  const since = new Date(Math.max(now.getTime() - UPGRADES.newsHours * 3600_000, last ? Date.parse(last) - 20 * 60000 : 0));
+  const news = await data.getNews([], since, now, last ? 3000 : 6000);
   const found = upgradesIn(news);
   const have = found.length ? new Set((await q(`SELECT symbol, day FROM upgrade_list WHERE symbol = ANY($1)`, [found.map((u) => u.symbol)])).map((r) => `${r.symbol}|${day(r.day)}`)) : new Set<string>();
   const fresh = found.filter((u) => !have.has(`${u.symbol}|${u.day}`));
   let added = 0, thin = 0;
+  const thinNames: string[] = [];
   if (fresh.length) {
     const bars = await data.getDailyBars(fresh.map((u) => u.symbol), addDays(today, -45), today, { feed: "sip" });
     const open = inSession(now);
     const snaps = open && data.getSnapshots ? await data.getSnapshots([...new Set([...fresh.map((u) => u.symbol), "SPY"])]).catch(() => ({} as Record<string, { price: number }>)) : {};
     for (const u of fresh) {
       const t = tradable(bars.filter((b) => b.symbol === u.symbol).sort((a, b) => a.date.localeCompare(b.date)), u.day);
-      if (!t.ok) { thin++; continue; }
+      if (!t.ok) { thin++; thinNames.push(u.symbol); continue; }
       // Market open and a live price in hand: in now. Otherwise it waits for the next open.
       const price = open ? snaps[u.symbol]?.price ?? null : null;
       await q(
@@ -119,9 +125,13 @@ export async function runUpgrades(data: MarketData | null, now = new Date()): Pr
   }
   // More brokers on a stock already listed today: add their names (the entry stays).
   for (const u of found.filter((x) => have.has(`${x.symbol}|${x.day}`))) await q(`UPDATE upgrade_list SET brokers = (SELECT ARRAY(SELECT DISTINCT unnest(brokers || $3::text[]))), top_broker = top_broker OR $4 WHERE symbol = $1 AND day = $2`, [u.symbol, u.day, u.brokers, u.topBroker]).catch(() => undefined);
+  await store.cachePut("upgrades:last", { at: now.toISOString() }).catch(() => undefined);
   const settled = await settle(data, now);
   const open = Number((await q(`SELECT count(*) AS n FROM upgrade_list WHERE exit_date IS NULL`))[0]?.n ?? 0);
-  return `upgrades: ${found.length} in the last ${UPGRADES.newsHours} hours of headlines, ${added} new${thin ? ` (${thin} too small or thinly traded)` : ""}, ${settled.entered} entered at an open, ${settled.closed} closed · ${open} open`;
+  // How far back the headlines read actually reach (the stream gives the newest 1,000), and the latest listings by name.
+  const oldest = news.reduce((m, n) => (n.ts < m ? n.ts : m), now.toISOString());
+  const latest = (await q(`SELECT symbol, entry_price FROM upgrade_list ORDER BY news_at DESC LIMIT 8`).catch(() => [])).map((r) => `${r.symbol}${r.entry_price === null ? "" : ` $${Number(r.entry_price).toFixed(2)}`}`);
+  return `upgrades: ${found.length} in the headlines since ${etLabel(since.toISOString())}, ${added} new${thin ? ` (${thin} too small or thinly traded: ${thinNames.slice(0, 8).join(", ")})` : ""}, ${settled.entered} entered at an open, ${settled.closed} closed · ${open} open · ${news.length} headlines read back to ${etLabel(oldest)} · latest: ${latest.join(", ") || "none"}`;
 }
 
 async function settle(data: MarketData, now: Date): Promise<{ entered: number; closed: number }> {

@@ -58,10 +58,10 @@ describe("the upgrades list (PGlite)", () => {
 
   it("an upgrade before the bell enters at that day's open; one during the session at the live price", async () => {
     // 9:10 AM ET: only the SNY upgrade is out, the market is closed.
-    expect(await runUpgrades(data, new Date("2026-11-25T14:10:00Z"))).toMatch(/^upgrades: 1 in the last 30 hours of headlines, 1 new, 0 entered at an open, 0 closed · 1 open/);
+    expect(await runUpgrades(data, new Date("2026-11-25T14:10:00Z"))).toMatch(/^upgrades: 1 in the headlines since Nov 24, 3:10 AM ET, 1 new, 0 entered at an open, 0 closed · 1 open/);
     expect((await upgradeBook(4000))[0]).toMatchObject({ symbol: "SNY", day: "2026-11-25", entryDate: null, basis: "open", prevClose: 51.9, topBroker: true });
     // 10:30 AM ET: SNY's open is known, and LIVE's upgrade has just appeared.
-    expect(await runUpgrades(data, new Date("2026-11-25T15:30:00Z"))).toMatch(/2 in the last 30 hours of headlines, 1 new, 1 entered at an open, 0 closed · 2 open/);
+    expect(await runUpgrades(data, new Date("2026-11-25T15:30:00Z"))).toMatch(/2 in the headlines since Nov 25, 8:50 AM ET, 1 new, 1 entered at an open, 0 closed · 2 open · 2 headlines read back to Nov 25, 9:02 AM ET · latest: LIVE \$21.50, SNY \$53.60/);
     const book = await upgradeBook(4000);
     expect(book.find((u) => u.symbol === "SNY")).toMatchObject({ entryDate: "2026-11-25", entryPrice: 53.6, spyEntry: 700, exitBy: "2027-02-17" });
     expect(book.find((u) => u.symbol === "LIVE")).toMatchObject({ entryDate: "2026-11-25", entryPrice: 21.5, spyEntry: 703, basis: "listing" });
