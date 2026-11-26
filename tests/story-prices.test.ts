@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { DailyBar, MarketData, MinuteBar } from "@/lib/alpaca";
 import { moveLine, movesLine, priceCheck } from "@/lib/scout/price-check";
-import { buildStoryPrompt, STORY_SYSTEM_PROMPT, storySymbols, type Story } from "@/lib/scout/stories";
+import { buildStoryPrompt, detectStories, fastCandidates, fastMovers, STORY_SYSTEM_PROMPT, storySymbols, type Story } from "@/lib/scout/stories";
+import type { NewsItem } from "@/lib/alpaca";
 
 const bar = (symbol: string, date: string, c: number): DailyBar => ({ symbol, date, o: c, h: c, l: c, c, v: 1000 });
 const daily = [bar("SNY", "2026-11-20", 47.1), bar("SNY", "2026-11-23", 46.9), bar("SPY", "2026-11-20", 700), bar("SPY", "2026-11-23", 702.1)];
@@ -33,5 +34,19 @@ describe("what a story's stocks have already done", () => {
     expect(buildStoryPrompt([story], "2026-11-24")).toContain("Prices (measured by the scout's code just now, 15 minutes delayed; not a source): SNY -0.4% on 2026-11-23 (close $46.90), then +8.3% in pre-market trading to $50.80.");
     expect(STORY_SYSTEM_PROMPT).toContain('Do not name a trade against it on a rule of thumb ("buyers dip", "good news fades")');
     expect(STORY_SYSTEM_PROMPT).toContain("When the buyer RISES on its own deal, the market is endorsing it");
+  });
+
+  it("a shock headline on a stock already moving hard is a story at once", () => {
+    const item = (headline: string, symbols: string[], source = "fiscal.ai"): NewsItem => ({ id: Math.random(), ts: "2026-11-25T12:32:00Z", headline, summary: "", symbols, source, url: "https://example.com/x" });
+    const items = [item("Nutanix CEO Rajiv Ramaswami to Step Down", ["NTNX"]), item("BofA Securities Downgrades Nutanix to Neutral", ["NTNX"]), item("Acme chief resigns", ["ACME"]), item("Quiet Co opens a new office", ["QUIET"])];
+    // Two headlines from a news aggregator are not a story by count...
+    expect(detectStories(items)).toHaveLength(0);
+    // ...but the stocks with a shock headline are worth a price look,
+    expect(fastCandidates(items, new Set()).sort()).toEqual(["ACME", "NTNX"]);
+    // and the one that is down 15% is read now; a shock headline with no move, or a move with no shock headline, is not.
+    const fast = fastMovers(items, new Set(), { NTNX: -15.24, ACME: -1.2, QUIET: -20 });
+    expect(fast.map((s) => [s.key, s.fastMove])).toEqual([["NTNX", -15.2]]);
+    expect(fastMovers(items, new Set(["NTNX"]), { NTNX: -15.24 })).toEqual([]);
+    expect(buildStoryPrompt(fast, "2026-11-25")).toContain("read early because the stock is -15.2% since its last close on a shock headline");
   });
 });

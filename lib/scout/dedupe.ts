@@ -1,7 +1,8 @@
 /**
  * One card per stock and direction per player: a second card on the same call (say two angles on PRE from one
- * pasted article) would count the same bet twice on the Scoreboard. The story desk and the options desk are left
- * out: the story desk re-researches a story as it moves through stages, and options flags have their own limit.
+ * pasted article) would count the same bet twice on the Scoreboard. The options desk is left out (its flags have
+ * their own limit). The story desk cards a story again when it reaches a new stage; short of that (a story that is
+ * only building, or read again), it may not repeat the same side of the same stock within a few days.
  */
 import { normalizeTicker } from "./tickers";
 import { playerOf, type Player } from "./scoreboard";
@@ -10,6 +11,8 @@ import type { ImportItem } from "./importer";
 
 export const DUPLICATE_DAYS = 14;
 const EXEMPT: Player[] = ["scout_story", "scout_options"];
+/** Short of a new stage, the story desk may not card the same side of the same stock again within these days (NTNX: #423 in the evening, #448 the next morning, nothing new between them). */
+export const STORY_REPEAT_DAYS = 5;
 
 export interface Existing { cardId: number; createdAt: string; symbol: string; direction: "long" | "short"; player: Player }
 
@@ -21,11 +24,18 @@ export function existingCalls(cards: StoredCard[], candidates: Candidate[], trac
 }
 
 /** Pure: the earlier card that makes this call a repeat, if any. Without a direction yet, any card on the stock counts. */
-export function duplicateOf(existing: Existing[], call: { origin: "scout" | "human"; term: string; symbol: string | undefined; direction?: "long" | "short" }): Existing | null {
+export function duplicateOf(existing: Existing[], call: { origin: "scout" | "human"; term: string; symbol: string | undefined; direction?: "long" | "short"; now?: Date }): Existing | null {
   if (!call.symbol) return null;
   const player = playerOf(call.origin, call.term);
-  if (EXEMPT.includes(player)) return null;
   const sym = normalizeTicker(call.symbol) ?? call.symbol.toUpperCase();
+  if (player === "scout_story") {
+    // Same stock, same side, a few days apart: the same bet twice. A different side, or a later stage, is a new card.
+    // A new stage (an institution acted in a headline the desk had not read) is a new card, as it always was.
+    if (!call.direction || /\(stage \d+\)/.test(call.term)) return null;
+    const since = (call.now ?? new Date()).getTime() - STORY_REPEAT_DAYS * 86400_000;
+    return existing.find((e) => e.player === player && e.symbol === sym && e.direction === call.direction && Date.parse(e.createdAt) >= since) ?? null;
+  }
+  if (EXEMPT.includes(player)) return null;
   return existing.find((e) => e.player === player && e.symbol === sym && (!call.direction || e.direction === call.direction)) ?? null;
 }
 

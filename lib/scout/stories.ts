@@ -108,6 +108,10 @@ export interface Story {
   attention?: Attention[];
   /** Measured by code: how much today's headlines repeat the ticker's previous stories (0 new … 1 repeated). */
   staleness?: number | null;
+  /** Set when the story was taken early: a shock headline with the stock already moving this much (%) since the last close. */
+  fastMove?: number;
+  /** Headlines with an institution acting that are newer than the desk's last read of the story (what a new stage needs). */
+  newEscalation?: number;
   /** Mainstream headlines reporting takeover or sale talk about this ticker (short of a signed deal). */
   takeover?: number;
   /** Set by runStories for takeover talk: the company's results date when it falls in the next days. */
@@ -124,6 +128,8 @@ export interface Story {
 }
 
 export interface DetectOptions {
+  /** When the desk last read each story (ISO time, by ticker): escalation in headlines no newer than that is not a new stage. */
+  lastRead?: Record<string, string>;
   /** Trailing daily average of stories per ticker, when known (from stored history). */
   dailyAvg?: Record<string, number>;
   minMainstream?: number;
@@ -138,7 +144,7 @@ export interface DetectOptions {
 
 /** Pure: find the day's stories. Ticker stories need mainstream coverage and shock wording or a spike; macro stories are shock wording across many headlines with few tickers. */
 export function detectStories(items: NewsItem[], opts: DetectOptions = {}): Story[] {
-  const { dailyAvg = {}, minMainstream = 3, minStories = 6, spikeMultiple = 4, maxStories = 8, openTickers = new Set<string>(), building = new Set<string>() } = opts;
+  const { dailyAvg = {}, minMainstream = 3, minStories = 6, spikeMultiple = 4, maxStories = 8, openTickers = new Set<string>(), building = new Set<string>(), lastRead = {} } = opts;
   const byTicker = new Map<string, Story>();
   const macro = new Map<string, Story>();
   for (const n of items) {
@@ -149,13 +155,15 @@ export function detectStories(items: NewsItem[], opts: DetectOptions = {}): Stor
     const h = { at: n.ts, headline: n.headline, source: n.source, symbols: n.symbols };
     if (n.symbols.length > 0 && n.symbols.length <= 6) {
       for (const s of n.symbols) {
-        const t = byTicker.get(s) ?? { key: s, label: s, symbols: [s], stories: 0, mainstream: 0, shockHits: 0, escalationHits: 0, escalation: [], latest: "", headlines: [] };
+        const t: Story = byTicker.get(s) ?? { key: s, label: s, symbols: [s], stories: 0, mainstream: 0, shockHits: 0, escalationHits: 0, newEscalation: 0, escalation: [], latest: "", headlines: [] };
         t.stories++;
         if (n.ts > t.latest) t.latest = n.ts;
         if (main) t.mainstream++;
         if (shock) t.shockHits++;
         if (esc.length) {
           t.escalationHits++;
+          // Only a headline from after the desk's last read of the story can make a new stage.
+          if (!lastRead[s] || n.ts > lastRead[s]) t.newEscalation = (t.newEscalation ?? 0) + 1;
           for (const w of esc) if (!t.escalation.includes(w)) t.escalation.push(w);
         }
         // Takeover talk: one or two companies in the headline (the target, perhaps the buyer), from a source the desk trusts.
@@ -185,7 +193,7 @@ export function detectStories(items: NewsItem[], opts: DetectOptions = {}): Stor
   for (const t of byTicker.values()) {
     const avg = dailyAvg[t.key];
     const spike = avg ? t.stories >= spikeMultiple * avg : false;
-    const newStage = openTickers.has(t.key) && (t.escalationHits >= 1 || building.has(t.key)) && t.mainstream >= 2;
+    const newStage = openTickers.has(t.key) && ((t.newEscalation ?? 0) >= 1 || building.has(t.key)) && t.mainstream >= 2;
     if (newStage || (t.takeover ?? 0) >= 1 || (t.mainstream >= minMainstream && (t.shockHits >= 2 || spike || t.stories >= minStories * 2))) out.push(t);
   }
   for (const m of macro.values()) {
@@ -199,6 +207,27 @@ export function detectStories(items: NewsItem[], opts: DetectOptions = {}): Stor
     .slice(0, maxStories)
     .map((s) => ({ ...s, headlines: s.headlines.slice().sort((a, b) => b.at.localeCompare(a.at)) }))
     .sort((a, b) => b.latest.localeCompare(a.latest));
+}
+
+/** A shock headline on a stock moving this hard is a story at once; at most this many are added per pass. */
+export const STORY_FAST = { movePct: 8, perRun: 2, look: 40 };
+
+/**
+ * Pure: stocks with a shock headline that did not make the cut by headline count but are already moving hard. The
+ * mainstream count takes hours to build (Nutanix, Nov 25 2026: CEO exit and a downgrade at 7:32 AM, down 15% from the
+ * open, first read at 6:35 PM); a big move on a shock headline does not need the wait.
+ */
+export function fastMovers(items: NewsItem[], have: Set<string>, moves: Record<string, number | null | undefined>, cfg = STORY_FAST): Story[] {
+  return detectStories(items, { minMainstream: 0, minStories: 0, maxStories: 400 })
+    .filter((s) => !s.key.startsWith("macro:") && !have.has(s.key) && s.shockHits >= 1 && Math.abs(moves[s.key] ?? 0) >= cfg.movePct)
+    .map((s) => ({ ...s, fastMove: Math.round(moves[s.key]! * 10) / 10 }))
+    .sort((a, b) => Math.abs(b.fastMove) - Math.abs(a.fastMove))
+    .slice(0, cfg.perRun);
+}
+
+/** Pure: the stocks worth a price look for the fast path (a shock headline, not yet a story), most headlines first. */
+export function fastCandidates(items: NewsItem[], have: Set<string>, cfg = STORY_FAST): string[] {
+  return detectStories(items, { minMainstream: 0, minStories: 0, maxStories: 400 }).filter((s) => !s.key.startsWith("macro:") && !have.has(s.key) && s.shockHits >= 1).sort((a, b) => b.stories - a.stories).slice(0, cfg.look).map((s) => s.key);
 }
 
 /** Pure: when no story qualifies, the busiest tickers with the counts the rule looks at (so the run says why). */
@@ -305,7 +334,7 @@ export function buildStoryPrompt(stories: Story[], date: string, preferences: st
   const L = [`Date: ${date}. ${stories.length} stories from the last 24 hours of the news stream.`];
   if (preferences) L.push(`\n${preferences}`);
   for (const s of stories) {
-    L.push(`\n## ${s.key} — ${s.symbols.length ? s.symbols.join(", ") : "macro"}: ${s.stories} headlines, ${s.mainstream} mainstream, ${s.shockHits} with shock wording${s.takeover ? ", takeover or sale talk reported (not a signed deal)" : ""}${s.escalation.length ? `, institutions acting: ${s.escalation.slice(0, 6).join(", ")}` : ""}`);
+    L.push(`\n## ${s.key} — ${s.symbols.length ? s.symbols.join(", ") : "macro"}: ${s.stories} headlines, ${s.mainstream} mainstream, ${s.shockHits} with shock wording${s.takeover ? ", takeover or sale talk reported (not a signed deal)" : ""}${s.fastMove !== undefined ? `, read early because the stock is ${s.fastMove > 0 ? "+" : ""}${s.fastMove}% since its last close on a shock headline (the coverage is still thin: check the headline is real and about this company)` : ""}${s.escalation.length ? `, institutions acting: ${s.escalation.slice(0, 6).join(", ")}` : ""}`);
     if (s.talkLog?.length) L.push(`Takeover reports on ${s.key} in the last 30 days, oldest first: ${s.talkLog.join(" | ")}`);
     if (s.premium) L.push(s.premium);
     if (s.earnings) L.push(s.earnings);
@@ -414,7 +443,17 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
   const openTickers = new Set(events.filter((e) => !e.key.startsWith("macro:")).map((e) => e.key));
   const recentCounts = await store.tickerCounts([...openTickers], addDays(et.date, -6), et.date);
   const building = new Set([...openTickers].filter((t) => coverageTrend(recentCounts.filter((c) => c.symbol === t), et.date).building));
-  const stories = detectStories(items, { dailyAvg, openTickers, building });
+  const lastRead: Record<string, string> = {};
+  for (const e of events) if (!lastRead[e.key] || e.createdAt > lastRead[e.key]) lastRead[e.key] = e.createdAt;
+  const stories = detectStories(items, { dailyAvg, openTickers, building, lastRead });
+  // The fast path: a shock headline on a stock that is already moving hard, before the headline count catches up.
+  try {
+    const have = new Set(stories.map((x) => x.key));
+    const look = fastCandidates(items, have);
+    const snaps = look.length && deps.data.getSnapshots ? await deps.data.getSnapshots(look) : {};
+    const moves = Object.fromEntries(look.map((k) => { const q = (snaps as Record<string, { price: number; prevClose: number | null }>)[k]; return [k, q?.prevClose ? (q.price / q.prevClose - 1) * 100 : null]; }));
+    stories.push(...fastMovers(items, have, moves));
+  } catch { /* the usual path still runs */ }
   const readToday = new Set(events.filter((e) => e.etDate === et.date).map((e) => e.key));
   const storyCounts = await store.tickerCounts(stories.filter((s) => !s.key.startsWith("macro:")).map((s) => s.key), addDays(et.date, -6), et.date);
   for (const s of stories) {
@@ -509,7 +548,7 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
     const story = fresh.find((s) => s.key === t.key);
     if (!story) continue;
     const stageNo = story.stage ?? (story.history?.length ? Math.max(...story.history.map((e) => e.stage)) : 1);
-    await store.addStoryEvent({ etDate: et.date, key: story.key, symbols: story.symbols, stage: stageNo, summary: t.summary, escalation: story.escalation.slice(0, 10), company: t.company || null, people: t.people.slice(0, 3), labels: { novelty: t.novelty, nature: t.nature, complexity: t.complexity, staleness: story.staleness ?? null } }).catch(() => undefined);
+    await store.addStoryEvent({ at: deps.now.toISOString(), etDate: et.date, key: story.key, symbols: story.symbols, stage: stageNo, summary: t.summary, escalation: story.escalation.slice(0, 10), company: t.company || null, people: t.people.slice(0, 3), labels: { novelty: t.novelty, nature: t.nature, complexity: t.complexity, staleness: story.staleness ?? null } }).catch(() => undefined);
     const termKey = story.stage ? `${story.key} (stage ${story.stage})` : story.history?.length && story.coverage?.building ? `${story.key} (building)` : story.key;
     // Public attention for a story seen for the first time, now that the desk has named its people (shown on the Stories page).
     if (!story.attention && (t.people.length || t.company)) story.attention = await publicAttention([...t.people, ...(t.company ? [t.company] : [])], story.history?.[0]?.date ?? et.date, et.date, deps.fetchImpl);
@@ -536,7 +575,8 @@ export function attachHistory(s: Story, events: Array<{ etDate: string; key: str
   const prior = events.filter((e) => e.key === s.key && e.etDate < today).sort((a, b) => a.etDate.localeCompare(b.etDate));
   if (!prior.length) return;
   s.history = prior.map((e) => ({ date: e.etDate, stage: e.stage, summary: e.summary }));
-  if (s.escalationHits > 0) s.stage = Math.max(...prior.map((e) => e.stage)) + 1;
+  // A new stage needs an institution acting in a headline the desk has not read yet (yesterday's "steps down" is not one).
+  if ((s.newEscalation ?? s.escalationHits) > 0) s.stage = Math.max(...prior.map((e) => e.stage)) + 1;
 }
 
 function storyTrigger(s: Story, date: string, role?: string): Signal[] {

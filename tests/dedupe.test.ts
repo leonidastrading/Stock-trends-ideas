@@ -21,9 +21,18 @@ describe("one card per stock and direction per player", () => {
     expect(duplicateOf(existing, { origin: "scout", term: "AAON backlog", symbol: "AAON", direction: "short" })?.cardId).toBe(2);
   });
 
-  it("an excluded card does not block, and the story desk is exempt", () => {
+  it("an excluded card does not block; the story desk may card a new stage, but not repeat a side within days", () => {
     expect(duplicateOf(existing, { origin: "human", term: "inbox: SATS again", symbol: "SATS", direction: "long" })).toBeNull();
-    expect(duplicateOf(existing, { origin: "scout", term: "story: NVDA stage 3", symbol: "NVDA", direction: "long" })).toBeNull();
+    const next = new Date("2026-11-15T11:00:00Z"); // the morning after card 4 (story desk, long NVDA)
+    // A new stage is a new card.
+    expect(duplicateOf(existing, { origin: "scout", term: "story: NVDA (stage 3) → NVDA", symbol: "NVDA", direction: "long", now: next })).toBeNull();
+    // The same story read again, or only building, on the same side: the same bet twice.
+    expect(duplicateOf(existing, { origin: "scout", term: "story: NVDA → NVDA", symbol: "NVDA", direction: "long", now: next })?.cardId).toBe(4);
+    expect(duplicateOf(existing, { origin: "scout", term: "story: NVDA (building) → NVDA", symbol: "NVDA", direction: "long", now: next })?.cardId).toBe(4);
+    // The other side, a week later, or before the side is known: not a repeat.
+    expect(duplicateOf(existing, { origin: "scout", term: "story: NVDA → NVDA", symbol: "NVDA", direction: "short", now: next })).toBeNull();
+    expect(duplicateOf(existing, { origin: "scout", term: "story: NVDA → NVDA", symbol: "NVDA", direction: "long", now: new Date("2026-11-22T11:00:00Z") })).toBeNull();
+    expect(duplicateOf(existing, { origin: "scout", term: "story: NVDA → NVDA", symbol: "NVDA", now: next })).toBeNull();
     expect(duplicateOf(existing, { origin: "human", term: "no ticker", symbol: undefined })).toBeNull();
   });
 

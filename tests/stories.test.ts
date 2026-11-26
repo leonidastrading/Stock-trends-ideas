@@ -107,7 +107,8 @@ describe("story desk end to end", () => {
     expect(events.map((e) => [e.key, e.etDate, e.stage])).toEqual([["UNH", "2026-11-13", 1]]);
     await expect(query(`UPDATE story_events SET summary = 'x'`)).rejects.toThrow(); // append-only
 
-    const next = [n("Three House committees ask UnitedHealth for a briefing on claim denials", ["UNH"]), n("Senators press UnitedHealth after CEO killing", ["UNH"])];
+    // The next morning's headlines (after the desk's first read): an institution acting in them is a new stage.
+    const next = [n("Three House committees ask UnitedHealth for a briefing on claim denials", ["UNH"]), n("Senators press UnitedHealth after CEO killing", ["UNH"])].map((x) => ({ ...x, ts: "2026-11-14T13:00:00Z" }));
     const prompts: string[] = [];
     const data: MarketData = {
       getNews: async (symbols) => (symbols.length ? [] : next),

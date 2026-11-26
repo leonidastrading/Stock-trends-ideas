@@ -75,6 +75,8 @@ export async function currentVersion(settings: store.ScoutSettings): Promise<sto
   return store.ensureVersion(versionHash(spec), settings.model, settings.effort, spec);
 }
 
+const playerIsStory = (input: { origin: string; term: string }) => input.origin === "scout" && input.term.startsWith("story: ");
+
 /** Record each source's status on the health panel. */
 export async function recordHealth(results: SourceResult[]): Promise<void> {
   for (const r of results) await store.saveHealth(r.source, r.status, r.detail ?? null);
@@ -131,7 +133,8 @@ async function researchNow(input: ResearchInput, deps: ResearchDeps): Promise<Re
   // One card per stock and direction per player (14 days): skip a repeat before spending anything on it.
   const { DUPLICATE_DAYS, duplicateOf, existingCalls } = await import("./dedupe");
   const recentCalls = async () => existingCalls(...(await Promise.all([store.cardsSince(DUPLICATE_DAYS), store.candidatesSince(DUPLICATE_DAYS), store.allTracks()])));
-  const early = duplicateOf(await recentCalls(), { origin: input.origin, term: input.term, symbol: input.tickersHint[0] });
+  // The side is known up front for a desk that proposes it (the story desk): its repeat is caught before the model is paid.
+  const early = duplicateOf(await recentCalls(), { origin: input.origin, term: input.term, symbol: input.tickersHint[0], direction: playerIsStory(input) ? input.proposedDirection : undefined, now: deps.now });
   if (early) {
     const reason = `duplicate: card #${early.cardId} (${early.createdAt.slice(0, 10)}) already calls ${early.direction} ${early.symbol} for the same player`;
     return { outcome: "rejected", reason, candidate: await store.addCandidate({ ...base, outcome: "rejected", reason }) };
@@ -244,7 +247,7 @@ async function researchNow(input: ResearchInput, deps: ResearchDeps): Promise<Re
   if (identity.noValidTicker) gated = { ...gated, status: "not_promoted" as const, notes: [...gated.notes, "not promoted: no ticker that is still the named company's stock"] };
 
   // The model may have chosen a different stock than the hint, or a parallel import may have just logged the same call.
-  const late = duplicateOf(await recentCalls(), { origin: input.origin, term: input.term, symbol: gated.card.tickers[0].symbol, direction: gated.card.direction });
+  const late = duplicateOf(await recentCalls(), { origin: input.origin, term: input.term, symbol: gated.card.tickers[0].symbol, direction: gated.card.direction, now: deps.now });
   if (late) {
     const reason = `duplicate: card #${late.cardId} (${late.createdAt.slice(0, 10)}) already calls ${late.direction} ${late.symbol} for the same player`;
     return { outcome: "rejected", reason, candidate: await store.addCandidate({ ...base, outcome: "rejected", reason }) };

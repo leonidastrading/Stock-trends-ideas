@@ -547,8 +547,8 @@ export async function storyEventsSince(from: string): Promise<StoryEvent[]> {
 }
 
 /** Record that the desk read a story today; once per key per day (later reads the same day are ignored). */
-export async function addStoryEvent(e: { etDate: string; key: string; symbols: string[]; stage: number; summary: string; escalation: string[]; company?: string | null; people?: string[]; labels?: unknown }): Promise<void> {
-  await q(`INSERT INTO story_events (et_date, key, symbols, stage, summary, escalation, company, people, labels) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (key, et_date) DO NOTHING`, [e.etDate, e.key, e.symbols, e.stage, e.summary, e.escalation, e.company ?? null, e.people ?? [], e.labels ? JSON.stringify(e.labels) : null]);
+export async function addStoryEvent(e: { etDate: string; key: string; symbols: string[]; stage: number; summary: string; escalation: string[]; company?: string | null; people?: string[]; labels?: unknown; /** When the desk read it (headlines after this are what a new stage needs). */ at?: string }): Promise<void> {
+  await q(`INSERT INTO story_events (et_date, key, symbols, stage, summary, escalation, company, people, labels, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10::timestamptz, now())) ON CONFLICT (key, et_date) DO NOTHING`, [e.etDate, e.key, e.symbols, e.stage, e.summary, e.escalation, e.company ?? null, e.people ?? [], e.labels ? JSON.stringify(e.labels) : null, e.at ?? null]);
 }
 
 // ------------------------------------------------------------ chatter test

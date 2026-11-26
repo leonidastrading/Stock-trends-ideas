@@ -25,6 +25,22 @@ describe("story stages (the NVDA shape)", () => {
     expect(s[0]).toMatchObject({ key: "NVDA", escalationHits: 2 });
   });
 
+  it("headlines the desk has already read cannot make a new stage the next morning", () => {
+    // Nutanix, Nov 25-26 2026: the CEO exit was read in the evening; by morning the same headlines were still inside the 24-hour window.
+    const old = [news("Nutanix CEO resigns; board names interim CEO"), news("Nutanix board launches search after CEO resigns", "bloomberg")].map((x) => ({ ...x, ts: "2026-11-25T12:32:00Z" }));
+    const open = { openTickers: new Set(["NVDA"]) };
+    expect(detectStories(old, { ...open, lastRead: { NVDA: "2026-11-25T23:35:00Z" } })).toHaveLength(0);
+    // A headline from after the read, with an institution acting, is a new stage.
+    const fresh = [...old, { ...news("Nutanix board hires law firm to review CEO exit", "wsj"), ts: "2026-11-26T10:00:00Z" }];
+    const [s] = detectStories(fresh, { ...open, lastRead: { NVDA: "2026-11-25T23:35:00Z" } });
+    expect(s).toMatchObject({ key: "NVDA", escalationHits: 3, newEscalation: 1 });
+    attachHistory(s, [{ etDate: "2026-11-25", key: "NVDA", stage: 1, summary: "x" }], "2026-11-26");
+    expect(s.stage).toBe(2);
+    // Without anything new, the earlier reads are attached but no stage is claimed.
+    const again = detectStories(old, { ...open, minMainstream: 0, minStories: 0, lastRead: { NVDA: "2026-11-25T23:35:00Z" } }).find((x) => x.key === "NVDA");
+    if (again) { attachHistory(again, [{ etDate: "2026-11-25", key: "NVDA", stage: 1, summary: "x" }], "2026-11-26"); expect(again.stage).toBeUndefined(); }
+  });
+
   it("numbers stages from the desk's earlier reads and shows them to the desk", () => {
     const [s] = detectStories([news("Nvidia board hires former U.S. attorney to probe Huang"), news("Nvidia shares drop as board opens probe", "cnbc"), news("Board investigation weighs on Nvidia", "wsj")], { openTickers: new Set(["NVDA"]) });
     attachHistory(s, [{ etDate: "2026-10-28", key: "NVDA", stage: 1, summary: "NYT: US intelligence links a Huang contact to Chinese spying; Nvidia denies." }, { etDate: "2026-11-09", key: "NVDA", stage: 9, summary: "today's read is not history" }], "2026-11-09");
