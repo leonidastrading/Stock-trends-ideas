@@ -90,14 +90,19 @@ export async function PUT(request: Request) {
     readImage(media, `This ${what} comes from a dump of posts and articles being read for market rumors. Transcribe the claims, names, companies and numbers it contains.`, { callModel: defaultDeps().callModel, now: new Date() });
   try {
     if ((request.headers.get("content-type") ?? "").includes("multipart/form-data")) {
-      const file = (await request.formData()).get("file");
+      const formData = await request.formData();
+      const file = formData.get("file");
+      // A long scan arrives a few pages at a time ("pages 5-8 of 40"): read those pages in full, not as one summary.
+      const part = String(formData.get("part") ?? "").replace(/[^\w ,-]/g, "").slice(0, 40);
       if (!(file instanceof File) || !file.size) return NextResponse.json({ ok: false, errors: ["no file"] }, { status: 422 });
       const bytes = new Uint8Array(await file.arrayBuffer());
       const { fileText } = await import("@/lib/scout/inbox");
       const text = /\.pdf$/i.test(file.name) ? await fileText(file.name, bytes).catch(() => "") : "";
       if (text.replace(/\s+/g, "").length >= 50) return NextResponse.json({ ok: true, text, via: "text layer" });
       if (!/\.pdf$/i.test(file.name)) return NextResponse.json({ ok: false, errors: ["send a PDF here, or an image as JSON"] }, { status: 422 });
-      const r = await read({ mediaType: "application/pdf", data: Buffer.from(bytes).toString("base64") }, "scanned PDF");
+      const r = part
+        ? await readImage({ mediaType: "application/pdf", data: Buffer.from(bytes).toString("base64") }, `These are ${part} of a scanned document a trader uploaded for research. Transcribe what matters on these pages in full: companies, tickers, drugs and trials, numbers, dates and claims, tables included. For this document text_in_image may run to about 4,000 characters.`, { callModel: defaultDeps().callModel, now: new Date() })
+        : await read({ mediaType: "application/pdf", data: Buffer.from(bytes).toString("base64") }, "scanned PDF");
       return NextResponse.json({ ok: true, text: imageAsText(r), via: "read by the model (scanned)" });
     }
     const body = z.object({ mediaType: z.enum(IMAGE_TYPES), data: z.string().min(100).max(6_000_000) }).safeParse(await request.json().catch(() => null));

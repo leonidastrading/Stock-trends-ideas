@@ -1,6 +1,7 @@
 /**
  * Reading uploaded files in the browser, shared by the Rumors and Investigate uploads: zips opened (nested too),
- * text and Office files read here, PDFs read here (scanned ones on the server, where the model reads the pages),
+ * text and Office files read here, PDFs read here (scanned ones on the server, where the model reads the pages, a
+ * long or heavy scan a few pages at a time),
  * images shrunk to JPEG and read by the model. Each file reports its progress as a step.
  */
 import { decodeText, kindOf, looksBinary, officeText, unzipFiles } from "./unpack";
@@ -36,18 +37,40 @@ async function readOnServer(init: RequestInit): Promise<string> {
   return String(j.text ?? "");
 }
 
-/** A PDF's text: read in the browser when it has a text layer, else on the server (scanned pages go to the model). */
-async function pdfText(name: string, bytes: Uint8Array): Promise<string> {
+/** A PDF's text: read in the browser when it has a text layer, else on the server (scanned pages go to the model, a long or heavy scan in parts). */
+async function pdfText(name: string, bytes: Uint8Array, onNote: (note: string) => void = () => undefined): Promise<string> {
   try {
     const { extractText, getDocumentProxy } = await import("unpdf");
     const { text } = await extractText(await getDocumentProxy(bytes.slice()), { mergePages: true });
     const t = Array.isArray(text) ? text.join("\n") : text;
     if (t.replace(/\s+/g, "").length >= 50) return t;
   } catch { /* fall back to the server */ }
-  if (bytes.length > MAX_SERVER_PDF) throw new Error(`scanned PDF over ${MAX_SERVER_PDF / 1e6} MB: split it or upload the pages as images`);
-  const form = new FormData();
-  form.set("file", new Blob([bytes.slice()], { type: "application/pdf" }), name);
-  return readOnServer({ body: form });
+  const whole = () => {
+    const form = new FormData();
+    form.set("file", new Blob([bytes.slice()], { type: "application/pdf" }), name);
+    return readOnServer({ body: form });
+  };
+  // A scan: split it, so a heavy file fits the upload limit and a long one is read a few pages at a time.
+  const { pagesLabel, splitPdf } = await import("./split-pdf");
+  const split = await splitPdf(bytes).catch(() => null);
+  if (!split) {
+    if (bytes.length > MAX_SERVER_PDF) throw new Error(`scanned PDF over ${MAX_SERVER_PDF / 1e6} MB that could not be split (protected or damaged?): upload the pages as images`);
+    return whole();
+  }
+  if (split.parts.length <= 1 && bytes.length <= MAX_SERVER_PDF && !split.unread) return whole();
+  if (!split.parts.length) throw new Error("scanned PDF whose pages are each over the upload limit: upload the pages as smaller images");
+  const texts: string[] = [];
+  let failed = 0;
+  for (const [k, part] of split.parts.entries()) {
+    onNote(`scanned: the model is reading ${pagesLabel(part)} of ${split.pages} (part ${k + 1} of ${split.parts.length})`);
+    const form = new FormData();
+    form.set("file", new Blob([part.bytes.slice()], { type: "application/pdf" }), name);
+    form.set("part", `${pagesLabel(part)} of ${split.pages}`);
+    try { texts.push(`[${name}, ${pagesLabel(part)}]\n${await readOnServer({ body: form })}`); } catch (err) { failed++; if (!texts.length && k === split.parts.length - 1) throw err; }
+  }
+  const left = [split.unread ? `the last ${split.unread} pages were not read (only the first ${split.parts.at(-1)!.to} are)` : "", split.tooBig.length ? `page${split.tooBig.length === 1 ? "" : "s"} ${split.tooBig.join(", ")} too large to send` : "", failed ? `${failed} part${failed === 1 ? "" : "s"} could not be read` : ""].filter(Boolean);
+  if (left.length) texts.push(`[${name}: ${left.join("; ")}]`);
+  return texts.join("\n\n");
 }
 
 export type Step = { name: string; state: "waiting" | "reading" | "done" | "skipped" | "failed"; note?: string };
@@ -79,7 +102,7 @@ export async function readFiles(files: File[], onSteps: (steps: Step[]) => void)
         parts.push({ name: x.name, text: t });
       } else if (kind === "pdf") {
         update(i, { state: "reading" });
-        parts.push({ name: x.name, text: await pdfText(x.name, x.bytes) });
+        parts.push({ name: x.name, text: await pdfText(x.name, x.bytes, (note) => update(i, { state: "reading", note })) });
       } else if (kind === "office") {
         const t = officeText(x.name, x.bytes);
         if (!t) { update(i, { state: "skipped", note: "no text in it" }); continue; }
