@@ -113,6 +113,8 @@ export async function primaryFilings(items: NewsItem[], deps: { data: MarketData
     const text = await filingText(n.url, ua, deps.fetchImpl).catch(() => null);
     if (!text) continue;
     const why = materialReason(itemsOf(n), text);
+    // One line per filing opened, so a coding session can see what the desk was handed and what was passed over.
+    console.log(`primary filing ${sym} (items ${itemsOf(n).join(", ")}): ${why ? `handed to the story desk: ${why}` : "routine, passed over"}`);
     if (!why) continue;
     out.set(sym, { what: `8-K filed ${new Date(n.ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })} ET: ${why}`, url: n.url, text });
     await store.cachePut(countKey, { n: ++used }).catch(() => undefined);
