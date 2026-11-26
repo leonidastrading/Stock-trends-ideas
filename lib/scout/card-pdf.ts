@@ -12,7 +12,7 @@ import { etLabel } from "../time";
 
 const hex = (h: string): RGB => rgb(parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255);
 /** The site's dark theme (app/globals.css). */
-export const PDF_COLORS = { bg: "#121211", panel: "#1a1a19", border: "#2f2f2d", grid: "#262624", text: "#f0efec", secondary: "#c3c2b7", muted: "#94938b", accent: "#3987e5", pos: "#4cc38a", warn: "#f5a524", neg: "#f2706b" };
+export const PDF_COLORS = { series1: "#3987e5", series2: "#d95926", series3: "#199e70", bg: "#121211", panel: "#1a1a19", border: "#2f2f2d", grid: "#262624", text: "#f0efec", secondary: "#c3c2b7", muted: "#94938b", accent: "#3987e5", pos: "#4cc38a", warn: "#f5a524", neg: "#f2706b" };
 const C = Object.fromEntries(Object.entries(PDF_COLORS).map(([k, v]) => [k, hex(v)])) as Record<keyof typeof PDF_COLORS, RGB>;
 
 const SWAPS: Array<[RegExp, string]> = [[/[→⇒➜]/g, "->"], [/←/g, "<-"], [/≥/g, ">="], [/≤/g, "<="], [/−/g, "-"], [/×/g, "x"], [/≈/g, "~"], [/[    ]/g, " "], [/[​‌‍﻿]/g, ""], [/[✓✔]/g, "yes"], [/[✗✘]/g, "no"], [/↑/g, "up"], [/↓/g, "down"]];
@@ -53,8 +53,10 @@ export interface CardPdfInput {
   about: string | null; sectorLabel: string | null; companyName: string | null;
   /** Where the idea came from, in a word or two. */
   source: string | null;
-  /** Daily closes for the chart (oldest first), and the paper result so far, when prices are at hand. */
-  bars: Array<{ date: string; c: number }>;
+  /** Daily bars for the chart (oldest first), and the paper result so far, when prices are at hand. */
+  bars: Array<{ date: string; c: number; o?: number; h?: number; l?: number; v?: number }>;
+  /** The company's income statement and EPS against the estimate (quarterly unless asked otherwise), when on file. */
+  fundamentals?: { period: "annual" | "quarter"; income: Array<{ label: string; date: string; revenue: number | null; netIncome: number | null; margin: number | null }>; eps: Array<{ label: string; date: string; actual: number | null; estimate: number | null }>; source?: string | null } | null;
   result: { ret: number; spy: number | null; vsSpy: number | null; closed: boolean } | null;
   siteUrl: string | null; now: Date;
 }
@@ -62,6 +64,24 @@ export interface CardPdfInput {
 const W = 612, H = 792, M = 40, INNER = W - 2 * M;
 const pct = (x: number | null | undefined, d = 1) => (x === null || x === undefined ? "-" : `${x >= 0 ? "+" : "-"}${Math.abs(x).toFixed(d)}%`);
 const day = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+
+/** Pure: an amount in short form ("11M", "-83M", "1.2B"). */
+export function shortMoney(x: number | null): string {
+  if (x === null) return "-";
+  if (x === 0) return "0";
+  const a = Math.abs(x), sign = x < 0 ? "-" : "";
+  return a >= 1e12 ? `${sign}${(a / 1e12).toFixed(1)}T` : a >= 1e9 ? `${sign}${(a / 1e9).toFixed(1)}B` : a >= 1e6 ? `${sign}${(a / 1e6).toFixed(a < 1e7 ? 1 : 0)}M` : `${sign}${(a / 1e3).toFixed(0)}K`;
+}
+
+/** Pure: a few round axis values from lo to hi (0 included when the range crosses it). */
+export function axisTicks(lo: number, hi: number): number[] {
+  const span = hi - lo || Math.abs(hi) || 1;
+  const step0 = span / 3, mag = 10 ** Math.floor(Math.log10(step0));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((m) => m >= step0) ?? 10 * mag;
+  const out: number[] = [];
+  for (let v = Math.floor(lo / step) * step; out.length < 12; v += step) { out.push(Math.round(v * 1e6) / 1e6); if (v >= hi - step * 1e-9) break; }
+  return out;
+}
 
 /** The card as PDF bytes. */
 export async function cardPdf(input: CardPdfInput): Promise<Uint8Array> {
@@ -154,12 +174,13 @@ export async function cardPdf(input: CardPdfInput): Promise<Uint8Array> {
   // The chart: closes, the paper entry as a dashed line, the first and last price.
   const bars = input.bars.filter((b) => b.c > 0);
   if (bars.length >= 10) {
-    const ch = 150, x0 = M + 8, x1 = W - M - 52, top = y - 22, bottom = y - ch + 16;
+    const candles = bars.every((b) => b.o !== undefined && b.h !== undefined && b.l !== undefined && b.o > 0);
+    const ch = 176, x0 = M + 10, x1 = W - M - 52, top = y - 24, bottom = y - ch + 28;
     need(ch + 10);
     page.drawRectangle({ x: M, y: y - ch, width: INNER, height: ch, color: C.panel, borderColor: C.border, borderWidth: 0.8 });
-    page.drawText(safe(`${c.primaryTicker} · daily closes, ${day(bars[0].date)} to ${day(bars.at(-1)!.date)}`), { x: M + 8, y: y - 13, size: 8, font: bold, color: C.muted });
+    page.drawText(safe(`${c.primaryTicker} · daily, ${day(bars[0].date)} to ${day(bars.at(-1)!.date)} · last $${bars.at(-1)!.c.toFixed(2)}`), { x: M + 8, y: y - 13, size: 8, font: bold, color: C.muted });
     const entry = track?.entryDate && track.entryPrice ? { date: track.entryDate, price: track.entryPrice } : null;
-    const values = [...bars.map((b) => b.c), ...(entry ? [entry.price] : [])];
+    const values = [...bars.flatMap((b) => (candles ? [b.h!, b.l!] : [b.c])), ...(entry ? [entry.price] : [])];
     const lo = Math.min(...values), hi = Math.max(...values), span = hi - lo || 1;
     const px = (i: number) => x0 + (i / (bars.length - 1)) * (x1 - x0), py = (v: number) => bottom + ((v - lo) / span) * (top - bottom);
     for (const g of [0, 0.5, 1]) {
@@ -167,7 +188,18 @@ export async function cardPdf(input: CardPdfInput): Promise<Uint8Array> {
       page.drawLine({ start: { x: x0, y: py(v) }, end: { x: x1, y: py(v) }, thickness: 0.5, color: C.grid });
       page.drawText(`$${v.toFixed(v < 10 ? 2 : v < 100 ? 1 : 0)}`, { x: x1 + 6, y: py(v) - 3, size: 7.5, font: regular, color: C.muted });
     }
-    for (let i = 1; i < bars.length; i++) page.drawLine({ start: { x: px(i - 1), y: py(bars[i - 1].c) }, end: { x: px(i), y: py(bars[i].c) }, thickness: 1.2, color: C.text });
+    if (candles) {
+      // Candles like the card's chart: green up, red down, with the day's range as a wick; volume along the bottom.
+      const cw = Math.max(0.7, Math.min(5, ((x1 - x0) / bars.length) * 0.68));
+      const vmax = Math.max(...bars.map((b) => b.v ?? 0));
+      bars.forEach((b, i) => {
+        const up = b.c >= b.o!, col = up ? C.pos : C.neg, x = px(i);
+        if (vmax > 0 && b.v) page.drawRectangle({ x: x - cw / 2, y: bottom - 12, width: cw, height: Math.max(0.3, (b.v / vmax) * 14), color: col, opacity: 0.35 });
+        page.drawLine({ start: { x, y: py(b.l!) }, end: { x, y: py(b.h!) }, thickness: Math.min(0.7, cw / 2), color: col });
+        const y0 = py(Math.min(b.o!, b.c)), bh = Math.max(0.5, Math.abs(py(b.c) - py(b.o!)));
+        page.drawRectangle({ x: x - cw / 2, y: y0, width: cw, height: bh, color: col });
+      });
+    } else for (let i = 1; i < bars.length; i++) page.drawLine({ start: { x: px(i - 1), y: py(bars[i - 1].c) }, end: { x: px(i), y: py(bars[i].c) }, thickness: 1.2, color: C.text });
     if (entry) {
       page.drawLine({ start: { x: x0, y: py(entry.price) }, end: { x: x1, y: py(entry.price) }, thickness: 0.9, color: C.accent, dashArray: [4, 3] });
       const at = bars.findIndex((b) => b.date >= entry.date);
@@ -177,6 +209,111 @@ export async function cardPdf(input: CardPdfInput): Promise<Uint8Array> {
       page.drawText(label, { x: x0 + 4, y: py(entry.price) + (py(entry.price) > top - 12 ? -10 : 4), size: 7.5, font: regular, color: C.accent });
     }
     y -= ch + 12;
+  }
+
+  // Financials: revenue and net income as bars, net margin as a line, EPS against the estimate, then the numbers.
+  const f = input.fundamentals;
+  const inc = (f?.income ?? []).filter((r) => r.revenue !== null || r.netIncome !== null).slice(-6);
+  const eps = (f?.eps ?? []).filter((r) => r.actual !== null || r.estimate !== null).slice(-6);
+  if (f && (inc.length || eps.length)) {
+    const fh = 150, gap = 8, cwid = (INNER - 2 * gap) / 3;
+    need(fh + 22 + (inc.length ? 16 + inc.length * 13 : 0));
+    page.drawText(safe(`FINANCIALS · ${f.period === "quarter" ? "by quarter" : "by fiscal year"}${f.source ? ` · ${f.source}` : ""}`, bold), { x: M, y: y - 9, size: 8.5, font: bold, color: C.muted });
+    y -= 16;
+    const frame = (i: number, title: string, sub: string) => {
+      const x = M + i * (cwid + gap);
+      page.drawRectangle({ x, y: y - fh, width: cwid, height: fh, color: C.panel, borderColor: C.border, borderWidth: 0.8 });
+      page.drawText(safe(title, bold), { x: x + 8, y: y - 13, size: 8, font: bold, color: C.text });
+      if (sub) page.drawText(safe(sub), { x: x + 8, y: y - 23, size: 6.8, font: regular, color: C.muted });
+      return { left: x + 34, right: x + cwid - 8, top: y - 34, bottom: y - fh + 34, x };
+    };
+    const scale = (vals: number[], box: { top: number; bottom: number }) => {
+      const tk = axisTicks(Math.min(0, ...vals), Math.max(0, ...vals));
+      const lo = tk[0], hi = tk[tk.length - 1];
+      return { tk, at: (v: number) => box.bottom + ((v - lo) / (hi - lo || 1)) * (box.top - box.bottom) };
+    };
+    const axis = (box: { left: number; right: number }, tk: number[], at: (v: number) => number, fmt: (v: number) => string) => {
+      for (const v of tk) {
+        page.drawLine({ start: { x: box.left, y: at(v) }, end: { x: box.right, y: at(v) }, thickness: v === 0 ? 0.8 : 0.4, color: v === 0 ? C.border : C.grid });
+        const t = safe(fmt(v));
+        page.drawText(t, { x: box.left - 4 - regular.widthOfTextAtSize(t, 6.5), y: at(v) - 2.2, size: 6.5, font: regular, color: C.muted });
+      }
+    };
+    const xlabel = (box: { bottom: number }, x: number, text: string) => { const t = safe(text); page.drawText(t, { x: x - regular.widthOfTextAtSize(t, 6.5) / 2, y: box.bottom - 11, size: 6.5, font: regular, color: C.muted }); };
+    const legend = (box: { x: number }, items: Array<[string, RGB, boolean]>) => {
+      let lx = box.x + 8;
+      for (const [label, col, ring] of items) {
+        if (ring) page.drawCircle({ x: lx + 3, y: y - fh + 7.5, size: 2.6, borderColor: col, borderWidth: 1 }); else page.drawRectangle({ x: lx, y: y - fh + 5, width: 6, height: 5, color: col });
+        page.drawText(label, { x: lx + 9, y: y - fh + 5, size: 6.5, font: regular, color: C.muted });
+        lx += 15 + regular.widthOfTextAtSize(label, 6.5);
+      }
+    };
+    // Revenue and net income.
+    const b1 = frame(0, "Revenue and net income", "");
+    if (inc.length) {
+      const { tk, at } = scale(inc.flatMap((r) => [r.revenue ?? 0, r.netIncome ?? 0]), b1);
+      axis(b1, tk, at, shortMoney);
+      const gw = (b1.right - b1.left) / inc.length, bw = Math.min(11, (gw - 6) / 2);
+      inc.forEach((r, i) => {
+        const cx = b1.left + gw * i + gw / 2;
+        for (const [v, col, dx] of [[r.revenue, C.series1, -bw - 0.6], [r.netIncome, C.series2, 0.6]] as Array<[number | null, RGB, number]>) {
+          if (v === null || v === 0) continue;
+          page.drawRectangle({ x: cx + dx, y: Math.min(at(0), at(v)), width: bw, height: Math.max(0.6, Math.abs(at(v) - at(0))), color: col });
+        }
+        xlabel(b1, cx, r.label);
+      });
+      legend(b1, [["Revenue", C.series1, false], ["Net income", C.series2, false]]);
+    }
+    // Net margin.
+    const b2 = frame(1, "Net margin", "net income / revenue");
+    const mg = inc.filter((r) => r.margin !== null);
+    if (mg.length >= 2) {
+      const { tk, at } = scale(mg.map((r) => r.margin!), b2);
+      axis(b2, tk, at, (v) => `${v}%`);
+      const gw = (b2.right - b2.left) / mg.length, xi = (i: number) => b2.left + gw * i + gw / 2;
+      mg.forEach((r, i) => {
+        if (i) page.drawLine({ start: { x: xi(i - 1), y: at(mg[i - 1].margin!) }, end: { x: xi(i), y: at(r.margin!) }, thickness: 1.3, color: C.series3 });
+        xlabel(b2, xi(i), r.label);
+      });
+      mg.forEach((r, i) => page.drawCircle({ x: xi(i), y: at(r.margin!), size: 2.2, color: C.series3 }));
+      for (const i of [0, mg.length - 1]) { const t = `${mg[i].margin}%`; page.drawText(t, { x: Math.min(b2.right - bold.widthOfTextAtSize(t, 6.8), Math.max(b2.left, xi(i) - bold.widthOfTextAtSize(t, 6.8) / 2)), y: at(mg[i].margin!) + 4.5, size: 6.8, font: bold, color: C.text }); }
+    } else page.drawText("Not enough periods for a margin line.", { x: b2.x + 8, y: y - 60, size: 7.5, font: italic, color: C.muted });
+    // EPS against the estimate.
+    const both = eps.filter((r) => r.actual !== null && r.estimate !== null);
+    const b3 = frame(2, "EPS", both.length ? `beat the estimate ${both.filter((r) => r.actual! >= r.estimate!).length} of the last ${both.length}` : "actual and estimate");
+    if (eps.length) {
+      const { tk, at } = scale(eps.flatMap((r) => [r.actual, r.estimate]).filter((v): v is number => v !== null), b3);
+      axis(b3, tk, at, (v) => v.toFixed(2));
+      const gw = (b3.right - b3.left) / eps.length;
+      eps.forEach((r, i) => {
+        const cx = b3.left + gw * i + gw / 2;
+        if (r.estimate !== null) page.drawCircle({ x: cx, y: at(r.estimate), size: 3.4, borderColor: C.secondary, borderWidth: 1.1 });
+        if (r.actual !== null) page.drawCircle({ x: cx, y: at(r.actual), size: 3, color: C.series1 });
+        xlabel(b3, cx, r.label === "next" ? "next" : r.label);
+      });
+      legend(b3, [["Actual", C.series1, false], ["Estimate", C.secondary, true]]);
+    } else page.drawText("No EPS on file.", { x: b3.x + 8, y: y - 60, size: 7.5, font: italic, color: C.muted });
+    y -= fh + 10;
+    // The numbers themselves, newest last.
+    const labels = [...new Set([...inc.map((r) => r.label), ...eps.map((r) => r.label)])].filter((l) => l !== "next");
+    if (labels.length) {
+      const cols = [M, M + 96, M + 186, M + 276, M + 366, M + 456];
+      const head = [f.period === "quarter" ? "QUARTER" : "YEAR", "REVENUE", "NET INCOME", "NET MARGIN", "EPS", "EPS ESTIMATE"];
+      need(15 + labels.length * 13);
+      head.forEach((h, i) => page.drawText(h, { x: cols[i], y: y - 8, size: 6.8, font: bold, color: C.muted }));
+      y -= 12;
+      page.drawLine({ start: { x: M, y }, end: { x: W - M, y }, thickness: 0.5, color: C.border });
+      y -= 3;
+      for (const l of labels) {
+        const r = inc.find((x) => x.label === l), e = eps.find((x) => x.label === l);
+        const cells: Array<[string, RGB]> = [[l, C.text], [r ? shortMoney(r.revenue) : "-", C.text], [r ? shortMoney(r.netIncome) : "-", r?.netIncome != null && r.netIncome < 0 ? C.neg : C.text], [r?.margin != null ? `${r.margin}%` : "-", C.secondary],
+          [e?.actual != null ? e.actual.toFixed(2) : "-", e?.actual != null && e.estimate != null ? (e.actual >= e.estimate ? C.pos : C.neg) : C.text], [e?.estimate != null ? e.estimate.toFixed(2) : "-", C.secondary]];
+        need(13);
+        cells.forEach(([t, col], i) => page.drawText(safe(t), { x: cols[i], y: y - 9, size: 9, font: i === 0 ? bold : regular, color: col }));
+        y -= 13;
+      }
+      y -= 8;
+    }
   }
 
   // The body: a label and its text, like the card's own list.

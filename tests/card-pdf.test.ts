@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { describe, expect, it } from "vitest";
-import { cardPdf, cardPdfName, pdfSafe, wrapText, type CardPdfInput } from "@/lib/scout/card-pdf";
+import { axisTicks, cardPdf, cardPdfName, pdfSafe, shortMoney, wrapText, type CardPdfInput } from "@/lib/scout/card-pdf";
 import type { StoredCard, Track } from "@/lib/scout/store";
 
 const card = {
@@ -26,8 +26,14 @@ const card = {
   },
 } as unknown as StoredCard;
 const track = { cardId: 377, symbol: "SNY", sectorEtf: "XLV", direction: "short", cardDate: "2026-11-24", entryDate: "2026-11-24", entryPrice: 50.3, spyEntry: 700, sectorEntry: 150, deadlineDate: "2026-12-24", exitDate: null, exitPrice: null, spyExit: null, sectorExit: null, exitReason: null, maxDrawdownPct: -8, tappedAt: null, swingResponse: null } as unknown as Track;
-const bars = Array.from({ length: 150 }, (_, i) => ({ date: new Date(Date.UTC(2026, 5, 1 + i)).toISOString().slice(0, 10), c: i < 140 ? 44 + 4 * Math.sin(i / 9) + i * 0.02 : i < 148 ? 47 - (i - 140) * 0.1 : i === 148 ? 51.9 : 54.39 }));
-const input: CardPdfInput = { card, track, review: null, about: "Sanofi is a French multinational pharmaceutical company that makes prescription medicines and vaccines.", sectorLabel: "Health care", companyName: "Sanofi", source: "News scan", bars, result: { ret: -0.081, spy: 0.004, vsSpy: -0.077, closed: false }, siteUrl: "https://example.com", now: new Date("2026-11-26T01:55:00Z") };
+const closes = Array.from({ length: 178 }, (_, i) => (i < 168 ? 44 + 4 * Math.sin(i / 9) + i * 0.02 : i < 176 ? 47 - (i - 168) * 0.1 : i === 176 ? 51.9 : 54.39));
+const bars = closes.map((c, i) => { const o = i ? closes[i - 1] + (i % 3 - 1) * 0.3 : c; return { date: new Date(Date.UTC(2026, 5, 1 + i)).toISOString().slice(0, 10), c, o, h: Math.max(o, c) + 0.6, l: Math.min(o, c) - 0.5, v: 1e6 * (1 + (i % 7) / 3) + (i > 175 ? 6e6 : 0) }; });
+const fundamentals = {
+  period: "quarter" as const, source: "SEC filings (XBRL) and Finnhub",
+  income: [["Q2 '25", 8.1e6, -52e6], ["Q3 '25", 7.9e6, -54e6], ["Q1 '26", 6.5e6, -61e6], ["Q2 '26", 5.2e6, -67e6], ["Q3 '26", 4.0e6, -83.1e6]].map(([label, revenue, netIncome], i) => ({ label: label as string, date: `2026-0${i + 1}-30`, revenue: revenue as number, netIncome: netIncome as number, margin: Math.round(((netIncome as number) / (revenue as number)) * 1000) / 10 })),
+  eps: [["Q1 '26", -1.06, -0.51], ["Q2 '26", -0.52, null], ["Q3 '26", -0.68, -0.56]].map(([label, actual, estimate], i) => ({ label: label as string, date: `2026-0${i + 4}-15`, actual: actual as number, estimate: estimate as number | null })),
+};
+const input: CardPdfInput = { card, track, review: null, about: "Sanofi is a French multinational pharmaceutical company that makes prescription medicines and vaccines.", sectorLabel: "Health care", companyName: "Sanofi", source: "News scan", bars, fundamentals, result: { ret: -0.081, spy: 0.004, vsSpy: -0.077, closed: false }, siteUrl: "https://example.com", now: new Date("2026-11-26T01:55:00Z") };
 
 describe("a card as a PDF", () => {
   it("swaps or drops what the PDF's fonts cannot draw, and wraps to the width", async () => {
@@ -43,6 +49,12 @@ describe("a card as a PDF", () => {
     expect(wrapText("https://example.com/a-very-long-address-that-does-not-fit", font, 10, 80).join("")).toBe("https://example.com/a-very-long-address-that-does-not-fit");
   });
 
+  it("short amounts and round axis values for the financial charts", () => {
+    expect([shortMoney(11e6), shortMoney(-83.1e6), shortMoney(4e6), shortMoney(1.25e9), shortMoney(0), shortMoney(null), shortMoney(350_000)]).toEqual(["11M", "-83M", "4.0M", "1.3B", "0", "-", "350K"]);
+    expect(axisTicks(-83e6, 8e6)).toEqual([-100e6, -50e6, 0, 50e6]);
+    expect(axisTicks(-1.06, 0)).toEqual([-1.5, -1, -0.5, 0]);
+  });
+
   it("is a real PDF with the card in it, with or without prices and a paper track", async () => {
     const pdf = await cardPdf(input);
     if (process.env.CARD_PDF_OUT) writeFileSync(process.env.CARD_PDF_OUT, Buffer.from(pdf));
@@ -51,7 +63,9 @@ describe("a card as a PDF", () => {
     expect(doc.getPageCount()).toBeLessThanOrEqual(3);
     expect(doc.getTitle()).toBe("Card #377: Sanofi agrees to buy Insmed for $41 billion; its own shares may drift lower");
     expect(Buffer.from(pdf).subarray(0, 5).toString()).toBe("%PDF-");
-    const bare = await cardPdf({ ...input, track: null, bars: [], result: null, about: null, companyName: null, source: null, siteUrl: null });
+    const bare = await cardPdf({ ...input, track: null, bars: [], fundamentals: null, result: null, about: null, companyName: null, source: null, siteUrl: null });
+    // Closes only (no open, high or low on file): the chart falls back to a line.
+    expect((await PDFDocument.load(await cardPdf({ ...input, bars: bars.map((b) => ({ date: b.date, c: b.c })) }))).getPageCount()).toBeGreaterThanOrEqual(1);
     expect((await PDFDocument.load(bare)).getPageCount()).toBeGreaterThanOrEqual(1);
     expect(cardPdfName(card)).toBe("card-377-SNY-short.pdf");
   });
