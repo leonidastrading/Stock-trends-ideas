@@ -2,6 +2,7 @@
 import { CARD_PEEK } from "@/config/card-peek";
 import { cardForApi } from "./card-api";
 import { crowdingFor } from "./crowding";
+import { etLabel, toEt } from "../time";
 import * as store from "./store";
 
 /** Pure: a long text as numbered pieces short enough for one log line each. */
@@ -17,12 +18,32 @@ export function slim(value: unknown): unknown {
   return Object.fromEntries(Object.entries(value as Record<string, unknown>).filter(([k, v]) => v !== null && v !== "" && !/^(url|urls|links?|chart|logo|html)$/i.test(k)).map(([k, v]) => [k, slim(v)]));
 }
 
-export async function runCardPeek(origin: string, peek = CARD_PEEK): Promise<number> {
-  if (!peek.ids.length) return 0;
+const one = (t: string | null | undefined, n: number) => (t ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+
+/** What the scout did on a stock lately: its cards, the research attempts (with why one was turned away) and the story desk's reads. */
+export async function peekSymbols(symbols: string[], days: number, now = new Date()): Promise<string[]> {
+  const from = toEt(new Date(now.getTime() - days * 86400_000)).date;
+  const [cards, cands, events] = await Promise.all([store.cardsSince(days).catch(() => []), store.candidatesSince(days).catch(() => []), store.storyEventsSince(from).catch(() => [])]);
+  const out: string[] = [];
+  for (const sym of symbols) {
+    const mine = cards.filter((c) => c.primaryTicker === sym || c.card.tickers.some((t) => t.symbol === sym));
+    const tried = cands.filter((c) => c.tickersHint.includes(sym) || new RegExp(`\\b${sym}\\b`).test(c.term));
+    const read = events.filter((e) => e.symbols.includes(sym));
+    out.push(`peek ${sym}: ${mine.length} cards, ${tried.length} research attempts, ${read.length} story-desk reads in ${days} days`);
+    for (const c of mine) out.push(`peek ${sym} card #${c.id} ${etLabel(c.createdAt)} ${c.origin} ${c.direction} ${c.primaryTicker} ${c.status}: ${one(c.title, 140)} | ${one(c.card.thesis, 500)}`);
+    for (const c of tried) out.push(`peek ${sym} attempt ${etLabel(c.createdAt)} ${c.origin} "${one(c.term, 100)}" [${c.tickersHint.join(",")}] -> ${c.outcome}${c.cardId ? ` #${c.cardId}` : ""}${c.reason ? `: ${one(c.reason, 600)}` : ""}`);
+    for (const e of read) out.push(`peek ${sym} story ${e.etDate} ${e.key} stage ${e.stage} [${e.symbols.join(",")}]: ${one(e.summary, 700)}`);
+  }
+  return out;
+}
+
+export async function runCardPeek(origin: string, peek: { rev: number; ids: number[]; symbols?: string[]; days?: number } = CARD_PEEK): Promise<number> {
+  if (!peek.ids.length && !peek.symbols?.length) return 0;
   const key = `card-peek:${peek.rev}`;
   if (await store.cacheGet(key).catch(() => null)) return 0;
   await store.cachePut(key, { at: new Date().toISOString(), ids: peek.ids });
   let n = 0;
+  if (peek.symbols?.length) for (const line of await peekSymbols(peek.symbols, peek.days ?? 10)) { console.log(line); n++; }
   for (const id of peek.ids) {
     const card = await store.getCard(id).catch(() => null);
     if (!card) { console.log(`card-peek #${id}: no such card`); continue; }
