@@ -22,7 +22,11 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const STATUS_RANK: Record<string, number> = { promoted: 0, late: 1, not_promoted: 2 };
-const SORTS = [{ value: "best", label: "Best first" }, { value: "newest", label: "Newest" }, { value: "confidence", label: "Highest confidence" }, { value: "catalyst", label: "Catalyst soonest" }];
+const SORTS = [{ value: "best", label: "Best first" }, { value: "newest", label: "Newest first" }, { value: "oldest", label: "Oldest first" }, { value: "confidence", label: "Highest confidence" }, { value: "confidence_low", label: "Lowest confidence" }, { value: "catalyst", label: "Catalyst soonest" }];
+/** The periods on offer; ALL_DAYS reaches back before the first card. */
+const ALL_DAYS = 3650;
+const PERIODS = [7, 30, 90, 365, ALL_DAYS];
+const periodLabel = (d: number) => (d === ALL_DAYS ? "All dates" : d === 365 ? "1 year" : `${d} days`);
 /** Filter groups that do not overlap, so their counts add up to the total. */
 const CONF_BANDS = [
   { key: "lt50", label: "Confidence under 50", lo: 0, hi: 50 }, { key: "50", label: "50–59", lo: 50, hi: 60 }, { key: "60", label: "60–69", lo: 60, hi: 70 },
@@ -58,7 +62,7 @@ type SP = { days?: string; source?: string; status?: string; sort?: string; conf
 export default async function IdeasPage({ searchParams }: { searchParams: Promise<SP> }) {
   if (!hasDatabase()) return <SetupNotice />;
   const sp = await searchParams;
-  const days = [7, 30, 90, 365].includes(Number(sp.days)) ? Number(sp.days) : 7;
+  const days = PERIODS.includes(Number(sp.days)) ? Number(sp.days) : 7;
   const sort = SORTS.some((s) => s.value === sp.sort) ? sp.sort! : "best";
   // Each filter group takes any number of values (comma-separated in the address); none = any.
   const many = (v: string | undefined, ok: (x: string) => boolean) => new Set((v ?? "").split(",").map((x) => x.trim()).filter((x) => x && ok(x)));
@@ -122,7 +126,9 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   const base = cards.filter((c) => (!repeats.has(c.id) || c.id === wantedId) && (showPenny || !penny.has(c.id) || c.id === wantedId));
   const rows = base.filter((c) => passes(c) || c.id === wantedId).sort((a, b) =>
     sort === "newest" ? b.createdAt.localeCompare(a.createdAt)
+      : sort === "oldest" ? a.createdAt.localeCompare(b.createdAt)
       : sort === "confidence" ? b.card.confidence - a.card.confidence || b.rankScore - a.rankScore
+      : sort === "confidence_low" ? a.card.confidence - b.card.confidence || a.rankScore - b.rankScore
       : sort === "catalyst" ? (a.catalystDate && a.catalystDate >= today ? a.catalystDate : "9999").localeCompare(b.catalystDate && b.catalystDate >= today ? b.catalystDate : "9999") || b.rankScore - a.rankScore
         : STATUS_RANK[a.status] - STATUS_RANK[b.status] || b.rankScore - a.rankScore || b.createdAt.localeCompare(a.createdAt));
   const wanted = Number(sp.card);
@@ -135,7 +141,7 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
     options: g.options.map((o) => ({ ...o, count: base.filter((c) => passes(c, g.param) && g.keyOf(c) === o.value).length })),
   }));
   // What is filtered, in words, for the folded filters line.
-  const summary = [days === 365 ? "1 year" : `${days} days`, SORTS.find((x) => x.value === sort)?.label ?? "",
+  const summary = [periodLabel(days), SORTS.find((x) => x.value === sort)?.label ?? "",
     ...GROUPS.filter((g) => sel[g.param].size).map((g) => `${g.title.toLowerCase()}: ${g.options.filter((o) => sel[g.param].has(o.value)).map((o) => o.label).join(" or ")}`),
     `${rows.length} card${rows.length === 1 ? "" : "s"}`].filter(Boolean).join(" · ");
 
@@ -168,7 +174,7 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
           </div>
         );
       })}
-      {page.total === 0 && <section className="card"><p className="muted">{cards.length ? "No cards match these filters." : `No cards in the last ${days} days. The scans run at midday on weekdays and hourly for stories.`}</p></section>}
+      {page.total === 0 && <section className="card"><p className="muted">{cards.length ? "No cards match these filters." : `No cards ${days === ALL_DAYS ? "yet" : `in the last ${days} days`}. The scans run at midday on weekdays and hourly for stories.`}</p></section>}
       <Pager params={params} name="page" page={page.page} pages={page.pages} total={page.total} label="cards" hash="#cards" />
 
     </>

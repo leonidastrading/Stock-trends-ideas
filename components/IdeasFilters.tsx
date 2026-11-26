@@ -62,7 +62,7 @@ export default function IdeasFilters({ days, sort, sorts, groups, summary, keep 
       <div className="toolbar">
         <span className="filter-links small">
           <span className="filter-title">Period</span>
-          {[["7", "7 days"], ["30", "30 days"], ["90", "90 days"], ["365", "1 year"]].map(([v, l]) => <button type="button" key={v} className={`chip${d === v ? " active" : ""}`} onClick={() => setD(v)}>{l}</button>)}
+          {[["7", "7 days"], ["30", "30 days"], ["90", "90 days"], ["365", "1 year"], ["3650", "All dates"]].map(([v, l]) => <button type="button" key={v} className={`chip${d === v ? " active" : ""}`} onClick={() => setD(v)}>{l}</button>)}
         </span>
       </div>
       <div className="toolbar">
