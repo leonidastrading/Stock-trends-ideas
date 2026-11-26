@@ -119,7 +119,8 @@ export default async function DriftPage({ searchParams }: { searchParams: Promis
               return <div className="small"><b>Paper short from the list:</b> joined {fmtEt(e.listedAt)}{e.entryPrice ? <> · entered at <b>${e.entryPrice.toFixed(2)}</b>{e.basis === "open" ? ` (${e.entryDate} open)` : ""}{ret !== null ? <> · <span className={ret >= 0 ? "pos" : "neg"}>{ret > 0 ? "+" : ""}{ret.toFixed(1)}%</span> so far</> : null}{e.exitBy ? <span className="muted"> · held to {e.exitBy}</span> : null}</> : <span className="muted"> · enters at the next open</span>}</div>;
             })()}
             <div className="small" style={{ marginTop: 4 }}>
-              {mine.length ? mine.map((c) => <a key={c.id} href={`/cards/${c.id}`} style={{ marginRight: 8 }}>card #{c.id} ({c.status.replace("_", " ")})</a>) : <DriftResearch symbol={s.symbol} />}
+              <span style={{ marginRight: 8 }}><DriftResearch symbol={s.symbol} again={mine.length > 0} /></span>
+              {mine.map((c) => <a key={c.id} href={`/cards/${c.id}`} style={{ marginRight: 8 }}>card #{c.id} ({c.status.replace("_", " ")})</a>)}
               {others.length > 0 && <span style={{ marginLeft: 8 }}><span className="muted">{mine.length ? "Other cards" : "Cards already"} on {s.symbol}: </span><CardChips cards={others} max={6} /></span>}
             </div>
             {s.headlines.length > 0 && (
@@ -141,7 +142,7 @@ export default async function DriftPage({ searchParams }: { searchParams: Promis
         );
       })}
       <RatingStudy state={study} events={studyRows} />
-      <DriftList entries={listEntries} cards={cards} data={data} />
+      <DriftList entries={listEntries} cards={cards} data={data} listed={all.map((x) => x.symbol)} />
       <DriftBook cards={cards.filter((c) => cands.some((x) => x.cardId === c.id && x.term.startsWith("drift: ")))} tracks={tracks} data={data} downgradeIds={cands.filter((x) => x.cardId && x.term.startsWith("drift: ") && /\bdowngrade\b/.test(x.term)).map((x) => x.cardId!)} />
     </>
   );

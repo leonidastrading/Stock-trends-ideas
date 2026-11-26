@@ -5,12 +5,13 @@ import { DRIFT_LIST, listResult, type ListEntry } from "@/lib/scout/drift-list";
 import type { StoredCard } from "@/lib/scout/store";
 import { fmtEt } from "@/lib/time";
 import { bookStats } from "./DriftBook";
+import DriftResearch from "./DriftResearch";
 
 const pct = (x: number | null) => (x === null ? "?" : `${x > 0 ? "+" : x < 0 ? "−" : ""}${Math.abs(x * 100).toFixed(1)}%`);
 const BASIS: Record<ListEntry["basis"], string> = { listing: "the price when it was listed", "minute bar": "the 1-minute bar at the time it was listed", open: "the next open (listed while the market was closed)" };
 
 /** The list's own paper book: every setup shorted on paper from the moment it first appeared, with no card. */
-export default async function DriftList({ entries, cards, data }: { entries: ListEntry[]; cards: StoredCard[]; data: MarketData | null }) {
+export default async function DriftList({ entries, cards, data, listed = [] }: { entries: ListEntry[]; cards: StoredCard[]; data: MarketData | null; /** Stocks on the list right now (only those can be researched from here). */ listed?: string[] }) {
   const open = entries.filter((e) => !e.exitDate);
   const closed = entries.filter((e) => e.exitDate);
   const snaps = (open.length && data?.getSnapshots ? await data.getSnapshots([...new Set([...open.map((e) => e.symbol), "SPY"])]).catch(() => ({})) : {}) as Record<string, { price: number; delayed?: boolean }>;
@@ -27,7 +28,7 @@ export default async function DriftList({ entries, cards, data }: { entries: Lis
       {entries.length === 0 ? <p className="small muted">Nothing yet: the first entries are written at the next hourly scan.</p> : (
         <>
           <div className="table-wrap"><table>
-            <thead><tr><th>Stock</th><th>News</th><th>Joined the list / entry</th><th className="num">Held</th><th className="num">Return</th><th className="num">vs SPY</th><th>Exit by</th><th>Cards</th></tr></thead>
+            <thead><tr><th>Stock</th><th>News</th><th>Joined the list / entry</th><th className="num">Held</th><th className="num">Return</th><th className="num">vs SPY</th><th>Exit by</th><th>Cards</th><th></th></tr></thead>
             <tbody>{live.map(({ e, r }) => (
               <tr key={`${e.symbol}-${e.eventDate}`}>
                 <td><Ticker symbol={e.symbol} /></td>
@@ -38,6 +39,7 @@ export default async function DriftList({ entries, cards, data }: { entries: Lis
                 <td className={`num ${r?.vsSpy == null ? "muted" : r.vsSpy >= 0 ? "pos" : "neg"}`}>{r?.vsSpy == null ? "—" : pct(r.vsSpy)}</td>
                 <td className="small">{e.exitBy ?? "—"}</td>
                 <td className="small">{cardsOn(e.symbol).length ? <CardChips cards={cardsOn(e.symbol)} max={3} /> : <span className="muted">none</span>}</td>
+                <td className="small">{listed.includes(e.symbol) ? <DriftResearch symbol={e.symbol} again={cardsOn(e.symbol).length > 0} small /> : <span className="muted" title="Only stocks still on the list can be researched from here">off the list</span>}</td>
               </tr>
             ))}</tbody>
           </table></div>
