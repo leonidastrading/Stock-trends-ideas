@@ -49,12 +49,23 @@ export interface CotReading {
   index3y: number | null;
   change1w: number | null;
   crowd: "crowded long" | "crowded short" | null;
+  /** The side and the extreme in words ("net short, least short in 3 years"), when the position is at an extreme. */
+  label?: string | null;
   weeks: number;
 }
 
 const num = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
 /** A field by name pattern (the CFTC's column names vary slightly between reports). */
 const field = (row: Record<string, unknown>, re: RegExp) => { const k = Object.keys(row).find((x) => re.test(x)); return k ? num(row[k]) : null; };
+
+/** Pure: the sign and the three-year extreme, said apart; null when the position is not at an extreme. */
+export function extremeLabel(net: number, index3y: number | null): string | null {
+  if (index3y === null || (index3y < 90 && index3y > 10)) return null;
+  const side = net >= 0 ? "long" : "short";
+  // High percentile = the net number is high: most long when long, least short when short. Low percentile is the mirror.
+  const extreme = index3y >= 90 ? (net >= 0 ? "most long" : "least short") : net >= 0 ? "least long" : "most short";
+  return `net ${side}, ${extreme} in 3 years`;
+}
 
 /** Pure: one market's rows (any order) → the latest reading. */
 export function cotReading(m: Pick<CotMarket, "key" | "name" | "ds">, rows: Array<Record<string, unknown>>): CotReading | null {
@@ -73,7 +84,9 @@ export function cotReading(m: Pick<CotMarket, "key" | "name" | "ds">, rows: Arra
     key: m.key, name: m.name, date: last.date, who: m.ds === "tff" ? "leveraged funds" : "managed money",
     net: last.net, netPctOi: last.oi ? Math.round((last.net / last.oi) * 1000) / 10 : null, index3y,
     change1w: pts.length >= 2 ? last.net - pts[pts.length - 2].net : null,
-    crowd: index3y === null ? null : index3y >= 90 ? "crowded long" : index3y <= 10 ? "crowded short" : null,
+    // Crowded only when the side and the extreme agree: net short at its least short in three years is not "crowded long".
+    crowd: index3y === null ? null : index3y >= 90 && last.net > 0 ? "crowded long" : index3y <= 10 && last.net < 0 ? "crowded short" : null,
+    label: extremeLabel(last.net, index3y),
     weeks: pts.length,
   };
 }

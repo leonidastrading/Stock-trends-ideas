@@ -10,7 +10,10 @@ describe("stocktwits helpers", () => {
     const r = messageRate([msg(0.5, "Bullish"), msg(1, "Bearish"), msg(2, "Bullish"), msg(3)], now)!;
     expect(r.spanHours).toBe(3);
     expect(r.perHour).toBeCloseTo(1.3, 1);
-    expect(r.bullishShare).toBeCloseTo(0.67, 2);
+    // Three tagged messages are too few to give a share ("100% bullish" on a handful says nothing).
+    expect(r.bullishShare).toBeNull();
+    const busy = messageRate([...Array.from({ length: 15 }, (_, i) => msg(0.1 + i * 0.1, "Bullish")), ...Array.from({ length: 5 }, (_, i) => msg(2 + i * 0.1, "Bearish"))], now)!;
+    expect(busy.bullishShare).toBe(0.75);
     expect(messageRate([msg(1)], now)).toBeNull();
   });
   it("trending entry by rank", () => {

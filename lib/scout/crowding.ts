@@ -58,11 +58,16 @@ export function components(p: CrowdingParts): Record<string, number> {
   return out;
 }
 
+/** Days of the stock's own Stocktwits history needed before a crowding score is given. */
+export const CROWDING_MIN_BASELINE_DAYS = 20;
+
 /** Pure: score (average of the parts, needs two) and stage. */
 export function crowdingScore(p: CrowdingParts): { score: number | null; stage: number | null; parts: Record<string, number> } {
   const parts = components(p);
   const vals = Object.values(parts);
   if (vals.length < 2) return { score: null, stage: null, parts };
+  // No score while the stock's own Stocktwits baseline is still building (a score against no baseline is not a reading).
+  if (p.attention && p.attention.days < CROWDING_MIN_BASELINE_DAYS) return { score: null, stage: null, parts };
   const score = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
   const z = p.attention?.z ?? null;
   const move30 = p.run?.move30 ?? 0;

@@ -184,17 +184,24 @@ export async function ensureBreadthBars(data: MarketData, now: Date): Promise<nu
 
 export interface OddsRow { question: string; slug: string | null; yes: number; dayChange: number | null; weekChange: number | null; volume24h: number; endDate: string | null }
 
+/** A prediction market counts only with this much traded in a day: a thin one moves on a few dollars. */
+export const ODDS_MIN_VOLUME = 50_000;
+const SPORT = /\b(vs\.?|nfl|nba|mlb|nhl|ufc|fifa|uefa|premier league|la liga|serie a|bundesliga|champions league|world cup|super bowl|grand prix|formula 1|f1|tennis|atp|wta|cricket|ipl|t20|esports?|league of legends|counter-strike|cs2|dota|valorant|playoffs?|touchdown|goals?|match|tournament|open \(|wimbledon|masters|ncaa|heisman|ballon d'or|boxing|fight|olympic\w*|medal)\b/i;
+const SHOWBIZ = /\b(oscars?|grammys?|emmys?|box office|album|movie|film|song|spotify|billboard|youtube views|tiktok|kardashian|taylor swift|bachelor|survivor|eurovision)\b/i;
+/** Pure: whether a market is about the economy, policy, companies, elections or conflicts (not sport or show business). */
+export const marketMatters = (question: string) => !SPORT.test(question) && !SHOWBIZ.test(question);
+
 /** Pure: the busiest open markets, biggest odds moves first (day, then week), then by trading volume. */
 export function oddsMovers(markets: Array<{ question: string; slug?: string; outcomes?: string; outcomePrices?: string; oneDayPriceChange?: number; oneWeekPriceChange?: number; volume24hr?: number; endDate?: string }>, n = 10): OddsRow[] {
   const rows = markets.flatMap((m) => {
     const o = marketOdds(m);
-    return o ? [{ question: m.question, slug: m.slug ?? null, yes: o.yes, dayChange: o.dayChange, weekChange: o.weekChange, volume24h: Math.round(m.volume24hr ?? 0), endDate: m.endDate?.slice(0, 10) ?? null }] : [];
+    return o && (m.volume24hr ?? 0) >= ODDS_MIN_VOLUME && marketMatters(m.question) ? [{ question: m.question, slug: m.slug ?? null, yes: o.yes, dayChange: o.dayChange, weekChange: o.weekChange, volume24h: Math.round(m.volume24hr ?? 0), endDate: m.endDate?.slice(0, 10) ?? null }] : [];
   });
   const move = (r: OddsRow) => Math.max(Math.abs(r.dayChange ?? 0) * 1.5, Math.abs(r.weekChange ?? 0));
   return rows.sort((a, b) => (move(b) >= 5 ? 1 : 0) - (move(a) >= 5 ? 1 : 0) || move(b) - move(a) || b.volume24h - a.volume24h).slice(0, n);
 }
 
 export async function polymarketPanel(): Promise<OddsRow[]> {
-  const ms = await getJson<Parameters<typeof oddsMovers>[0]>("https://gamma-api.polymarket.com/markets?closed=false&order=volume24hr&ascending=false&limit=100", { headers: { "user-agent": "Mozilla/5.0 (compatible; research-reader/1.0)" }, cacheMs: 10 * 60000 });
+  const ms = await getJson<Parameters<typeof oddsMovers>[0]>("https://gamma-api.polymarket.com/markets?closed=false&order=volume24hr&ascending=false&limit=300", { headers: { "user-agent": "Mozilla/5.0 (compatible; research-reader/1.0)" }, cacheMs: 10 * 60000 });
   return oddsMovers(ms, 10);
 }

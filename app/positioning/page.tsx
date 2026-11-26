@@ -48,7 +48,7 @@ export default async function PositioningPage() {
 
       <section className="card section">
         <h2>Futures positioning (CFTC Commitments of Traders)</h2>
-        <p className="small muted">Speculators&apos; net position (leveraged funds for financial futures, managed money for commodities) as a percentile of the last 3 years: 90th or higher is crowded long, 10th or lower crowded short. Published Fridays 3:30 PM ET with positions as of the Tuesday before.{cot.updatedAt ? ` Read ${fmtEtAgo(cot.updatedAt)}.` : ""}{cot.error && !cot.data ? <span className="warn"> Could not read the CFTC: {cot.error}</span> : null}</p>
+        <p className="small muted">Speculators&apos; net position (leveraged funds for financial futures, managed money for commodities) as a percentile of the last 3 years. The tag gives the side and the extreme apart ("net short, least short in 3 years"); "crowded" is said only when the two agree (net long at its most long, net short at its most short). Published Fridays 3:30 PM ET with positions as of the Tuesday before.{cot.updatedAt ? ` Read ${fmtEtAgo(cot.updatedAt)}.` : ""}{cot.error && !cot.data ? <span className="warn"> Could not read the CFTC: {cot.error}</span> : null}</p>
         <div className="table-wrap"><table>
           <thead><tr><th>Market</th><th>Who</th><th className="num">Net contracts</th><th className="num">% of open interest</th><th>3-year percentile</th><th className="num">Week change</th><th className="small">As of</th><th className="small">Traded through</th></tr></thead>
           <tbody>{rows.map((r) => {
@@ -56,7 +56,7 @@ export default async function PositioningPage() {
             const pct = r.index3y ?? 50;
             return (
               <tr key={r.key}>
-                <td>{r.name}{r.crowd && <div><span className={`tag ${r.crowd === "crowded long" ? "ok" : "neg"}`}>{r.crowd}</span></div>}</td>
+                <td>{r.name}{(r.label ?? r.crowd) && <div><span className={`tag ${r.crowd ? (r.crowd === "crowded long" ? "ok" : "neg") : ""}`}>{r.crowd ? `${r.crowd}: ` : ""}{r.label ?? ""}</span></div>}</td>
                 <td className="small">{r.who}</td>
                 <td className={`num ${r.net >= 0 ? "pos" : "neg"}`}>{r.net.toLocaleString("en-US")}</td>
                 <td className="num">{r.netPctOi !== null ? `${r.netPctOi}%` : "—"}</td>

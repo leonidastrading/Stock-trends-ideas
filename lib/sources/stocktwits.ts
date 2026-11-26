@@ -18,6 +18,9 @@ export interface StMessage { id: number; created_at: string; entities?: { sentim
 export interface StTrending { symbol: string; title?: string; trending_score?: number; watchlist_count?: number; trends?: { summary?: string } | null }
 interface Stream { symbol?: { symbol: string; title?: string; watchlist_count?: number }; messages?: StMessage[] }
 
+/** The fewest sentiment-tagged messages a bullish share is read from. */
+export const ST_MIN_TAGGED = 20;
+
 /** Pure: messages per hour over the span of the latest messages, and the bullish share of those that carry a sentiment tag. */
 export function messageRate(messages: StMessage[], now: Date): { perHour: number; bullishShare: number | null; spanHours: number } | null {
   const times = messages.map((m) => Date.parse(m.created_at)).filter((t) => Number.isFinite(t));
@@ -26,7 +29,8 @@ export function messageRate(messages: StMessage[], now: Date): { perHour: number
   const spanHours = Math.max((now.getTime() - oldest) / 3600000, 1 / 60);
   const tagged = messages.map((m) => m.entities?.sentiment?.basic).filter((s): s is string => !!s);
   const bullish = tagged.filter((s) => s === "Bullish").length;
-  return { perHour: r1(times.length / spanHours), bullishShare: tagged.length ? Math.round((bullish / tagged.length) * 100) / 100 : null, spanHours: r1(spanHours) };
+  // A share of a handful of messages says nothing ("100% bullish" on three posts): none is given under ST_MIN_TAGGED.
+  return { perHour: r1(times.length / spanHours), bullishShare: tagged.length >= ST_MIN_TAGGED ? Math.round((bullish / tagged.length) * 100) / 100 : null, spanHours: r1(spanHours) };
 }
 
 /** Pure: a ticker's 1-based rank in the trending list, if present. */

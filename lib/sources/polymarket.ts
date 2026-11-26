@@ -17,6 +17,9 @@ export function marketOdds(m: Market) {
   return { yes: Math.round(yes * 100), weekChange: m.oneWeekPriceChange === undefined ? null : Math.round(m.oneWeekPriceChange * 100), dayChange: m.oneDayPriceChange === undefined ? null : Math.round(m.oneDayPriceChange * 100) };
 }
 
+/** The least traded in a day for a market's odds to count as a signal. */
+export const MIN_VOLUME_24H = 50_000;
+
 export const polymarket: Source = {
   id: "polymarket",
   label: "Polymarket",
@@ -28,7 +31,8 @@ export const polymarket: Source = {
       const markets = (r.events ?? []).flatMap((e) => (e.markets ?? []).filter((m) => !m.closed).map((m) => ({ event: e.title, slug: e.slug, ...m })));
       const signals = markets
         .map((m) => ({ m, o: marketOdds(m) }))
-        .filter((x) => x.o)
+        // A market with little money traded cannot be evidence (one was cited at about $765 a day).
+        .filter((x) => x.o && (x.m.volume24hr ?? 0) >= MIN_VOLUME_24H)
         .sort((a, b) => Math.abs(b.o!.weekChange ?? 0) - Math.abs(a.o!.weekChange ?? 0))
         .slice(0, 3)
         .map(({ m, o }) => ({
@@ -37,6 +41,6 @@ export const polymarket: Source = {
           note: `"${m.question}": ${o!.yes}% yes${o!.weekChange === null ? "" : ` (${o!.weekChange >= 0 ? "+" : ""}${o!.weekChange} pts in 7 days)`}${m.endDate ? `, resolves ${m.endDate.slice(0, 10)}` : ""}`,
           detail: { event: m.event, url: `https://polymarket.com/event/${m.slug}`, week_change_points: o!.weekChange, day_change_points: o!.dayChange, volume_24h: m.volume24hr, end_date: m.endDate?.slice(0, 10) },
         }));
-      return { source: "polymarket", status: "ok", detail: signals.length ? undefined : `no open market matches "${ctx.term}"`, signals };
+      return { source: "polymarket", status: "ok", detail: signals.length ? undefined : markets.length ? `markets on "${ctx.term}" trade under $${MIN_VOLUME_24H / 1000}k a day: too thin to read` : `no open market matches "${ctx.term}"`, signals };
     }),
 };

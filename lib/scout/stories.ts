@@ -211,6 +211,9 @@ export function detectStories(items: NewsItem[], opts: DetectOptions = {}): Stor
     .sort((a, b) => b.latest.localeCompare(a.latest));
 }
 
+/** The most headlines read from the stream in one pass (a full busy day is about 6,000). */
+export const STREAM_MAX = 8000;
+
 /** A shock headline on a stock moving this hard is a story at once; at most this many are added per pass. */
 export const STORY_FAST = { movePct: 8, perRun: 2, look: 40 };
 
@@ -428,7 +431,8 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
   }
   let items: NewsItem[];
   try {
-    items = await deps.data.getNews([], daysAgo(deps.now, 1), deps.now, 1500);
+    // The whole day of the stream (it used to stop at 1,500 headlines, so on a busy day the oldest hours were never read).
+    items = await deps.data.getNews([], daysAgo(deps.now, 1), deps.now, STREAM_MAX);
     // The fast sources too (press wires, SEC 8-Ks, Nasdaq halts, Finnhub): stories are not held back when Alpaca's stream lags.
     const fast = await import("../sources/wires").then(({ fastNews }) => fastNews(deps.env, deps.fetchImpl, deps.now)).catch(() => [] as NewsItem[]);
     const seen = new Set(items.map((n) => n.headline.toLowerCase()));

@@ -30,6 +30,22 @@ export async function peekSymbols(symbols: string[], days: number, now = new Dat
     const tried = cands.filter((c) => c.tickersHint.includes(sym) || new RegExp(`\\b${sym}\\b`).test(c.term));
     const read = events.filter((e) => e.symbols.includes(sym));
     out.push(`peek ${sym}: ${mine.length} cards, ${tried.length} research attempts, ${read.length} story-desk reads in ${days} days`);
+    // The paper track beside each card, and the stock's recent closes as traded and split-adjusted (a gap between the two is a split).
+    for (const c of mine) {
+      const t = await store.getTrack(c.id).catch(() => null);
+      if (t) out.push(`peek ${sym} track #${c.id}: ${t.direction} ${t.symbol}, card day ${t.cardDate}, entry ${t.entryDate ?? "pending"} @ ${t.entryPrice ?? "?"} (SPY ${t.spyEntry ?? "?"}), exit ${t.exitDate ?? "open"} @ ${t.exitPrice ?? "-"} ${t.exitReason ?? ""}, worst ${t.maxDrawdownPct ?? "?"}%${t.excluded ? `, EXCLUDED: ${t.excluded}` : ""}`);
+    }
+    try {
+      const { marketDataFromEnv } = await import("../alpaca");
+      const data = marketDataFromEnv();
+      if (data) {
+        const today = toEt(now).date, from = toEt(new Date(now.getTime() - 45 * 86400_000)).date;
+        const [raw, adj] = await Promise.all([data.getDailyBars([sym], from, today, { feed: "sip", adjustment: "raw" }), data.getDailyBars([sym], from, today, { feed: "sip", adjustment: "all" })]);
+        const line = (bars: typeof raw) => bars.filter((b) => b.symbol === sym).sort((a, b) => a.date.localeCompare(b.date)).map((b) => `${b.date.slice(5)} ${b.c}`).join(", ");
+        out.push(`peek ${sym} closes as traded: ${line(raw).slice(0, 900)}`);
+        out.push(`peek ${sym} closes split-adjusted: ${line(adj).slice(0, 900)}`);
+      }
+    } catch (e) { out.push(`peek ${sym} closes: ${e instanceof Error ? e.message : String(e)}`); }
     for (const c of mine) out.push(`peek ${sym} card #${c.id} ${etLabel(c.createdAt)} ${c.origin} ${c.direction} ${c.primaryTicker} ${c.status}: ${one(c.title, 140)} | ${one(c.card.thesis, 500)}`);
     for (const c of tried) out.push(`peek ${sym} attempt ${etLabel(c.createdAt)} ${c.origin} "${one(c.term, 100)}" [${c.tickersHint.join(",")}] -> ${c.outcome}${c.cardId ? ` #${c.cardId}` : ""}${c.reason ? `: ${one(c.reason, 600)}` : ""}`);
     for (const e of read) out.push(`peek ${sym} story ${e.etDate} ${e.key} stage ${e.stage} [${e.symbols.join(",")}]: ${one(e.summary, 700)}`);

@@ -229,9 +229,11 @@ export interface FilingDiff {
   similarity: number | null; added: number; removed: number; mechanical: Mechanical | null; read: DiffRead | null; flag: string; source: "card" | "smallcap"; error: string | null; createdAt: string;
 }
 
+/** A date column as YYYY-MM-DD, whether the driver gives a string or a Date (a Date turned to text read "Thu Nov 20", which the page showed as "Invalid Date"). */
+const ymd = (v: unknown): string | null => (v === null || v === undefined || v === "" ? null : v instanceof Date ? v.toISOString().slice(0, 10) : /^\d{4}-\d{2}-\d{2}/.test(String(v)) ? String(v).slice(0, 10) : Number.isNaN(Date.parse(String(v))) ? null : new Date(String(v)).toISOString().slice(0, 10));
 const toDiff = (r: Record<string, unknown>): FilingDiff => ({
-  accession: String(r.accession), cik: String(r.cik), ticker: (r.ticker as string) ?? null, company: String(r.company ?? ""), form: String(r.form), filed: String(r.filed).slice(0, 10), url: String(r.url ?? ""),
-  priorAccession: (r.prior_accession as string) ?? null, priorFiled: r.prior_filed ? String(r.prior_filed).slice(0, 10) : null, priorUrl: (r.prior_url as string) ?? null,
+  accession: String(r.accession), cik: String(r.cik), ticker: (r.ticker as string) ?? null, company: String(r.company ?? ""), form: String(r.form), filed: ymd(r.filed)!, url: String(r.url ?? ""),
+  priorAccession: (r.prior_accession as string) ?? null, priorFiled: ymd(r.prior_filed), priorUrl: (r.prior_url as string) ?? null,
   similarity: r.similarity === null || r.similarity === undefined ? null : Number(r.similarity), added: Number(r.added ?? 0), removed: Number(r.removed ?? 0),
   mechanical: (r.mechanical as Mechanical) ?? null, read: (r.ai as DiffRead) ?? null, flag: String(r.flag), source: r.source as "card" | "smallcap", error: (r.error as string) ?? null, createdAt: new Date(r.created_at as string).toISOString(),
 });
