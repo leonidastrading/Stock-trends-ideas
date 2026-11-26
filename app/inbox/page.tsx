@@ -1,4 +1,5 @@
 import LinkedText from "@/components/LinkedText";
+import CheckInbox from "./CheckInbox";
 import CardChips from "@/components/CardChips";
 import { after } from "next/server";
 import SetupNotice from "@/components/SetupNotice";
@@ -108,13 +109,16 @@ export default async function InboxPage() {
       <section className="card notice small">
         Other bots can send the scout ideas as files. Each idea is researched with the scout&apos;s own data, logged as a thesis card that is never edited, gated like everything else, tracked on paper against SPY, and scored as <b>&quot;Your bot&quot;</b> on the Scoreboard. Nothing places an order.
         <div style={{ marginTop: 6 }}>
-          {repo ? <>Watching <b>{repo}</b>, folder <code>{path}/</code>{tokenSet ? "" : <span className="warn"> · no GITHUB_INBOX_TOKEN set: works only if the repo is public</span>}. New files are read on the next hourly call, or now with &quot;Check the GitHub inbox&quot; on Settings.</>
+          {repo ? <>Watching <b>{repo}</b>, folder <code>{path}/</code>{tokenSet ? "" : <span className="warn"> · no GITHUB_INBOX_TOKEN set: works only if the repo is public</span>}. New files are read on the next hourly call, or now with &quot;Check for new files now&quot; below.</>
             : <span className="warn">Not connected yet: set GITHUB_INBOX_REPO (owner/name) and GITHUB_INBOX_TOKEN (fine-grained, read-only Contents on that repo) in Vercel and redeploy.</span>}
         </div>
       </section>
 
       <section className="card">
-        <h2>Track record</h2>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+          <h2 style={{ margin: 0 }}>Track record</h2>
+          {repo && <CheckInbox />}
+        </div>
         <p className="small secondary">Every document received, newest first, and what the scout did with each idea.</p>
         {waiting.length > 0 && <p className="small warn">Reading now: {waiting.join(", ")}. Opening this page starts the read; refresh in a minute or two to see them here (text and PDF files take longer than JSON, because the model pulls the ideas out of the prose).</p>}
         <div className="table-wrap"><table>
