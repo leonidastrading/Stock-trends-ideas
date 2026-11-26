@@ -2,7 +2,9 @@ import SetupNotice from "@/components/SetupNotice";
 import { KIND_LABEL, type Kind } from "@/config/scout";
 import { hasDatabase } from "@/lib/db";
 import { loadIdeas } from "@/lib/scout/ideas-load";
-import { byKind, calibration, PLAYER_LABEL, PLAYERS, playerOf, splitBy, STAKE, standings, toRound, type Round, type SplitRow, type Standing } from "@/lib/scout/scoreboard";
+import { boardLines, byKind, byVerdict, calibration, PLAYER_LABEL, PLAYERS, playerOf, score, splitBy, STAKE, storiesOf, STORY_DAYS, STUDY_ONLY, toRound, verdictGroup, type Line, type Round, type SplitRow } from "@/lib/scout/scoreboard";
+import { ruleRows } from "@/lib/scout/rule-books";
+import type { RuleLine } from "@/lib/scout/rule-lines";
 import { crowdingFor, STAGE_LABEL, timing } from "@/lib/scout/crowding";
 import * as store from "@/lib/scout/store";
 
@@ -12,10 +14,9 @@ export const runtime = "nodejs";
 const pts = (x: number | null | undefined) => (x === null || x === undefined ? "—" : `${x > 0 ? "+" : x < 0 ? "−" : ""}${Math.abs(x).toLocaleString("en-US")}`);
 const cls = (x: number | null | undefined) => (!x ? "" : x > 0 ? "pos" : "neg");
 const pc = (x: number | null) => (x === null ? "—" : `${Math.round(x * 100)}%`);
-const VERDICT: Record<string, string> = { played_out: "played out", did_not: "did not play out", mixed: "mixed", too_early: "too early to tell" };
 
-function luckText(s: Standing): string {
-  if (s.closed < 10) return s.closed ? `${s.closed} rounds: too few to tell` : "no rounds yet";
+function luckText(s: { closed: number; luck: number | null }): string {
+  if (s.closed < 10) return s.closed ? `${s.closed} closed: too few to tell` : "none closed yet";
   if (s.luck === null) return "—";
   if (s.luck < 0.05) return `a coin does this ${pc(s.luck)} of the time: looks like skill`;
   return `a coin does this ${pc(s.luck)} of the time: could be luck`;
@@ -37,17 +38,76 @@ function Call({ r }: { r: Round }) {
   return <b className={r.direction === "long" ? "pos" : "neg"}>{r.direction === "long" ? "▲" : "▼"} {r.symbol}</b>;
 }
 
-export default async function ScoreboardPage() {
+function LinesTable({ lines, empty }: { lines: Line[]; empty: string }) {
+  const firstOf = new Set<string>();
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead><tr><th>Player</th><th>Side</th><th className="num">Stories closed</th><th className="num">Hit rate</th><th className="num">Median</th><th className="num">Mean without best and worst</th><th className="num">Banked</th><th className="num">In play</th><th>Luck check</th><th>Best · worst</th></tr></thead>
+        <tbody>
+          {lines.map((l) => {
+            const first = !firstOf.has(l.player);
+            firstOf.add(l.player);
+            return (
+              <tr key={`${l.player}${l.side}`}>
+                <td>{first ? <b>{PLAYER_LABEL[l.player]}</b> : null}</td>
+                <td className={l.side === "long" ? "pos" : "neg"}>{l.side === "long" ? "▲ longs" : "▼ shorts"}<div className="small muted">{l.stories} {l.stories === 1 ? "story" : "stories"}{l.calls > l.stories ? ` from ${l.calls} calls` : ""} · {l.open} open</div></td>
+                <td className="num">{l.closed || "—"}</td>
+                <td className="num">{l.closed ? <>{pc(l.hitRate)}<div className="small muted">{l.wins} of {l.closed}</div></> : "—"}</td>
+                <td className={`num ${cls(l.median)}`}><b>{pts(l.median)}</b></td>
+                <td className={`num ${cls(l.trimmed)}`}>{pts(l.trimmed)}</td>
+                <td className={`num ${cls(l.banked)}`}>{l.closed ? pts(l.banked) : "—"}<div className="small muted">{l.closed ? `${pts(l.bankedSpy)} vs SPY` : ""}</div></td>
+                <td className={`num ${cls(l.inPlay)}`}>{l.open ? pts(l.inPlay) : "—"}</td>
+                <td className="small secondary">{luckText(l)}</td>
+                <td className="small">{l.best ? <><Call r={l.best} /> <span className={cls(score(l.best))}>{pts(score(l.best))}</span></> : "—"}{l.worst ? <> · <Call r={l.worst} /> <span className={cls(score(l.worst))}>{pts(score(l.worst))}</span></> : ""}</td>
+              </tr>
+            );
+          })}
+          {lines.length === 0 && <tr><td colSpan={10} className="muted">{empty}</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function RulesTable({ rows }: { rows: RuleLine[] }) {
+  return (
+    <div className="table-wrap"><table>
+      <thead><tr><th>Rule</th><th>Side</th><th className="num">Trades</th><th className="num">Closed</th><th className="num">Hit rate</th><th className="num">Median</th><th className="num">Mean without best and worst</th><th className="num">Banked</th><th className="num">In play</th></tr></thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.rule}>
+            <td><b>{r.rule}</b><div className="small muted">{r.about}</div></td>
+            <td className={r.side === "long" ? "pos" : "neg"}>{r.side === "long" ? "▲ long" : "▼ short"}</td>
+            <td className="num">{r.trades}<div className="small muted">{r.open} open</div></td><td className="num">{r.closed || "—"}</td>
+            <td className="num">{r.closed ? <>{pc(r.hitRate)}<div className="small muted">{r.wins} of {r.closed}</div></> : "—"}</td>
+            <td className={`num ${cls(r.median)}`}><b>{pts(r.median)}</b></td><td className={`num ${cls(r.trimmed)}`}>{pts(r.trimmed)}</td>
+            <td className={`num ${cls(r.banked)}`}>{r.closed ? pts(r.banked) : "—"}</td><td className={`num ${cls(r.inPlay)}`}>{r.open ? pts(r.inPlay) : "—"}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table></div>
+  );
+}
+
+export default async function ScoreboardPage({ searchParams }: { searchParams: Promise<{ v?: string }> }) {
   if (!hasDatabase()) return <SetupNotice />;
-  const [cards, tracks, candidates, reviews, calibrated] = await Promise.all([store.allCards(), store.allTracks(), store.candidatesSince(3650), store.allReviews(), store.calibratedVersionIds()]);
+  const view = (await searchParams).v === "latest" ? "latest" : "all";
+  const [cards, tracks, candidates, reviews, calibrated, versions] = await Promise.all([store.allCards(), store.allTracks(), store.candidatesSince(3650), store.allReviews(), store.calibratedVersionIds(), store.listVersions()]);
   const termByCard = new Map(candidates.filter((c) => c.cardId).map((c) => [c.cardId!, c.term]));
   const cardById = new Map(cards.map((c) => [c.id, c]));
   const ideas = await loadIdeas(cards, tracks);
-  const rounds = ideas.map((i) => {
+  const everyRound = ideas.map((i) => {
     const c = cardById.get(i.cardId)!;
-    return toRound(i, playerOf(c.origin, termByCard.get(c.id)), typeof c.card.confidence === "number" ? c.card.confidence : null, calibrated.has(c.versionId));
+    return toRound(i, playerOf(c.origin, termByCard.get(c.id)), typeof c.card.confidence === "number" ? c.card.confidence : null, calibrated.has(c.versionId), { versionId: c.versionId, term: termByCard.get(c.id) });
   });
-  const table = standings(rounds);
+  // One version at a time, or all of them. Nothing is frozen yet, so "all versions" is the default view.
+  const latest = versions.at(-1) ?? null;
+  const rounds = view === "latest" && latest ? everyRound.filter((r) => r.versionId === latest.id) : everyRound;
+  const board = rounds.filter((r) => !r.study), study = rounds.filter((r) => r.study);
+  const lines = boardLines(board), studyLines = boardLines(study);
+  const stories = storiesOf(board.filter((r) => score(r) !== null));
+  const verdicts = byVerdict(board, (id) => reviews.get(id)?.verdict);
   const calib = calibration(rounds);
   const calibN = calib.reduce((a, b) => a + b.n, 0);
   const kinds = byKind(rounds);
@@ -57,17 +117,24 @@ export default async function ScoreboardPage() {
   const byTiming = splitBy(rounds, (r) => { const t = timing(entryOf(r)?.stage ?? null); return t; }, ["early", "middle", "late"]);
   const byStage = splitBy(rounds, (r) => { const s = entryOf(r)?.stage; return s === null || s === undefined ? null : `${s} · ${STAGE_LABEL[s]}`; }, STAGE_LABEL.map((l, i) => `${i} · ${l}`));
   const byCoverage = splitBy(rounds, (r) => entryOf(r)?.parts.coverage?.band ?? null, ["low", "moderate", "high"]);
+  // Shorts by whether the shares could be borrowed when entered (read from the day this was first recorded).
+  const borrowOf = new Map(tracks.map((t) => [t.cardId, t.borrow ?? null]));
+  const byBorrow = splitBy(rounds.filter((r) => r.direction === "short"), (r) => borrowOf.get(r.cardId) ?? null, ["easy", "hard", "not shortable"]);
   const measured = rounds.filter((r) => entryOf(r)).length;
   const active = PLAYERS.filter((p) => rounds.some((r) => r.player === p));
-  const recent = rounds.filter((r) => r.closed && r.points !== null).sort((a, b) => (b.exitDate ?? "").localeCompare(a.exitDate ?? "")).slice(0, 15);
+  const recent = rounds.filter((r) => r.closed && r.points !== null).sort((a, b) => (b.exitDate ?? "").localeCompare(a.exitDate ?? "")).slice(0, 40);
   const inPlay = rounds.filter((r) => !r.closed && r.points !== null).sort((a, b) => b.points! - a.points!);
+  const rules = await ruleRows(cards, termByCard).catch(() => null);
 
   return (
     <>
       <h1>Scoreboard</h1>
       <section className="card notice small">
-        Points are paper dollars beaten versus SPY on a ${STAKE.toLocaleString("en-US")} stake per call: a call that does 3.2% better than SPY scores +32, one that lags by 5% scores −50. <b>Banked</b> points come from closed calls; <b>in play</b> are open calls at the latest close and can still change.
-        Every call ever tracked counts here, across versions; the formal pass/fail per version stays on <a href="/scoring">Scoring</a>. Paper only.
+        The headline number is <b>points against the sector fund</b>: paper dollars beaten on a ${STAKE.toLocaleString("en-US")} stake against the fund of the call&apos;s own sector, so a chip stock is judged against chips, not the whole market (a call that does 3.2% better scores +32). <b>One result per story:</b> a player who calls the same stock the same way again within {STORY_DAYS} days is repeating one idea, and it counts once, at its first call. <b>Longs and shorts are on separate lines</b>, so a falling market cannot be read as skill. Read the median and the mean without the best and worst before the totals: one big winner can carry a total. Paper only.
+        <div style={{ marginTop: 6 }}>
+          View: <span className="filter-links"><a className={`chip ${view === "all" ? "active" : ""}`} href="/scoreboard">All versions</a> <a className={`chip ${view === "latest" ? "active" : ""}`} href="/scoreboard?v=latest">Latest version only{latest ? ` (v${latest.id}, since ${latest.createdAt.slice(0, 10)})` : ""}</a></span>
+          <span className="muted"> · {versions.length} versions so far and none is frozen yet, so all versions is the default; the formal pass/fail per version is on <a href="/scoring">Scoring</a>.</span>
+        </div>
       </section>
 
       {tracks.some((t) => t.priceCheck) && (
@@ -81,29 +148,41 @@ export default async function ScoreboardPage() {
 
       <section className="card">
         <h2>Leaderboard</h2>
-        <div className="table-wrap">
-          <table>
-            <thead><tr><th>Player</th><th className="num">Banked</th><th className="num">vs sector</th><th className="num">In play</th><th className="num">Rounds won</th><th className="num">Hit rate</th><th>Luck check</th><th>Best · worst</th><th className="num">Calibration (Brier)</th></tr></thead>
-            <tbody>
-              {table.filter((s) => s.calls > 0).map((s, i) => (
-                <tr key={s.player}>
-                  <td>{i === 0 && s.banked > 0 ? "🏆 " : ""}<b>{PLAYER_LABEL[s.player]}</b><div className="small muted">{s.calls} calls · {s.closed} closed · {s.open} open</div></td>
-                  <td className={`num ${cls(s.banked)}`}><b>{pts(s.banked)}</b></td>
-                  <td className={`num ${cls(s.bankedVsSector)}`}>{s.closed ? pts(s.bankedVsSector) : "—"}</td>
-                  <td className={`num ${cls(s.inPlay)}`}>{pts(s.inPlay)}</td>
-                  <td className="num">{s.closed ? `${s.wins} / ${s.closed}` : "—"}</td>
-                  <td className="num">{pc(s.hitRate)}</td>
-                  <td className="small secondary">{luckText(s)}</td>
-                  <td className="small">{s.best ? <><Call r={s.best} /> <span className={cls(s.best.points)}>{pts(s.best.points)}</span></> : "—"}{s.worst ? <> · <Call r={s.worst} /> <span className={cls(s.worst.points)}>{pts(s.worst.points)}</span></> : ""}</td>
-                  <td className="num">{s.brier === null ? "—" : s.brier.toFixed(3)}<div className="small muted">{s.brierN ? `${s.brierN} rated` : ""}</div></td>
-                </tr>
-              ))}
-              {!table.some((s) => s.calls > 0) && <tr><td colSpan={9} className="muted">No tracked calls yet. A call enters at the next open after its card, once the after-close job has run.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-        <p className="small secondary">"vs sector" is the same stake measured against each call&apos;s sector fund: points there mean the company moved, not just its industry (NVDA down while AMD rose). Hit rate = closed calls that beat SPY. The luck check asks how often flipping a coin for each call would win at least as many rounds; under 5% starts to look like skill, and it needs at least 10 rounds to say anything. Brier: 0 is perfect, 0.25 is what you get by always saying 50%, higher is worse than that.</p>
+        <p className="small secondary">{stories.length} stories from {board.length} calls{view === "latest" ? " in the latest version" : ""}. Players are ordered by their closed points, longs and shorts together.</p>
+        <LinesTable lines={lines} empty="No tracked calls yet. A call enters at the live price when the market is open, else at the next open." />
+        <p className="small secondary">Points are against each call&apos;s sector fund (against SPY for the few cards with no sector fund price); the small figure under Banked is the same stories against SPY. Hit rate = closed stories that beat their sector fund. The luck check asks how often a coin flipped once per story would win at least as many; under 5% starts to look like skill, and it needs at least 10 closed stories to say anything.</p>
       </section>
+
+      <section className="card" id="rules">
+        <h2>Rules, with no model deciding</h2>
+        <p className="small secondary">Each rule takes every trade its condition gives, with no AI choosing. These are what could one day be traded by fixed rules, so each has its own line. Points here are against SPY (these books keep no sector fund) and each trade counts once.</p>
+        {rules ? <RulesTable rows={rules.lines} /> : <p className="small muted">The rule books could not be read just now.</p>}
+        {rules && (
+          <>
+            <h3 style={{ marginTop: "1rem" }}>Down drift: the model&apos;s picks against the setups it passed on</h3>
+            <p className="small secondary">Every Drift setup is shorted by the rule the moment it lists. Some of them the model also wrote a card on (its picks); the rest it passed on. Both groups are measured the same way, from the rule&apos;s own entry. If the picks do no better than the passes, the model&apos;s judgment adds nothing to the plain rule here. Too few closed trades to say anything yet: the first close on {rules.firstClose ?? "a date not set yet"}.</p>
+            <RulesTable rows={rules.picks} />
+          </>
+        )}
+      </section>
+
+      <section className="card" id="verdicts">
+        <h2>Did the thesis play out, and did the call make money?</h2>
+        <p className="small secondary">The day after a card&apos;s catalyst, the scout reads what happened and gives a verdict on the thesis. Points and the verdict can disagree: a short that made money while its thesis did not play out was the market, not the idea. Closed stories on the leaderboard, by verdict.</p>
+        <div className="table-wrap"><table>
+          <thead><tr><th>Thesis</th><th className="num">Closed stories</th><th className="num">Beat the sector fund</th><th className="num">Hit rate</th><th className="num">Median points</th></tr></thead>
+          <tbody>{verdicts.map((v) => <tr key={v.verdict}><td>{v.verdict}</td><td className="num">{v.n}</td><td className="num">{v.n ? `${v.wins} of ${v.n}` : "—"}</td><td className="num">{pc(v.hitRate)}</td><td className={`num ${cls(v.median)}`}>{pts(v.median)}</td></tr>)}</tbody>
+        </table></div>
+        <p className="small muted">&quot;Cannot tell&quot; is a mixed result or a check made too early. &quot;No check yet&quot; means no post-catalyst read was made (a card with no dated catalyst closes at its time limit only).</p>
+      </section>
+
+      {studyLines.length > 0 && (
+        <section className="card" id="study">
+          <h2>Study only, off the leaderboard for now</h2>
+          <p className="small secondary">These desks had a flaw in how their calls were made, so their results are kept apart until the desk has results under the fixed rule: rumors ({STUDY_ONLY.scout_rumors}), themes ({STUDY_ONLY.scout_themes}), and Congress clusters (clusters were built from small trades reported months late). The calls stay tracked and are never deleted.</p>
+          <LinesTable lines={studyLines} empty="No study-only calls." />
+        </section>
+      )}
 
       <section className="card">
         <h2>Calibration: when a call said X%, did it win X% of the time?</h2>
@@ -152,13 +231,16 @@ export default async function ScoreboardPage() {
         <SplitTable title="Timing" rows={byTiming} />
         <SplitTable title="Crowding stage" rows={byStage} />
         <SplitTable title="Analyst coverage" rows={byCoverage} />
+        <h3 style={{ marginTop: "1rem" }}>Shorts by whether the shares could be borrowed when entered</h3>
+        <p className="small secondary">A paper short ignores borrow. From November 26, 2026 each new short records the broker&apos;s reading on its entry day: on the easy-to-borrow list, shortable but hard to borrow (a fee, or no fill), or not shortable. Older shorts have no reading and are left out. If the money is in the hard-to-borrow rows, it is not money a real account could have made.</p>
+        <SplitTable title="Borrow at entry" rows={byBorrow} />
       </section>
 
       <section className="card">
-        <h2>Recent rounds</h2>
+        <h2>Recent closed calls, with the thesis verdict</h2>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Closed</th><th>Player</th><th>Call</th><th className="num">Points</th><th className="num">vs sector</th><th>What happened</th></tr></thead>
+            <thead><tr><th>Closed</th><th>Player</th><th>Call</th><th className="num">vs SPY</th><th className="num">vs sector fund</th><th>Thesis</th></tr></thead>
             <tbody>
               {recent.map((r) => {
                 const rv = reviews.get(r.cardId);
@@ -169,7 +251,7 @@ export default async function ScoreboardPage() {
                     <td><Call r={r} /> <span className="small secondary">{cardById.get(r.cardId)?.title}</span>{r.confidence !== null && r.calibrated && <span className="small muted"> · said {r.confidence}%</span>}</td>
                     <td className={`num ${cls(r.points)}`}><b>{pts(r.points)}</b></td>
                     <td className={`num ${cls(r.sectorPoints)}`}>{pts(r.sectorPoints)}</td>
-                    <td className="small">{rv ? <><span className="tag">{VERDICT[rv.verdict] ?? rv.verdict}</span> {rv.summary}</> : <span className="muted">no post-catalyst check</span>}</td>
+                    <td className="small"><span className={`tag ${verdictGroup(rv?.verdict) === "played out" ? "ok" : verdictGroup(rv?.verdict) === "did not play out" ? "error" : ""}`}>{verdictGroup(rv?.verdict)}</span> {rv ? rv.summary : <span className="muted">no post-catalyst read was made</span>}</td>
                   </tr>
                 );
               })}

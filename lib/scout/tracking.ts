@@ -102,8 +102,10 @@ async function priceCheckNotes(data: MarketData, tracks: Track[], today: string)
 export async function runPriceCheck(data: MarketData, now: Date): Promise<string> {
   const tracks = await store.allTracks();
   const notes = await priceCheckNotes(data, tracks, toEt(now).date);
+  // Whether each new short could have been borrowed, read on the day it was entered.
+  const borrow = await import("./price-sanity").then(({ recordBorrow }) => recordBorrow(data, toEt(now).date)).catch((e) => `borrow: failed (${e instanceof Error ? e.message.slice(0, 80) : e})`);
   const flagged = (await store.allTracks()).filter((t) => t.priceCheck);
-  return `price check: ${tracks.filter((t) => !t.exitDate && t.entryDate).length} open calls, ${notes.length} adjusted or flagged${notes.length ? ` (${notes.join("; ").slice(0, 600)})` : ""}; ${flagged.length} price unverified${flagged.length ? `: ${flagged.map((t) => `#${t.cardId} ${t.symbol}`).join(", ").slice(0, 300)}` : ""}`;
+  return `price check: ${tracks.filter((t) => !t.exitDate && t.entryDate).length} open calls, ${notes.length} adjusted or flagged${notes.length ? ` (${notes.join("; ").slice(0, 600)})` : ""}; ${flagged.length} price unverified${flagged.length ? `: ${flagged.map((t) => `#${t.cardId} ${t.symbol}`).join(", ").slice(0, 300)}` : ""}; ${borrow}`;
 }
 
 /** Pure: is the card written before that day's 9:30 AM ET open? */

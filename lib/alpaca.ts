@@ -74,7 +74,7 @@ export function applyLatestBars(snaps: Record<string, Snapshot>, bars: Record<st
 
 export interface Mover { symbol: string; price: number; changePct: number }
 
-export interface Asset { symbol: string; name: string; exchange: string; active: boolean; tradable: boolean }
+export interface Asset { symbol: string; name: string; exchange: string; active: boolean; tradable: boolean; /** Whether the broker's data says the stock can be sold short, and whether it is on the easy-to-borrow list. */ shortable?: boolean; easyToBorrow?: boolean }
 
 export interface MinuteBar { t: string; o: number; h: number; l: number; c: number; v: number }
 
@@ -315,8 +315,8 @@ export class AlpacaClient {
   /** What a symbol currently is: issuer name, exchange, whether it trades. Null when the symbol is unknown. */
   async getAsset(symbol: string): Promise<Asset | null> {
     try {
-      const a = await this.refGet<{ symbol: string; name?: string; exchange?: string; status?: string; tradable?: boolean; class?: string }>(`/v2/assets/${encodeURIComponent(symbol)}`, {});
-      return { symbol: a.symbol, name: a.name ?? "", exchange: a.exchange ?? "", active: a.status === "active", tradable: !!a.tradable };
+      const a = await this.refGet<{ symbol: string; name?: string; exchange?: string; status?: string; tradable?: boolean; class?: string; shortable?: boolean; easy_to_borrow?: boolean }>(`/v2/assets/${encodeURIComponent(symbol)}`, {});
+      return { symbol: a.symbol, name: a.name ?? "", exchange: a.exchange ?? "", active: a.status === "active", tradable: !!a.tradable, ...(typeof a.shortable === "boolean" ? { shortable: a.shortable } : {}), ...(typeof a.easy_to_borrow === "boolean" ? { easyToBorrow: a.easy_to_borrow } : {}) };
     } catch (err) {
       if (err instanceof AlpacaError && (err.status === 404 || err.status === 422)) return null;
       throw err;

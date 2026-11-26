@@ -30,6 +30,8 @@ export interface ListEntry {
   /** Where the entry price came from: the scan that listed it, the 1-minute bar at that time, or the next open. */
   basis: Basis;
   exitBy: string | null; exitDate: string | null; exitPrice: number | null; spyExit: number | null;
+  /** Whether the shares could be borrowed when the short was entered (null when not recorded). */
+  borrow?: "easy" | "hard" | "not shortable" | null;
 }
 
 export const listKey = (s: { symbol: string; eventDate: string }) => `${s.symbol}|${s.eventDate}`;
@@ -74,7 +76,7 @@ const adjusted = (r: Record<string, unknown>) => (num(r.entry_price) === null ? 
 const toEntry = (r: Record<string, unknown>): ListEntry => ({
   symbol: String(r.symbol), eventDate: day(r.event_date)!, eventKind: String(r.event_kind ?? ""), headline: String(r.headline ?? ""), url: (r.url as string) ?? null,
   listedAt: new Date(r.listed_at as string).toISOString(), entryDate: day(r.entry_date), entryPrice: adjusted(r), spyEntry: num(r.spy_entry), basis: r.basis as Basis,
-  exitBy: day(r.exit_by), exitDate: day(r.exit_date), exitPrice: num(r.exit_price), spyExit: num(r.spy_exit),
+  exitBy: day(r.exit_by), exitDate: day(r.exit_date), exitPrice: num(r.exit_price), spyExit: num(r.spy_exit), borrow: (r.borrow as ListEntry["borrow"]) ?? null,
 });
 
 /** Every paper short from the list, newest first. */

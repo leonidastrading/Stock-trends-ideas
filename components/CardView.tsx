@@ -194,6 +194,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
         {k.unknowns.length > 0 && <><dt>Unknowns</dt><dd>{k.unknowns.join("; ")}</dd></>}
         {c.gateNotes.length > 0 && <><dt>Gate notes</dt><dd className="small secondary">{c.gateNotes.join(" · ")}</dd></>}
         {track && <><dt>Paper track</dt><dd className="small">
+          {track?.borrow && c.direction === "short" && <div className={`small ${track.borrow === "easy" ? "muted" : "warn"}`} title="The broker's reading on the day the paper short was entered. A paper short ignores borrow; a real one may cost a fee or not be possible.">{track.borrow === "easy" ? "Easy to borrow when entered." : track.borrow === "hard" ? "Hard to borrow when entered: a real short would pay a fee, or might not be filled." : "Not shortable when entered: this short could not have been placed for real."}</div>}
           {track?.corrections && <div className="small warn"><b>Correction:</b> {track.corrections}</div>}
           {track?.priceCheck && <div className="small warn" title="Left out of the Scoreboard's points until the price passes the check."><b>Price unverified:</b> {track.priceCheck}.</div>}
           {!track?.priceCheck && track && !track.exitDate && result && q?.changePct != null && Math.abs(q.changePct) > 40 && <div className="small muted" title="A move this large is checked against the whole market's prices and for a split before it counts."><b>Price unverified:</b> the stock shows a {pct(q.changePct)} move today; the result below waits for the price check.</div>}

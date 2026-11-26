@@ -267,6 +267,8 @@ export interface Track {
   entryPriceRaw?: number | null;
   /** Splits since the entry (2-for-1 = 0.5); 1 when none. */
   splitFactor?: number;
+  /** For a short: whether the shares could be borrowed when it was entered (the broker's reading that day; null when not recorded). */
+  borrow?: "easy" | "hard" | "not shortable" | null;
   /** Corrections added after the card was written (a wrong link taken off); the card's own text is never edited. */
   corrections?: string | null;
   /** Set when the prices disagree for a reason that is not a split: left out of the points until checked. */
@@ -282,7 +284,7 @@ const toTrack = (r: Row): Track => ({
   excluded: r.excluded ?? null,
   invalidatedAt: iso(r.invalidated_at) ?? null, invalidatedNote: r.invalidated_detail ?? null,
   cardAt: iso(r.card_at) ?? null,
-  corrections: r.corrections ?? null,
+  corrections: r.corrections ?? null, borrow: r.borrow ?? null,
 });
 
 const TRACK_SELECT = `SELECT t.*, (SELECT e.detail FROM track_events e WHERE e.card_id = t.card_id AND e.kind = 'excluded' ORDER BY e.id LIMIT 1) AS excluded,

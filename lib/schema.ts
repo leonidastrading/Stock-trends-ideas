@@ -752,6 +752,9 @@ CREATE TABLE IF NOT EXISTS drift_list (
   PRIMARY KEY (symbol, event_date)
 );
 ALTER TABLE bubble_events ADD COLUMN IF NOT EXISTS dropped text;
+-- Whether a paper short could have been borrowed when it was entered: easy | hard | not shortable (null: not recorded).
+ALTER TABLE tracks ADD COLUMN IF NOT EXISTS borrow text;
+ALTER TABLE drift_list ADD COLUMN IF NOT EXISTS borrow text;
 ALTER TABLE drift_list ADD COLUMN IF NOT EXISTS split_factor double precision NOT NULL DEFAULT 1;
 ALTER TABLE upgrade_list ADD COLUMN IF NOT EXISTS split_factor double precision NOT NULL DEFAULT 1;
 -- The pre-earnings screen: one row per stock and report date, the warning signs seen before the report and the reaction after.

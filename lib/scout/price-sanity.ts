@@ -97,3 +97,31 @@ export async function adjustBookForSplits(data: MarketData, book: { table: "drif
   }
   return notes;
 }
+
+export type Borrow = "easy" | "hard" | "not shortable";
+
+/** Pure: the borrow reading from the broker's asset record (null when it does not say). */
+export function borrowOf(a: { shortable?: boolean; easyToBorrow?: boolean } | null | undefined): Borrow | null {
+  if (!a || typeof a.shortable !== "boolean") return null;
+  return !a.shortable ? "not shortable" : a.easyToBorrow ? "easy" : "hard";
+}
+
+/**
+ * Paper shorts ignore whether the shares could be borrowed. For each short entered today or yesterday with no
+ * reading yet, the broker's record is kept beside it: on the easy-to-borrow list, shortable but hard to borrow, or
+ * not shortable. It is a reading from the day of the entry, never filled in later for older shorts. Card shorts and
+ * the Drift list's shorts both.
+ */
+export async function recordBorrow(data: MarketData, today: string): Promise<string> {
+  if (!data.getAsset) return "borrow: no asset data";
+  const since = new Date(Date.parse(`${today}T12:00:00Z`) - 86400_000).toISOString().slice(0, 10);
+  const cards = await q(`SELECT card_id, symbol FROM tracks WHERE direction = 'short' AND borrow IS NULL AND entry_date >= $1`, [since]);
+  const list = await q(`SELECT symbol, event_date::text AS k FROM drift_list WHERE borrow IS NULL AND entry_date >= $1`, [since]);
+  const seen = new Map<string, Borrow | null>();
+  const read = async (sym: string) => { if (!seen.has(sym)) seen.set(sym, borrowOf(await data.getAsset!(sym).catch(() => null))); return seen.get(sym)!; };
+  let n = 0;
+  for (const r of cards) { const b = await read(String(r.symbol)); if (b) { await q(`UPDATE tracks SET borrow = $2 WHERE card_id = $1 AND borrow IS NULL`, [r.card_id, b]); n++; } }
+  for (const r of list) { const b = await read(String(r.symbol)); if (b) { await q(`UPDATE drift_list SET borrow = $3 WHERE symbol = $1 AND event_date = $2 AND borrow IS NULL`, [r.symbol, String(r.k).slice(0, 10), b]); n++; } }
+  const hard = [...seen].filter(([, b]) => b && b !== "easy").map(([s, b]) => `${s} ${b}`);
+  return `borrow: ${n} new short${n === 1 ? "" : "s"} read${hard.length ? ` (${hard.join(", ")})` : ""}`;
+}
