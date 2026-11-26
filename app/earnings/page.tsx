@@ -25,10 +25,16 @@ export default async function EarningsPage() {
   if (!hasDatabase()) return <SetupNotice />;
   const data = marketDataFromEnv();
   const today = toEt(new Date()).date;
-  const [scans, tracks, cards, docs, history, snaps, backfill] = await Promise.all([
+  const [loaded, tracks, cards, docs, history, snaps, backfill] = await Promise.all([
     scansSince(800, today), allTracks(), allCards(), allDocs(), historyCount().catch(() => 0), snapshotCount().catch(() => 0),
     import("@/lib/scout/store").then((s) => s.cacheGet<{ next: string; floor: string }>("earnings:backfill")).catch(() => null),
   ]);
+  // Rows an older scan measured a day late are measured again on the report day, here and now (a few seconds, once).
+  let scans = loaded;
+  if (data && scans.some(measuredLate)) {
+    const fixed = await Promise.race([import("@/lib/scout/earnings").then(({ repairLateScans }) => repairLateScans(data)).then((r) => { console.log(`earnings repair: ${r}`); return true; }).catch((e) => { console.warn(`earnings repair failed: ${e instanceof Error ? e.message : e}`); return false; }), new Promise<boolean>((r) => setTimeout(() => r(false), 12_000))]);
+    if (fixed) scans = await scansSince(800, today).catch(() => scans);
+  }
   const trackBy = new Map(tracks.map((t) => [t.scanId, t]));
   const cardBy = new Map(cards.map((c) => [c.scanId, c]));
   const docBy = new Map(docs.map((d) => [d.scanId, d]));
@@ -131,6 +137,7 @@ function SetupCard({ s, t, c, d }: { s: ScanRow; t: TrackRow | null; c: CardRow 
         <Ticker symbol={s.symbol} className="pos" /> <span className="tag late">{s.setup}</span>{" "}
         {k ? <span className={`tag ${k.ai_recommendation === "promote" ? "ok" : ""}`}>{k.ai_recommendation === "promote" ? "promoted" : "log only"}</span> : <span className="tag">card waiting</span>}{" "}
         {measuredLate(s) && <span className="tag warn" title="This before-open report was measured on the session after it (a fault in the scan, fixed Nov 26, 2026). The reaction, volume and run-up shown are the second day's, the run-up includes the earnings jump, and the paper entry is a session later than the rule. The desk writes no card on it.">⚠ measured a day late: numbers are the second day&apos;s</span>}{" "}
+        {s.fixed && <span className="tag warn" title={`${s.fixed.why}. The first measurement said: reaction ${pct(s.fixed.was.reaction_pct)} vs SPY on ${s.fixed.was.volume_ratio ?? "?"}x volume, run-up ${s.fixed.was.runup_10d_pct === null ? "?" : pct(s.fixed.was.runup_10d_pct)} (rank ${s.fixed.was.runup_pct_rank ?? "?"}), setup ${s.fixed.was.setup ?? "none"}. Those were the second day's numbers, and the run-up included the earnings jump. The first measurement stays on file; the paper entry was a session late and is not moved.`}>corrected: measured again on the report day{s.fixed.was.setup !== s.setup ? ` (was ${s.fixed.was.setup ?? "no setup"})` : ""}</span>}{" "}
         {n.scanned_late && <span className="tag" title="The results were not published in time for the scan on the report's own night, so it was found a night later. The reaction is the report day's; the paper entry is one session later than the rule.">found a night late</span>}{" "}
         {isA(s.setup) && n.reaction_pct <= -EARN.gapPct && <span className="tag warn" title={`The market sold this beat: ${pct(n.reaction_pct)} vs SPY on the reaction day. The rule ranks the EPS beat and volume only, so it is still tracked as an up-drift setup on paper; the reaction itself points down.`}>⚠ beat sold off {pct(n.reaction_pct)}</span>}{" "}
         <span className="small muted">reported {dayLabel(s.reportDate)} {s.timing.replace("_", " ")} · {n.cap_group} · {n.sector ?? "sector ?"}</span>
@@ -139,6 +146,7 @@ function SetupCard({ s, t, c, d }: { s: ScanRow; t: TrackRow | null; c: CardRow 
         EPS <b>{n.eps_actual}</b> vs {n.eps_consensus} consensus <span className="muted">(frozen {n.consensus_captured_at ? etLabelAgo(n.consensus_captured_at) : "?"})</span> · surprise rank <b>{n.surprise_pct_rank ?? "?"}</b> · <span title={n.revenue_source ?? "Revenue and its consensus were in neither Finnhub nor Financial Modeling Prep"}>revenue {n.revenue_beat === null ? "not checked" : `${n.revenue_beat ? "beat" : "missed"} (${pct(n.revenue_surprise_pct)})`}</span> · reaction <b>{pct(n.reaction_pct)}</b> vs SPY on {n.volume_ratio}× volume · run-up 10d {pct(n.runup_10d_pct)} (rank {n.runup_pct_rank ?? "?"}) · {n.days_after_quarter_end ?? "?"} days after quarter end · ${n.market_cap_b}B
       </div>
       {d && <div className="small muted">Guidance by wording (no model): {d.guidanceNumeric} · {d.pressUrl ? <a href={d.pressUrl} target="_blank" rel="noreferrer">press release read</a> : "press release not found"} · {d.headlines.length} headline(s) before entry</div>}
+      {k && s.fixed && <div className="small warn">The card below was written from the first measurement: what it says about the reaction and the run-up used the second day&apos;s numbers and does not hold. The numbers above are the corrected ones.</div>}
       {k && (
         <>
           <div className="small">Beat quality <b className={k.beat_quality === "high" ? "pos" : k.beat_quality === "low" ? "neg" : "warn"}>{k.beat_quality}</b> ({k.beat_drivers.join(", ") || "?"}) · guidance <b>{k.guidance}</b> · confidence {k.confidence}{k.red_flags.length ? <span className="neg"> · red flags: {k.red_flags.join("; ")}</span> : null}</div>

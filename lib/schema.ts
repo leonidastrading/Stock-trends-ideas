@@ -883,6 +883,18 @@ CREATE TABLE IF NOT EXISTS earnings_scans (
   UNIQUE (symbol, report_date)
 );
 CREATE OR REPLACE TRIGGER earnings_scans_ro BEFORE UPDATE OR DELETE ON earnings_scans FOR EACH ROW EXECUTE FUNCTION forbid_change();
+-- A scan row measured on the wrong day (a before-open report measured on the session after it), measured again on the
+-- right one. The first measurement stays in earnings_scans untouched; this is what is shown and scored instead.
+CREATE TABLE IF NOT EXISTS earnings_scan_fixes (
+  scan_id integer PRIMARY KEY REFERENCES earnings_scans(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  reaction_date date NOT NULL,
+  numbers jsonb NOT NULL,
+  setup text,
+  reason text,
+  why text NOT NULL
+);
+CREATE OR REPLACE TRIGGER earnings_scan_fixes_ro BEFORE UPDATE OR DELETE ON earnings_scan_fixes FOR EACH ROW EXECUTE FUNCTION forbid_change();
 CREATE TABLE IF NOT EXISTS earnings_tracks (
   scan_id integer PRIMARY KEY,
   entry_date date NOT NULL,

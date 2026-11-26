@@ -1,3 +1,4 @@
+import { mergeReportDates } from "@/lib/sources/earnings-data";
 import { NextResponse } from "next/server";
 import { checkBasicAuth } from "@/lib/auth";
 import { marketDataFromEnv, type DailyBar } from "@/lib/alpaca";
@@ -44,7 +45,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ symbol: str
   const finn = process.env.FINNHUB_API_KEY?.trim()
     ? await panel<string[]>(`earndates-fh:${sym}`, 12 * 60, async () => { const d = await import("@/lib/sources/earnings-data").then(({ finnhubEarningsDates }) => finnhubEarningsDates(sym, addDays(today, -760), today)); if (d === null) throw new Error("no key"); return d; }, 8_000)
     : { data: [] as string[] };
-  const earnings = [...new Set([...(earn.data ?? []), ...onFile, ...(finn.data ?? [])])].sort();
+  // One line per report: the SEC's filing day first, then what is on file, then the calendar's (they differ by a day or two for the same report).
+  const earnings = mergeReportDates([earn.data ?? [], onFile, finn.data ?? []]);
   const next = info?.nextEarnings && info.nextEarnings >= today ? info.nextEarnings : null;
   // The company's name (for the chart's background) and the latest pre-market or after-hours trade.
   const [name, q] = await Promise.all([

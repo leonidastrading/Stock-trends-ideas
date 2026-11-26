@@ -184,6 +184,18 @@ export async function finnhubEarningsDates(symbol: string, from: string, today: 
   return finnhubDates((await res.json()) as { earningsCalendar?: Array<Record<string, unknown>> }, symbol, today);
 }
 
+/**
+ * Pure: report dates from several sources as one list. Sources date the same report a day or two apart (the SEC by
+ * the day the 8-K was filed, a calendar by the day it expects the report, after-the-close reports by the next day), so
+ * a date within a few days of one already kept is the same report: the first source to name it wins.
+ */
+export function mergeReportDates(lists: string[][], withinDays = 4): string[] {
+  const out: string[] = [];
+  const t = (d: string) => Date.parse(`${d}T00:00:00Z`);
+  for (const list of lists) for (const d of [...list].sort()) if (/^\d{4}-\d{2}-\d{2}$/.test(d) && !out.some((x) => Math.abs(t(x) - t(d)) <= withinDays * 86400_000)) out.push(d);
+  return out.sort();
+}
+
 // ---------------------------------------------------------------- the press release (SEC 8-K item 2.02, or a foreign company's 6-K)
 
 /** Pure: text that reads like an earnings release (a quarter or period named, and results in numbers). */

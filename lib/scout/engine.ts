@@ -206,6 +206,8 @@ export async function earningsNight(data: import("../alpaca").MarketData, now: D
   try {
     const e = await import("./earnings");
     out.scan = await e.scanEarnings(data, now).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+    // Rows an older scan measured a day late are measured again on the report day (the first measurement is kept).
+    out.repair = await e.repairLateScans(data, now).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
     // Tomorrow's reports: freeze consensus, market cap and year-ago EPS while they are still before release.
     out.snapshots = await e.snapshotConsensus(data, now).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
     out.docs = await e.gatherSetupDocs({ data, env: process.env, now }, deadline).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);

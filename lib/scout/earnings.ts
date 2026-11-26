@@ -224,7 +224,7 @@ export function toCard(reply: string, s: { symbol: string; setup: Setup; reportD
 
 // ---------------------------------------------------------------- storage
 
-export interface ScanRow { id: number; createdAt: string; version: string; symbol: string; reportDate: string; reactionDate: string; timing: Timing; setup: Setup | null; reason: string | null; numbers: Numbers }
+export interface ScanRow { id: number; createdAt: string; version: string; symbol: string; reportDate: string; reactionDate: string; timing: Timing; setup: Setup | null; reason: string | null; numbers: Numbers; /** Set when the row was measured again on the right day: when, why, and what the first measurement said. */ fixed?: { at: string; why: string; was: { reactionDate: string; setup: Setup | null; reaction_pct: number; volume_ratio: number | null; runup_10d_pct: number | null; runup_pct_rank: number | null; surprise_pct_rank: number | null } } }
 export interface TrackRow {
   scanId: number; entryDate: string; exitDate: string | null; nextReport: string | null; nextKnown: boolean; entryPrice: number | null; exitPrice: number | null; closed: boolean;
   retPct: number | null; spyPct: number | null; worstPct: number | null; tappedAt: string | null;
@@ -237,7 +237,17 @@ const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
 const day = (v: unknown) => (v ? (v instanceof Date ? v.toISOString().slice(0, 10) : String(v).slice(0, 10)) : null);
 const numOrNull = (v: unknown) => (v === null || v === undefined ? null : Number(v));
 
-const toScan = (r: Record<string, unknown>): ScanRow => ({ id: Number(r.id), createdAt: iso(r.created_at)!, version: String(r.version), symbol: String(r.symbol), reportDate: day(r.report_date)!, reactionDate: day(r.reaction_date)!, timing: r.timing as Timing, setup: (r.setup as Setup) ?? null, reason: (r.reason as string) ?? null, numbers: r.numbers as Numbers });
+const rawScan = (r: Record<string, unknown>): ScanRow => ({ id: Number(r.id), createdAt: iso(r.created_at)!, version: String(r.version), symbol: String(r.symbol), reportDate: day(r.report_date)!, reactionDate: day(r.reaction_date)!, timing: r.timing as Timing, setup: (r.setup as Setup) ?? null, reason: (r.reason as string) ?? null, numbers: (typeof r.numbers === "string" ? JSON.parse(r.numbers) : r.numbers) as Numbers });
+/** A scan row as shown and scored: the corrected measurement when there is one (queries that join earnings_scan_fixes as fix_*), with the first one kept beside it. */
+const toScan = (r: Record<string, unknown>): ScanRow => {
+  const s = rawScan(r);
+  if (!r.fix_numbers) return s;
+  const n = (typeof r.fix_numbers === "string" ? JSON.parse(r.fix_numbers) : r.fix_numbers) as Numbers;
+  return { ...s, reactionDate: day(r.fix_reaction_date)!, setup: (r.fix_setup as Setup) ?? null, reason: (r.fix_reason as string) ?? null, numbers: n,
+    fixed: { at: iso(r.fix_at)!, why: String(r.fix_why ?? ""), was: { reactionDate: s.reactionDate, setup: s.setup, reaction_pct: s.numbers.reaction_pct, volume_ratio: s.numbers.volume_ratio, runup_10d_pct: s.numbers.runup_10d_pct, runup_pct_rank: s.numbers.runup_pct_rank, surprise_pct_rank: s.numbers.surprise_pct_rank } } };
+};
+/** The columns of a correction, joined to a scan row. */
+const FIX = `f.reaction_date AS fix_reaction_date, f.numbers AS fix_numbers, f.setup AS fix_setup, f.reason AS fix_reason, f.created_at AS fix_at, f.why AS fix_why`;
 const toTrack = (r: Record<string, unknown>): TrackRow => ({
   scanId: Number(r.scan_id), entryDate: day(r.entry_date)!, exitDate: day(r.exit_date), nextReport: day(r.next_report), nextKnown: !!r.next_known, entryPrice: numOrNull(r.entry_price), exitPrice: numOrNull(r.exit_price), closed: !!r.closed,
   retPct: numOrNull(r.ret_pct), spyPct: numOrNull(r.spy_pct), worstPct: numOrNull(r.worst_pct), tappedAt: iso(r.tapped_at),
@@ -245,7 +255,7 @@ const toTrack = (r: Record<string, unknown>): TrackRow => ({
 });
 
 export async function scansSince(days: number, today?: string): Promise<ScanRow[]> {
-  return (await q(`SELECT * FROM earnings_scans WHERE reaction_date >= $1 ORDER BY reaction_date DESC, id DESC`, [addDays(today ?? toEt(new Date()).date, -days)])).map(toScan);
+  return (await q(`SELECT s.*, ${FIX} FROM earnings_scans s LEFT JOIN earnings_scan_fixes f ON f.scan_id = s.id WHERE s.reaction_date >= $1 ORDER BY s.reaction_date DESC, s.id DESC`, [addDays(today ?? toEt(new Date()).date, -days)])).map(toScan);
 }
 export async function allTracks(): Promise<TrackRow[]> {
   return (await q(`SELECT * FROM earnings_tracks ORDER BY entry_date DESC`)).map(toTrack);
@@ -257,7 +267,7 @@ export async function allDocs(): Promise<DocRow[]> {
   return (await q(`SELECT * FROM earnings_docs`)).map((r) => ({ scanId: Number(r.scan_id), fetchedAt: iso(r.fetched_at)!, pressUrl: (r.press_url as string) ?? null, pressText: (r.press_text as string) ?? null, headlines: (r.headlines as DocRow["headlines"]) ?? [], guidanceNumeric: String(r.guidance_numeric ?? "unknown") }));
 }
 export async function getScan(id: number): Promise<ScanRow | null> {
-  const r = (await q(`SELECT * FROM earnings_scans WHERE id = $1`, [id]))[0];
+  const r = (await q(`SELECT s.*, ${FIX} FROM earnings_scans s LEFT JOIN earnings_scan_fixes f ON f.scan_id = s.id WHERE s.id = $1`, [id]))[0];
   return r ? toScan(r) : null;
 }
 export async function markTapped(id: number, body: unknown): Promise<void> {
@@ -585,10 +595,49 @@ export async function gatherSetupDocs(deps: { data: MarketData | null; env: Node
   return n;
 }
 
+/**
+ * Measure again the rows an older scan measured on the wrong day (a before-open report measured on the session after
+ * it: the reaction, volume and run-up were the second day's, and the run-up included the earnings jump itself). The
+ * first measurement stays on file untouched; the corrected numbers, ranks and setup are stored beside it and are what
+ * the page shows and the scoreboard counts. The paper entry is not moved: it was a session late and stays so.
+ */
+export async function repairLateScans(data: MarketData, now = new Date(), max = 40): Promise<string> {
+  const today = toEt(now).date;
+  const late = (await q(`SELECT s.* FROM earnings_scans s LEFT JOIN earnings_scan_fixes f ON f.scan_id = s.id WHERE f.scan_id IS NULL AND s.timing = 'before_open' AND s.reaction_date > s.report_date AND s.report_date >= $1 ORDER BY s.id LIMIT $2`, [addDays(today, -90), max])).map(rawScan);
+  if (!late.length) return "no rows measured on the wrong day";
+  const from = addDays(late.reduce((m, s) => (s.reportDate < m ? s.reportDate : m), today), -45);
+  const bars = await data.getDailyBars(["SPY", ...new Set(late.map((s) => s.symbol))], from, today);
+  const by = new Map<string, DailyBar[]>();
+  for (const b of bars) by.set(b.symbol, [...(by.get(b.symbol) ?? []), b]);
+  for (const v of by.values()) v.sort((a, b) => a.date.localeCompare(b.date));
+  const spy = by.get("SPY") ?? [];
+  const groups = new Map<string, { surprises: number[]; runups: number[] }>();
+  let done = 0;
+  const changed: string[] = [];
+  for (const s of late) {
+    // The first session on or after the report day: where a before-open report is first traded.
+    const rd = spy.find((b) => b.date >= s.reportDate)?.date;
+    const st = rd ? reactionStats(by.get(s.symbol) ?? [], spy, rd) : null;
+    if (!rd || !st) continue;
+    const n0 = s.numbers, group = capGroup(n0.market_cap_b * 1e9), key = `${group}|${s.reportDate}`;
+    if (!groups.has(key)) groups.set(key, await groupHistory(group, s.reportDate));
+    const hist = groups.get(key)!;
+    const known = n0.consensus_source === "snapshot" && Number.isFinite(n0.eps_consensus);
+    const surprise = known ? (n0.eps_actual - n0.eps_consensus) / st.prevClose : 0;
+    const n: Numbers = { ...n0, surprise: Math.round(surprise * 1e6) / 1e6, surprise_pct_rank: known && hist.surprises.length >= EARN.minHistory ? pctRank(surprise, hist.surprises) : null, rank_basis: hist.surprises.length,
+      reaction_pct: st.reactionPct, volume_ratio: st.volumeRatio, runup_10d_pct: st.runup10Pct, runup_pct_rank: st.runup10Pct !== null && hist.runups.length >= EARN.minHistory ? pctRank(st.runup10Pct, hist.runups) : null, price: st.price };
+    const { setup, reason } = classify(n);
+    await q(`INSERT INTO earnings_scan_fixes (scan_id, reaction_date, numbers, setup, reason, why) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING`, [s.id, rd, JSON.stringify(n), setup, reason, `first measured on ${s.reactionDate}, the session after the report; measured again on ${rd}`]);
+    done++;
+    if (setup !== s.setup) changed.push(`${s.symbol} ${s.setup ?? "none"} -> ${setup ?? "none"}`);
+  }
+  return `${done} of ${late.length} rows measured again on the report day${changed.length ? `; setup changed: ${changed.join(", ")}` : ""}`;
+}
+
 /** Write the waiting A-setup cards (a few per call, within the earnings desk's own budget). Setups are tracked either way. */
 export async function writeCards(deps: { data: MarketData | null; callModel: CallModel; now: Date; env: NodeJS.ProcessEnv; fetchImpl?: typeof fetch }, deadline: number, max = EARN.cardsPerCall, only?: number): Promise<string> {
   // A before-open report measured on the session after it (an older scan's mistake) gets no card: its numbers are the second day's.
-  const waiting = await q(`SELECT s.*, t.entry_date, t.exit_date, t.next_report, t.next_known FROM earnings_scans s JOIN earnings_tracks t ON t.scan_id = s.id LEFT JOIN earnings_cards c ON c.scan_id = s.id WHERE c.scan_id IS NULL AND s.setup IN ('A', 'A+', 'A++') AND s.reaction_date >= $2 AND NOT (s.timing = 'before_open' AND s.reaction_date > s.report_date) AND ($3::int IS NULL OR s.id = $3) ORDER BY s.reaction_date DESC LIMIT $1`, [max, addDays(toEt(deps.now).date, -10), only ?? null]);
+  const waiting = await q(`SELECT s.*, ${FIX}, t.entry_date, t.exit_date, t.next_report, t.next_known FROM earnings_scans s JOIN earnings_tracks t ON t.scan_id = s.id LEFT JOIN earnings_cards c ON c.scan_id = s.id LEFT JOIN earnings_scan_fixes f ON f.scan_id = s.id WHERE c.scan_id IS NULL AND (CASE WHEN f.scan_id IS NULL THEN s.setup ELSE f.setup END) IN ('A', 'A+', 'A++') AND s.reaction_date >= $2 AND NOT (f.scan_id IS NULL AND s.timing = 'before_open' AND s.reaction_date > s.report_date) AND ($3::int IS NULL OR s.id = $3) ORDER BY s.reaction_date DESC LIMIT $1`, [max, addDays(toEt(deps.now).date, -10), only ?? null]);
   if (!waiting.length) return "no cards waiting";
   const settings = await store.loadSettings();
   const today = toEt(deps.now).date;
