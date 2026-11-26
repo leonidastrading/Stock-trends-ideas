@@ -2,13 +2,15 @@ import SetupNotice from "@/components/SetupNotice";
 import Ticker from "@/components/Ticker";
 import { marketDataFromEnv } from "@/lib/alpaca";
 import { hasDatabase } from "@/lib/db";
-import { allCards, allDocs, allTracks, EARN, EARN_VERSION, historyCount, isA, isShortStudy, isStudy, peerBench, scansSince, score, snapshotCount, weekOf, type CardRow, type DocRow, type Group, type ScanRow, type TrackRow } from "@/lib/scout/earnings";
+import { allCards, allDocs, allTracks, EARN, EARN_VERSION, historyCount, isA, isShortStudy, isStudy, measuredLate, peerBench, scansSince, score, snapshotCount, weekOf, type CardRow, type DocRow, type Group, type ScanRow, type TrackRow } from "@/lib/scout/earnings";
 import { calendarDay } from "@/lib/sources/earnings-data";
 import { addDays, etLabelAgo, toEt, dayAgo } from "@/lib/time";
 import EarningsSend from "./EarningsSend";
 import TabNew from "@/components/TabNew";
 import NewSince from "@/components/NewSince";
 import StockChart from "@/components/StockChart";
+import ResearchButton from "@/components/ResearchButton";
+import EarningsResearch from "./EarningsResearch";
 import { tvSymbol } from "@/config/links";
 
 export const dynamic = "force-dynamic";
@@ -128,6 +130,8 @@ function SetupCard({ s, t, c, d }: { s: ScanRow; t: TrackRow | null; c: CardRow 
       <div>
         <Ticker symbol={s.symbol} className="pos" /> <span className="tag late">{s.setup}</span>{" "}
         {k ? <span className={`tag ${k.ai_recommendation === "promote" ? "ok" : ""}`}>{k.ai_recommendation === "promote" ? "promoted" : "log only"}</span> : <span className="tag">card waiting</span>}{" "}
+        {measuredLate(s) && <span className="tag warn" title="This before-open report was measured on the session after it (a fault in the scan, fixed Nov 26, 2026). The reaction, volume and run-up shown are the second day's, the run-up includes the earnings jump, and the paper entry is a session later than the rule. The desk writes no card on it.">⚠ measured a day late: numbers are the second day&apos;s</span>}{" "}
+        {n.scanned_late && <span className="tag" title="The results were not published in time for the scan on the report's own night, so it was found a night later. The reaction is the report day's; the paper entry is one session later than the rule.">found a night late</span>}{" "}
         {isA(s.setup) && n.reaction_pct <= -EARN.gapPct && <span className="tag warn" title={`The market sold this beat: ${pct(n.reaction_pct)} vs SPY on the reaction day. The rule ranks the EPS beat and volume only, so it is still tracked as an up-drift setup on paper; the reaction itself points down.`}>⚠ beat sold off {pct(n.reaction_pct)}</span>}{" "}
         <span className="small muted">reported {dayLabel(s.reportDate)} {s.timing.replace("_", " ")} · {n.cap_group} · {n.sector ?? "sector ?"}</span>
       </div>
@@ -148,6 +152,10 @@ function SetupCard({ s, t, c, d }: { s: ScanRow; t: TrackRow | null; c: CardRow 
       </div>
       <div className="small" style={{ marginTop: 4 }}>
         {t?.tappedAt ? <span className="tag ok">sent to Swing ideas {etLabelAgo(t.tappedAt)}</span> : k?.ai_recommendation === "promote" && !t?.closed ? <EarningsSend id={s.id} /> : null}
+        {" "}{!k && isA(s.setup) && !measuredLate(s) ? <EarningsResearch id={s.id} symbol={s.symbol} /> : (
+          <ResearchButton symbol={s.symbol} term={`${s.symbol} after earnings`} kind="event" from={{ label: "Earnings drift", url: "/earnings" }}
+            observation={`${s.symbol} reported ${s.reportDate} (${s.timing.replace("_", " ")}): EPS ${n.eps_actual} vs ${n.eps_consensus} consensus (surprise rank ${n.surprise_pct_rank ?? "?"} of 100 in its size group)${measuredLate(s) ? "" : `, ${n.reaction_pct > 0 ? "+" : ""}${n.reaction_pct}% vs SPY on the reaction day on ${n.volume_ratio ?? "?"}x volume`}. The scout's earnings-drift screen lists it as setup ${s.setup}. Is there still a trade after this report, and which way?`} />
+        )}
       </div>
       {/* The report shows as an earnings line; the paper entry (and exit once closed) as markers. */}
       <div style={{ marginTop: 10 }}><StockChart symbol={s.symbol} tvSymbol={tvSymbol(s.symbol)} height={440} entry={t?.entryDate ? { date: t.entryDate, price: t.entryPrice, direction: "long", label: "paper entry", ...(t.closed && t.exitDate ? { exitDate: t.exitDate, exitPrice: t.exitPrice } : {}) } : undefined} /></div>

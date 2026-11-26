@@ -80,6 +80,8 @@ export interface Numbers {
   days_after_quarter_end: number | null;
   market_cap_b: number; cap_group: string; sector: string | null; price: number;
   year_ago_eps: number | null; year_ago_source: "our history" | "nasdaq calendar" | "none";
+  /** Set when the scan found the report a night late (its numbers were not published in time): the reaction is still measured on the report's own reaction day, the paper entry is one session later than the rule. */
+  scanned_late?: boolean;
 }
 
 /** Pure: which setup a report is, or why not. */
@@ -198,7 +200,7 @@ const aiSchema = z.object({
 });
 
 /** The rules, prompt, reply format and data conventions, hashed: changing any of them starts a new version. */
-export const EARN_VERSION = createHash("sha256").update(JSON.stringify({ EARN, EARN_PROMPT, EARN_SCHEMA, data: "nasdaq-calendar+snapshot-consensus+finnhub-revenue+fmp-revenue+sec-8k-6k; surprise explained to the model", conventions: "entry next open; ranks all sectors; volume filter on A; big beats sold off 7%+ are study D (short), not A" })).digest("hex").slice(0, 10);
+export const EARN_VERSION = createHash("sha256").update(JSON.stringify({ EARN, EARN_PROMPT, EARN_SCHEMA, data: "nasdaq-calendar+snapshot-consensus+finnhub-revenue+fmp-revenue+sec-8k-6k; surprise explained to the model", conventions: "entry next open; ranks all sectors; volume filter on A; big beats sold off 7%+ are study D (short), not A; reaction day from the time of day frozen before the release, a report missed on its night is scanned the next night on its own reaction day" })).digest("hex").slice(0, 10);
 
 export interface EarnCard {
   ticker: string; setup: Setup; report_date: string; timing: Timing; numbers: Numbers;
@@ -369,6 +371,22 @@ async function sector(symbol: string, fetchImpl?: typeof fetch): Promise<string 
   return s;
 }
 
+/**
+ * Pure: the session the market first reacted to a report on: the report day itself for a before-open report, the
+ * next session otherwise. The time of day is the one frozen before the release when there is one (the calendar often
+ * drops or changes it once the results are out), else the calendar's.
+ */
+export function reactionDay(reportDate: string, calendarTiming: Timing, frozenTiming: Timing | null | undefined, sessions: string[]): { timing: Timing; date: string | null } {
+  const timing = frozenTiming && frozenTiming !== "unknown" ? frozenTiming : calendarTiming;
+  return { timing, date: timing === "before_open" ? (sessions.includes(reportDate) ? reportDate : sessionsAfter(sessions, reportDate, 1)) : sessionsAfter(sessions, reportDate, 1) };
+}
+
+/**
+ * Pure: an older row whose reaction was measured a day late (a before-open report measured on the session after it):
+ * its reaction and run-up are the second day's, so the numbers on it are not the report's.
+ */
+export const measuredLate = (s: { timing: Timing; reportDate: string; reactionDate: string }) => s.timing === "before_open" && s.reactionDate > s.reportDate;
+
 /** After the close: every report whose reaction day was today, through the numbers, tracked on paper, sorted into setups. */
 export async function scanEarnings(data: MarketData, now: Date, fetchImpl?: typeof fetch, env: NodeJS.ProcessEnv = process.env): Promise<ScanReport> {
   const today = toEt(now).date;
@@ -377,11 +395,14 @@ export async function scanEarnings(data: MarketData, now: Date, fetchImpl?: type
   if (!sessions.includes(today)) return { ...out, error: "not a trading day" };
   const prev = sessionBefore(sessions, today)!;
   const [todays, prevs] = await Promise.all([calendarDay(today, fetchImpl, true), calendarDay(prev, fetchImpl, true)]);
-  // Reaction day today: before-open reports today; after-close (and unstated-time) reports from the previous session.
-  const reports = [...todays.filter((r) => r.timing === "before_open"), ...prevs.filter((r) => r.timing !== "before_open")];
+  const listed = [...todays, ...prevs];
+  const snaps = await snapshotsFor(listed.map((r) => ({ symbol: r.symbol, reportDate: r.reportDate })));
+  // Each report's own reaction day: today's (before-open today; after-close or unstated from the previous session),
+  // and yesterday's for a before-open report that was missed last night (its numbers were not out yet).
+  const reactionOf = new Map(listed.map((r) => [`${r.symbol}|${r.reportDate}`, reactionDay(r.reportDate, r.timing, snaps.get(`${r.symbol}|${r.reportDate}`)?.timing, sessions)]));
+  const reports = listed.filter((r) => { const d = reactionOf.get(`${r.symbol}|${r.reportDate}`)!.date; return d === today || d === prev; });
   out.reports = reports.length;
   const done = new Set((await q(`SELECT symbol || '|' || report_date AS k FROM earnings_scans WHERE report_date >= $1`, [prev])).map((r) => String(r.k)));
-  const snaps = await snapshotsFor(reports.map((r) => ({ symbol: r.symbol, reportDate: r.reportDate })));
   // The universe uses the market cap as of the report (the snapshot), else the calendar's.
   const capOf = (r: EarningsReport) => snaps.get(`${r.symbol}|${r.reportDate}`)?.marketCap ?? r.marketCap;
   const fresh = reports.filter((r) => { const c = capOf(r); return !done.has(`${r.symbol}|${r.reportDate}`) && c !== null && c >= EARN.minCap && c < EARN.maxCap && r.epsActual !== null; });
@@ -395,7 +416,8 @@ export async function scanEarnings(data: MarketData, now: Date, fetchImpl?: type
   const groups = new Map<string, { surprises: number[]; runups: number[] }>();
   const entry = sessionsAfter(sessions, today, 1);
   for (const r of fresh) {
-    const st = reactionStats(by.get(r.symbol) ?? [], spy, today);
+    const react = reactionOf.get(`${r.symbol}|${r.reportDate}`)!;
+    const st = reactionStats(by.get(r.symbol) ?? [], spy, react.date!);
     if (!st || st.price < EARN.minPrice || (st.iexDollarVolume ?? 0) < EARN.minIexDollarVolume) continue;
     const snap = snaps.get(`${r.symbol}|${r.reportDate}`) ?? null;
     if (!snap || snap.epsEstimate === null) out.noSnapshot++;
@@ -424,6 +446,7 @@ export async function scanEarnings(data: MarketData, now: Date, fetchImpl?: type
       market_cap_b: r2(cap / 1e9), cap_group: groupLabel(group), sector: null, price: st.price,
       year_ago_eps: yearAgo, year_ago_source: own !== null ? "our history" : snap?.lastYearEps != null ? "nasdaq calendar" : "none",
     };
+    if (react.date! < today) n.scanned_late = true;
     if (Number.isNaN(n.eps_consensus)) n.eps_consensus = r.epsEstimate ?? NaN; // shown for reference only; never used for a setup
     // Sector only for reports that could be a setup (one request each, cached per stock).
     const maybe = (n.surprise_pct_rank ?? 0) >= EARN.topRank || Math.abs(n.reaction_pct) > EARN.gapPct;
@@ -445,7 +468,7 @@ export async function scanEarnings(data: MarketData, now: Date, fetchImpl?: type
     }
     const { setup, reason } = classify(n);
     const row = (await q(`INSERT INTO earnings_scans (version, symbol, report_date, reaction_date, timing, setup, reason, numbers) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (symbol, report_date) DO NOTHING RETURNING id`,
-      [EARN_VERSION, r.symbol, r.reportDate, today, snap?.timing ?? r.timing, setup, reason, JSON.stringify(n)]))[0];
+      [EARN_VERSION, r.symbol, r.reportDate, react.date, react.timing, setup, reason, JSON.stringify(n)]))[0];
     if (!row) continue;
     out.inUniverse++;
     // Forward history (from the snapshot) for later ranks.
@@ -563,8 +586,9 @@ export async function gatherSetupDocs(deps: { data: MarketData | null; env: Node
 }
 
 /** Write the waiting A-setup cards (a few per call, within the earnings desk's own budget). Setups are tracked either way. */
-export async function writeCards(deps: { data: MarketData | null; callModel: CallModel; now: Date; env: NodeJS.ProcessEnv; fetchImpl?: typeof fetch }, deadline: number, max = EARN.cardsPerCall): Promise<string> {
-  const waiting = await q(`SELECT s.*, t.entry_date, t.exit_date, t.next_report, t.next_known FROM earnings_scans s JOIN earnings_tracks t ON t.scan_id = s.id LEFT JOIN earnings_cards c ON c.scan_id = s.id WHERE c.scan_id IS NULL AND s.setup IN ('A', 'A+', 'A++') AND s.reaction_date >= $2 ORDER BY s.reaction_date DESC LIMIT $1`, [max, addDays(toEt(deps.now).date, -10)]);
+export async function writeCards(deps: { data: MarketData | null; callModel: CallModel; now: Date; env: NodeJS.ProcessEnv; fetchImpl?: typeof fetch }, deadline: number, max = EARN.cardsPerCall, only?: number): Promise<string> {
+  // A before-open report measured on the session after it (an older scan's mistake) gets no card: its numbers are the second day's.
+  const waiting = await q(`SELECT s.*, t.entry_date, t.exit_date, t.next_report, t.next_known FROM earnings_scans s JOIN earnings_tracks t ON t.scan_id = s.id LEFT JOIN earnings_cards c ON c.scan_id = s.id WHERE c.scan_id IS NULL AND s.setup IN ('A', 'A+', 'A++') AND s.reaction_date >= $2 AND NOT (s.timing = 'before_open' AND s.reaction_date > s.report_date) AND ($3::int IS NULL OR s.id = $3) ORDER BY s.reaction_date DESC LIMIT $1`, [max, addDays(toEt(deps.now).date, -10), only ?? null]);
   if (!waiting.length) return "no cards waiting";
   const settings = await store.loadSettings();
   const today = toEt(deps.now).date;

@@ -3,20 +3,35 @@ import { z } from "zod";
 import { checkBasicAuth } from "@/lib/auth";
 import { hasDatabase } from "@/lib/db";
 import { query } from "@/lib/db";
-import { getScan, markTapped, type EarnCard } from "@/lib/scout/earnings";
+import { getScan, markTapped, measuredLate, writeCards, type EarnCard } from "@/lib/scout/earnings";
 import * as store from "@/lib/scout/store";
 import { sendIdeaToSwing } from "@/lib/scout/swing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 /** Earnings tab: send one promoted A-setup to the Swing ideas log (paper, its "earnings" section). */
 export async function POST(request: Request) {
   if (!checkBasicAuth(request.headers.get("authorization"))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!hasDatabase()) return NextResponse.json({ ok: false, errors: ["database not connected"] }, { status: 503 });
-  const parsed = z.object({ action: z.literal("send"), id: z.number().int().positive() }).safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ ok: false, errors: ["send { action: 'send', id }"] }, { status: 422 });
+  const parsed = z.object({ action: z.enum(["send", "research"]), id: z.number().int().positive() }).safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ ok: false, errors: ["send { action: 'send' | 'research', id }"] }, { status: 422 });
   const s = await getScan(parsed.data.id);
+  // Research now: write this setup's waiting card at once (the desk's own card, within its budget), instead of at the nightly pass.
+  if (parsed.data.action === "research") {
+    if (!s) return NextResponse.json({ ok: false, errors: ["no such setup"] }, { status: 404 });
+    if ((await query(`SELECT 1 FROM earnings_cards WHERE scan_id = $1`, [s.id])).length) return NextResponse.json({ ok: true, result: "the card is already written" });
+    if (measuredLate(s)) return NextResponse.json({ ok: false, errors: ["this row was measured a day late (its reaction and run-up are the second day's), so the desk writes no card on it"] }, { status: 422 });
+    try {
+      const { defaultDeps } = await import("@/lib/scout/engine");
+      const d = defaultDeps();
+      const result = await writeCards({ data: d.data, callModel: d.callModel, now: d.now, env: d.env, fetchImpl: d.fetchImpl }, Date.now() + 240_000, 1, s.id);
+      return /^1 card/.test(result) ? NextResponse.json({ ok: true, result }) : NextResponse.json({ ok: false, errors: [result] }, { status: 422 });
+    } catch (err) {
+      return NextResponse.json({ ok: false, errors: [err instanceof Error ? err.message : String(err)] }, { status: 500 });
+    }
+  }
   const t = (await query(`SELECT * FROM earnings_tracks WHERE scan_id = $1`, [parsed.data.id]))[0];
   const c = (await query(`SELECT card FROM earnings_cards WHERE scan_id = $1`, [parsed.data.id]))[0]?.card as EarnCard | undefined;
   if (!s || !t) return NextResponse.json({ ok: false, errors: ["no such setup"] }, { status: 404 });
