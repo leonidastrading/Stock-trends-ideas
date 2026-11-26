@@ -34,6 +34,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ name: strin
       case "panelstudy": result = await import("@/lib/scout/panel-study").then(({ runPanelStudy }) => runPanelStudy(deps.data ?? null, deps.now)); break;
       case "upgrades": result = await import("@/lib/scout/upgrades").then(({ runUpgrades }) => runUpgrades(deps.data ?? null, deps.now)); break;
       case "driftlist": result = deps.data ? `drift list book: ${await import("@/lib/scout/drift-list").then(({ updateListBook }) => updateListBook(deps.data!, deps.now))}` : "drift list book: waiting for market data (Alpaca keys)"; break;
+      case "pricecheck": result = deps.data ? await import("@/lib/scout/tracking").then(({ runPriceCheck }) => runPriceCheck(deps.data!, deps.now)) : "price check: waiting for market data (Alpaca keys)"; break;
       case "preearnings": result = await import("@/lib/scout/pre-earnings").then(({ runPreEarnings }) => runPreEarnings(deps)); break;
       case "ratingstudy": {
         const r = await import("@/lib/scout/rating-study").then(({ runRatingStudy }) => runRatingStudy(deps.data ?? null));

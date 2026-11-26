@@ -68,7 +68,8 @@ export async function reconcileSplits(data: MarketData, tracks: Track[], today: 
       if (!rewritten.has(t.symbol) && adj) { await store.upsertBars(adj.filter((b) => b.date < today)); rewritten.add(t.symbol); }
       await store.setSplitFactor(t.cardId, v.factor);
       const now$ = Math.round(recorded * v.factor * 100) / 100;
-      if (t.exitDate && adj) await store.setDrawdown(t.cardId, maxDrawdownPct(t.direction, recorded * splitFactorSince(on(raw, t.entryDate!)!.c, on(adj, t.entryDate!)!.c), adj, t.entryDate!, t.exitDate));
+      // The worst point so far, measured again on the adjusted prices (it had been measured against the old entry).
+      if (adj) await store.setDrawdown(t.cardId, maxDrawdownPct(t.direction, v.asTraded ? recorded * splitFactorSince(on(raw, t.entryDate!)!.c, on(adj, t.entryDate!)!.c) : recorded, adj.filter((b) => b.date < today), t.entryDate!, t.exitDate ?? null));
       await store.addTrackEvent(t.cardId, "split", `${t.symbol}: a ${splitWords(v.factor)} split since the entry on ${t.entryDate}; the entry of $${recorded} as traded is $${now$} on ${t.exitDate ? "the exit day's" : "today's"} prices (the recorded entry is kept)`);
       notes.push(`card #${t.cardId} ${t.symbol}: ${splitWords(v.factor)} split, entry $${recorded} -> $${now$}`);
     }
@@ -86,6 +87,23 @@ export async function reconcileSplits(data: MarketData, tracks: Track[], today: 
     else if (!problem && t.priceCheck) { await store.setPriceCheck(t.cardId, null); notes.push(`card #${t.cardId} ${t.symbol}: price confirmed`); }
   }
   return notes;
+}
+
+/** The calls to check now (open ones, those closed in the last week, and every closed call once), checked; one log line. */
+async function priceCheckNotes(data: MarketData, tracks: Track[], today: string): Promise<string[]> {
+  const everyClosed = await store.tryLock("price-sanity:closed:1", 60 * 24 * 3650).catch(() => false);
+  const toCheck = tracks.filter((t) => !t.exitDate || everyClosed || t.exitDate >= addDays(today, -7));
+  const notes = await reconcileSplits(data, toCheck, today).catch((e) => [`split check failed: ${e instanceof Error ? e.message : e}`]);
+  console.log(`price check: ${toCheck.length} calls checked (${toCheck.filter((t) => !t.exitDate).length} open)${everyClosed ? ", every closed call included" : ""}: ${notes.length ? notes.join("; ").slice(0, 1800) : "nothing to adjust"}`);
+  return notes;
+}
+
+/** The hourly job: a split takes effect at the open, hours before the evening tracker runs; cards would show a false loss until then. */
+export async function runPriceCheck(data: MarketData, now: Date): Promise<string> {
+  const tracks = await store.allTracks();
+  const notes = await priceCheckNotes(data, tracks, toEt(now).date);
+  const flagged = (await store.allTracks()).filter((t) => t.priceCheck);
+  return `price check: ${tracks.filter((t) => !t.exitDate && t.entryDate).length} open calls, ${notes.length} adjusted or flagged${notes.length ? ` (${notes.join("; ").slice(0, 600)})` : ""}; ${flagged.length} price unverified${flagged.length ? `: ${flagged.map((t) => `#${t.cardId} ${t.symbol}`).join(", ").slice(0, 300)}` : ""}`;
 }
 
 /** Pure: is the card written before that day's 9:30 AM ET open? */
@@ -181,14 +199,8 @@ export async function updateTracks(data: MarketData, now: Date): Promise<TrackRe
 
   let open = tracks.filter((t) => !t.exitDate);
   if (!open.length) return report;
-  // Splits since entry and prices that fail the check, before anything is measured: open calls every half hour, calls
-  // closed in the last week with them, and every closed call once.
-  const everyClosed = await store.tryLock("price-sanity:closed:1", 60 * 24 * 3650).catch(() => false);
-  const toCheck = (await store.tryLock("price-sanity", 30).catch(() => true)) || everyClosed
-    ? tracks.filter((t) => !t.exitDate || everyClosed || t.exitDate >= addDays(et.date, -7))
-    : [];
-  const splitNotes = await reconcileSplits(data, toCheck, et.date).catch((e) => [`split check failed: ${e instanceof Error ? e.message : e}`]);
-  if (toCheck.length) console.log(`price check: ${toCheck.length} calls checked (${toCheck.filter((t) => !t.exitDate).length} open)${everyClosed ? ", every closed call included" : ""}: ${splitNotes.length ? splitNotes.join("; ").slice(0, 1500) : "nothing to adjust"}`);
+  // Splits since entry and prices that fail the check, before anything is measured (the hourly job does the same between runs).
+  const splitNotes = await priceCheckNotes(data, tracks, et.date);
   if (splitNotes.length) {
     report.notes.push(...splitNotes);
     const fresh = new Map((await store.allTracks()).map((t) => [t.cardId, t]));

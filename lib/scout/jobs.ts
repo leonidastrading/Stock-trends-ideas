@@ -22,6 +22,7 @@ export const JOBS = {
   upgrades: { everyMin: 15, about: "Drift: broker upgrades to a buy rating, each a paper long from the moment it appears (no card)" },
   driftlist: { everyMin: 10, about: "Drift: a paper short for every setup from the moment it first appeared on the list (no card), and the entries and exits that are due" },
   preearnings: { everyMin: 60, about: "Calendar: warning signs on stocks reporting in the next five sessions (slide, unexplained drop, filing change, short idea, fall through takeover talk), and the reaction after each report" },
+  pricecheck: { everyMin: 60, about: "Scoreboard: splits since each paper entry, and entries or closes that fail the price check (\"price unverified\")" },
   ratingstudy: { everyMin: 5, about: "the downgrade study (2019 to mid-2025): reads the news history in 4-minute passes until done, then does nothing" },
 } as const satisfies Record<string, { everyMin: number; about: string; rev?: number }>;
 export type JobName = keyof typeof JOBS;
