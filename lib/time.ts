@@ -86,8 +86,8 @@ export function fmtEt(iso: string | Date): string {
 }
 
 /**
- * How long ago (or how far ahead): "just now", "25m ago" under an hour, "3h ago" earlier today (US Eastern), then
- * "2 days ago" by calendar day ("1 day ago" for yesterday); "in 40m", "in 3h", "in 5 days" for the future.
+ * How long ago (or how far ahead): "just now", "25m ago" under an hour, "3h ago" under a day, then "2 days ago" by
+ * calendar day (US Eastern); "in 40m", "in 3h", "in 5 days" for the future.
  */
 export function ago(iso: string | Date, now = new Date()): string {
   const d = typeof iso === "string" ? new Date(iso) : iso;
@@ -96,7 +96,8 @@ export function ago(iso: string | Date, now = new Date()): string {
   const min = Math.floor(Math.abs(ms) / 60000);
   if (min < 1) return "just now";
   const days = Math.abs(daysBetween(toEt(d).date, toEt(now).date));
-  const span = min < 60 ? `${min}m` : days === 0 ? `${Math.floor(min / 60)}h` : `${days} day${days === 1 ? "" : "s"}`;
+  // Under a day is always in hours, also across midnight (a card from 10 PM read at midnight is "1h ago", not "1 day ago").
+  const span = min < 60 ? `${min}m` : min < 24 * 60 ? `${Math.floor(min / 60)}h` : `${days} day${days === 1 ? "" : "s"}`;
   return ms < 0 ? `in ${span}` : `${span} ago`;
 }
 
