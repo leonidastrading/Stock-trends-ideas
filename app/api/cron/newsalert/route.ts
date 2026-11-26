@@ -30,6 +30,8 @@ export async function GET(request: Request) {
     const result = await runNewsAlerts({ data, now });
     // The press-release desk rides on the same minute (logging only in its windows; no AI).
     const pr = await import("@/lib/scout/pr-desk").then(({ runPrDesk }) => runPrDesk({ data, now })).catch((e) => `pr desk failed: ${e instanceof Error ? e.message.slice(0, 120) : e}`);
+    // One line when the desk logged or filled something, so a coding session can see it working.
+    if (typeof pr === "string" && !/^pr desk: (0 logged, 0 outcomes|another pass|no market data)/.test(pr)) console.log(pr);
     return NextResponse.json({ status: "ok", result, pr });
   } catch (err) {
     return NextResponse.json({ status: "error", error: err instanceof Error ? err.message : String(err) }, { status: 500 });
