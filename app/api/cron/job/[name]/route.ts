@@ -35,6 +35,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ name: strin
       case "upgrades": result = await import("@/lib/scout/upgrades").then(({ runUpgrades }) => runUpgrades(deps.data ?? null, deps.now)); break;
       case "driftlist": result = deps.data ? `drift list book: ${await import("@/lib/scout/drift-list").then(({ updateListBook }) => updateListBook(deps.data!, deps.now))}` : "drift list book: waiting for market data (Alpaca keys)"; break;
       case "watchlist": result = await import("@/lib/scout/store").then(({ watchlistUpkeep }) => watchlistUpkeep()).then((r) => `watch-list: ${r.before.active} active and ${r.before.proposed} proposed before, ${r.after.active} active and ${r.after.proposed} proposed after; ${r.retired} retired${r.retired ? ` (${Object.entries(r.why).map(([k, n]) => `${n} ${k}`).join(", ")})` : ""}`); break;
+      case "earningsrepair": result = deps.data ? `earnings repair: ${await import("@/lib/scout/earnings").then(({ repairLateScans }) => repairLateScans(deps.data!, deps.now, 60))}` : "earnings repair: waiting for market data (Alpaca keys)"; break;
       case "pricecheck": result = deps.data ? await import("@/lib/scout/tracking").then(({ runPriceCheck }) => runPriceCheck(deps.data!, deps.now)) : "price check: waiting for market data (Alpaca keys)"; break;
       case "preearnings": result = await import("@/lib/scout/pre-earnings").then(({ runPreEarnings }) => runPreEarnings(deps)); break;
       case "ratingstudy": {
@@ -48,7 +49,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ name: strin
     // Each job's state goes on the health panel (Settings) and on Home when it is not reporting.
     await import("@/lib/scout/health").then(({ reportHealth, saysFailed }) => reportHealth(`job:${name}`, !saysFailed(result!), result!)).catch(() => undefined);
     // The finished study answers every 5 minutes: not worth a log line each time.
-    if (!/^(rating|panel) study: (done|waiting)/.test(result!)) console.log(result!);
+    if (!/^(rating|panel) study: (done|waiting)|^earnings repair: no rows/.test(result!)) console.log(result!);
     return NextResponse.json({ status: "ok", result: result! });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

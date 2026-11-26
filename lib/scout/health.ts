@@ -18,7 +18,7 @@ export const WATCHED: Record<string, { label: string; about: string; staleHours:
   wire_prnewswire: { label: "PR Newswire feed", about: "Press releases the minute they are out (News, press-release desk)", staleHours: 20 },
   sec_live_8k: { label: "SEC live 8-K list", about: "Filings read the moment they are public (News, story desk)", staleHours: 80 },
   nasdaq_halts: { label: "Nasdaq trading halts", about: "Halts in the News tab and alerts", staleHours: 80 },
-  ...Object.fromEntries(Object.entries(JOBS).filter(([n]) => !["ratingstudy", "panelstudy", "evidence", "listings"].includes(n)).map(([n, j]) => [`job:${n}`, { label: `Job: ${n}`, about: j.about, staleHours: Math.max(16, (j.everyMin / 60) * 3 + 14) }])),
+  ...Object.fromEntries(Object.entries(JOBS).filter(([n]) => !["ratingstudy", "panelstudy", "evidence", "listings", "earningsrepair"].includes(n)).map(([n, j]) => [`job:${n}`, { label: `Job: ${n}`, about: j.about, staleHours: Math.max(16, (j.everyMin / 60) * 3 + 14) }])),
 };
 
 const last = new Map<string, { status: string; at: number }>();
