@@ -931,11 +931,24 @@ export async function truthPostsSince(fromIso: string, relevantOnly = false): Pr
 
 
 /** Watch-list upkeep when auto-approve is on: the scout's waiting proposals go live, and its terms with no card in 30 days are retired. Terms you added are never touched. */
-export async function watchlistUpkeep(staleDays = 30): Promise<{ approved: number; retired: number }> {
-  const approved = (await q(`UPDATE watchlist SET status = 'active' WHERE status = 'proposed' AND added_by = 'scout' RETURNING id`)).length;
-  const retired = (await q(`UPDATE watchlist w SET status = 'retired' WHERE w.status = 'active' AND w.added_by = 'scout' AND w.added_at < now() - make_interval(days => $1)
-    AND NOT EXISTS (SELECT 1 FROM candidates c WHERE lower(c.term) = lower(w.term) AND c.outcome = 'card' AND c.created_at > now() - make_interval(days => $1)) RETURNING id`, [staleDays])).length;
-  return { approved, retired };
+/**
+ * Watch-list upkeep (see watch-terms.ts): the scout's terms that are not terms (over four words, or a card's title)
+ * and its quiet ones retire, and the active list is held to its cap. Nothing is approved here: proposals wait for
+ * the user. Seed terms and the user's own are never touched.
+ */
+export async function watchlistUpkeep(): Promise<{ before: { active: number; proposed: number }; after: { active: number; proposed: number }; retired: number; why: Record<string, number> }> {
+  const { upkeepPlan, WATCH } = await import("./watch-terms");
+  const items = await watchlist();
+  const titles = new Set((await q(`SELECT lower(title) AS t FROM cards WHERE created_at > now() - interval '240 days'`)).map((r) => String(r.t)));
+  const stale = new Set((await q(`SELECT w.id FROM watchlist w WHERE w.status = 'active' AND w.added_by = 'scout' AND w.added_at < now() - make_interval(days => $1)
+    AND NOT EXISTS (SELECT 1 FROM candidates c WHERE lower(c.term) = lower(w.term) AND c.outcome = 'card' AND c.created_at > now() - make_interval(days => $1))`, [WATCH.staleDays])).map((r) => Number(r.id)));
+  const plan = upkeepPlan(items, titles, stale);
+  const why: Record<string, number> = {};
+  for (const r of plan.retire) {
+    await q(`UPDATE watchlist SET status = 'retired', note = left(coalesce(note || ' · ', '') || $2, 400) WHERE id = $1`, [r.id, `retired: ${r.why}`]);
+    why[r.why] = (why[r.why] ?? 0) + 1;
+  }
+  return { before: plan.before, after: plan.after, retired: plan.retire.length, why };
 }
 
 // ------------------------------------------------------------ ticker lookup
@@ -991,6 +1004,20 @@ export async function addSiteArticles(siteId: number, articles: Array<{ url: str
   const fresh = articles.filter((a, i) => !known.has(a.url) && articles.findIndex((b) => b.url === a.url) === i);
   for (const a of fresh) await q(`INSERT INTO site_articles (url, site_id, title, published, baseline, outcome) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (url) DO NOTHING`, [a.url, siteId, a.title.slice(0, 300), a.published, baseline, baseline ? "already there when added" : null]);
   return fresh.map((a) => a.url);
+}
+
+/**
+ * Sites followed for at least `days` days whose articles were read in that time and led to no idea (or rumor):
+ * candidates for removal. `read` is how many of their articles were read.
+ */
+export async function quietSites(days: number): Promise<Array<{ id: number; label: string; read: number }>> {
+  return (await q(
+    `SELECT s.id, s.label, count(*) FILTER (WHERE a.outcome LIKE 'read%' OR a.outcome LIKE 'rumors:%') AS read,
+            count(*) FILTER (WHERE (a.outcome LIKE 'read%' AND a.outcome NOT LIKE '%no tradeable idea' AND a.outcome NOT LIKE '%: 0 rumor(s)') OR (a.outcome LIKE 'rumors:%' AND a.outcome NOT LIKE 'rumors: 0 %')) AS ideas
+     FROM sites s JOIN site_articles a ON a.site_id = s.id AND a.seen_at > now() - make_interval(days => $1) AND NOT a.baseline
+     WHERE s.active AND s.added_at < now() - make_interval(days => $1) GROUP BY s.id, s.label
+     HAVING count(*) FILTER (WHERE a.outcome LIKE 'read%' OR a.outcome LIKE 'rumors:%') > 0`, [days]))
+    .filter((r) => Number(r.ideas) === 0).map((r) => ({ id: Number(r.id), label: String(r.label), read: Number(r.read) }));
 }
 
 export async function setArticleOutcome(urls: string[], outcome: string): Promise<void> {

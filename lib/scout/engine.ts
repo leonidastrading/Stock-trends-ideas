@@ -301,8 +301,8 @@ export async function maintenance(deadline: number, now = new Date(), fetchImpl?
   if (left() > 60_000) {
     out.options = await import("./options-flow").then(({ runOptionsLog }) => runOptionsLog(Math.min(deadline - 45_000, Date.now() + 90_000), now, fetchImpl)).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
   } else out.options = "later: not enough time";
-  // Watch-list: the scout's proposals go live and its quiet terms retire (when auto-approve is on).
-  if ((await store.loadSettings()).autoApproveTerms !== false) out.watchlist = await store.watchlistUpkeep().catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+  // Watch-list: terms that are not terms and the scout's quiet ones retire, and the list is held to its cap (nothing is approved here).
+  out.watchlist = await store.watchlistUpkeep().then((r) => `${r.before.active} active before, ${r.after.active} after; ${r.retired} retired`).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);
   // Trump's posts (fallback for when the five-minute /api/cron/truth call is not set up).
   if (left() > 70_000 && (await store.tryLock("lock:truth", 5))) {
     out.truth = await import("./truth").then(({ pollTruth }) => pollTruth({ ...defaultDeps(now), fetchImpl }, fetchImpl, { research: left() > 200_000 })).catch((err) => `failed: ${err instanceof Error ? err.message : String(err)}`);

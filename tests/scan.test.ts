@@ -87,17 +87,17 @@ describe("the scan keeps to its time budget", () => {
       const src = { id: "hacker_news", label: "HN", about: "", configured: () => true, probe: async () => { calls++; return { source: "hacker_news", status: "ok" as const, signals: [] }; } };
       const deps = { data: null, sources: [src], callModel: async () => { throw new Error("no model in this test"); }, now: new Date("2026-11-12T12:00:00Z"), env: {} as NodeJS.ProcessEnv };
       await store.saveSettings({ ...(await store.loadSettings()), enabled: false });
-      // Each probe "takes" a second; the budget allows three.
+      // Each probe "takes" a second and terms are measured four at a time: the budget allows one group.
       const base = realNow();
       const clock = vi.spyOn(Date, "now").mockImplementation(() => base + calls * 1000);
       const first = await runScan(deps, { measureBy: base + 2500 });
       clock.mockRestore();
-      expect(calls).toBe(3);
-      expect(first.unmeasured).toBe(first.terms - 3);
+      expect(calls).toBe(4);
+      expect(first.unmeasured).toBe(first.terms - 4);
       const second = await runScan(deps, { resume: true });
-      expect(calls).toBe(first.terms); // the three from the first pass are not asked again
+      expect(calls).toBe(first.terms); // the four from the first pass are not asked again
       expect(second.unmeasured ?? 0).toBe(0);
-      expect(second.measured.length).toBe(first.terms - 3);
+      expect(second.measured.length).toBe(first.terms - 4);
     } finally {
       vi.restoreAllMocks();
       setQuerierForTests(null);

@@ -151,7 +151,8 @@ async function researchNow(input: ResearchInput, deps: ResearchDeps): Promise<Re
 
   // A bare ticker is searched by the company's name (the letters "TXN" measure nothing about Texas Instruments).
   const subject = input.results ? { term: input.term } : await import("./probe-term").then(({ probeSubject }) => probeSubject(input.term, input.tickersHint)).catch(() => ({ term: input.term }));
-  const results = input.results ?? (await probeAll(deps.sources, { ...subject, kind: input.kindHint, tickers: input.tickersHint, now: deps.now, env: deps.env, fetchImpl: deps.fetchImpl }));
+  // YouTube's daily quota is kept for the watch-list's terms (the daily scan): a one-off research probe does not spend it.
+  const results = input.results ?? (await probeAll(deps.sources.filter((s) => s.id !== "youtube"), { ...subject, kind: input.kindHint, tickers: input.tickersHint, now: deps.now, env: deps.env, fetchImpl: deps.fetchImpl }));
   if (!input.results) {
     await store.saveSignals(input.term, results.flatMap((r) => r.signals));
     await recordHealth(results);
@@ -284,10 +285,7 @@ async function researchNow(input: ResearchInput, deps: ResearchDeps): Promise<Re
     if (live) await store.setEntry(stored.id, { entryDate: et.date, entryPrice: live[stored.primaryTicker], spyEntry: live.SPY ?? null, sectorEntry: live[sectorEtf] ?? null });
   }
 
-  // What Vadim noticed stays on the watch-list as a proposal he can approve.
-  if (input.origin === "human") {
-    await store.addWatch({ term: gated.card.title, kind: gated.card.kind, tickers: gated.card.tickers.map((t) => t.symbol), addedBy: "scout", status: settings.autoApproveTerms === false ? "proposed" : "active", note: `from human-originated card #${stored.id}` });
-  }
+  // A card's title is not a watch-list term (no one searches for a headline): nothing is added to the list here.
   return { outcome: "card", card: stored, candidate };
 }
 

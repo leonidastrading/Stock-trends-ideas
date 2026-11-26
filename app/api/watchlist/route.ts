@@ -4,6 +4,7 @@ import { KINDS } from "@/config/scout";
 import { checkBasicAuth } from "@/lib/auth";
 import { hasDatabase } from "@/lib/db";
 import * as store from "@/lib/scout/store";
+import { termProblem, WATCH } from "@/lib/scout/watch-terms";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,11 +18,15 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const a = add.safeParse(body);
   if (a.success) {
+    const problem = termProblem(a.data.term);
+    if (problem) return NextResponse.json({ ok: false, errors: [`"${a.data.term}" cannot be a term: ${problem}.`] }, { status: 422 });
+    if ((await store.watchlist("active")).length >= WATCH.maxActive) return NextResponse.json({ ok: false, errors: [`The list is at its cap of ${WATCH.maxActive} active terms (so the daily scan finishes). Retire one first.`] }, { status: 409 });
     const w = await store.addWatch({ ...a.data, addedBy: "vadim", status: "active" });
     return w ? NextResponse.json({ ok: true, item: w }) : NextResponse.json({ ok: false, errors: ["that term is already on the list"] }, { status: 409 });
   }
   const s = status.safeParse(body);
   if (s.success) {
+    if (s.data.action !== "retire" && (await store.watchlist("active")).length >= WATCH.maxActive) return NextResponse.json({ ok: false, errors: [`The list is at its cap of ${WATCH.maxActive} active terms (so the daily scan finishes). Retire one first.`] }, { status: 409 });
     await store.setWatchStatus(s.data.id, s.data.action === "retire" ? "retired" : "active");
     return NextResponse.json({ ok: true });
   }

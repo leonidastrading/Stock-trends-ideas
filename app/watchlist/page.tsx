@@ -1,4 +1,5 @@
 import SetupNotice from "@/components/SetupNotice";
+import { WATCH } from "@/lib/scout/watch-terms";
 import { hasDatabase } from "@/lib/db";
 import * as store from "@/lib/scout/store";
 import { toEt } from "@/lib/time";
@@ -16,7 +17,7 @@ export default async function WatchlistPage() {
   return (
     <>
       <h1>Watch-list</h1>
-      <section className="card notice small">Terms the daily scan measures on every source: brands, products, apps and themes, each with a kind and the tickers it points at. The scout adds terms it discovers and retires its own after 30 quiet days (switch to approving them yourself in Settings). Terms you add stay until you retire them. Nothing here needs your attention unless you want to add a term.</section>
+      <section className="card notice small">Terms the daily scan measures on every source. A term is a phrase of one to four words that a person would search for: a brand, a product, an app or a theme, with a kind and the tickers it points at. The scout proposes terms it discovers; they wait here until you approve or dismiss them. It never adds a card&apos;s title, retires its own after 30 quiet days, and at most {WATCH.maxActive} terms are active so the daily scan finishes. Terms you add stay until you retire them.</section>
       <section className="card"><h2>Add a term</h2><AddForm /></section>
       {groups.map(([title, rows]) => rows.length > 0 && (
         <section className="card" key={title}>

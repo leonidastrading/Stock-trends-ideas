@@ -3,6 +3,7 @@
  * the measurements as history, flag the terms that accelerate, and research
  * the strongest few. Pure helpers are exported for tests.
  */
+import { termProblem } from "./watch-terms";
 import { SCOUT, type Kind } from "@/config/scout";
 import { probeAll, type Signal, type SourceResult } from "../sources";
 import { buildTriagePrompt, gatherPulse, parseTriage, triggerFor } from "./discovery";
@@ -60,6 +61,9 @@ export function acceleration(signals: Signal[], kind: string | null): Accelerati
   };
 }
 
+/** `termsAtOnce`: watch-list terms measured side by side. `youtubeTermsPerDay`: what YouTube's daily quota covers (about 201 units a term of 10,000). */
+export const SCAN = { termsAtOnce: 4, youtubeTermsPerDay: 45 };
+
 /** Today's scan so far, across its passes: the terms gone through and how many candidates went to research. */
 interface ScanProgress { date: string; terms: string[]; researched: number }
 const PROGRESS_KEY = "scan:progress";
@@ -101,12 +105,13 @@ export async function runScan(deps: ResearchDeps, opts: { measureBy?: number; sk
   const attempted = new Set(progress.terms);
   const saveProgress = () => store.cachePut(PROGRESS_KEY, { ...progress, terms: [...attempted] } satisfies ScanProgress).catch(() => undefined);
 
-  for (const [i, w] of items.entries()) {
-    if (attempted.has(w.term)) continue;
-    if (opts.measureBy && Date.now() > opts.measureBy) { report.unmeasured = items.slice(i).filter((x) => !attempted.has(x.term)).length; break; }
+  // YouTube's daily quota covers about 49 terms: with more than that active, each term is measured there every other day.
+  const dayNumber = Math.floor(Date.parse(`${et.date}T00:00:00Z`) / 86400_000);
+  const youtubeToday = (i: number) => items.length <= SCAN.youtubeTermsPerDay || (i + dayNumber) % 2 === 0;
+  const measure = async (w: (typeof items)[number], i: number) => {
     // A source measured for this term today is not called again (quotas, rate limits); its stored signals are reused.
     const today = await store.signalsOn(w.term, et.date);
-    const fresh = deps.sources.filter((s) => !today.has(s.id));
+    const fresh = deps.sources.filter((s) => !today.has(s.id) && (s.id !== "youtube" || youtubeToday(i)));
     const results: SourceResult[] = [
       ...(await probeAll(fresh, { term: w.term, kind: w.kind, tickers: w.tickers, now: deps.now, env: deps.env, fetchImpl: deps.fetchImpl })),
       ...deps.sources.filter((s) => today.has(s.id)).map((s): SourceResult => ({ source: s.id, status: "ok", detail: "measured earlier today; reused", signals: today.get(s.id)! })),
@@ -123,7 +128,13 @@ export async function runScan(deps: ResearchDeps, opts: { measureBy?: number; sk
     report.measured.push({ term: w.term, kind: w.kind, sources: results.filter((r) => r.signals.length).length, accelerating: acc.accelerating.length, score: Math.round(acc.score * 100) / 100, candidate: acc.isCandidate, cooldown: cool });
     if (acc.isCandidate && !cool) candidates.push({ term: w.term, kind: w.kind, tickers: w.tickers, results: results.map((r) => ({ ...r, signals: signals.filter((s) => s.source === r.source) })), acc });
     attempted.add(w.term);
-    if (attempted.size % 10 === 0) await saveProgress();
+  };
+  // A few terms at a time (each source keeps its own pace), so the whole list is measured inside one run.
+  const todo = items.map((w, i) => ({ w, i })).filter((x) => !attempted.has(x.w.term));
+  for (let k = 0; k < todo.length; k += SCAN.termsAtOnce) {
+    if (opts.measureBy && Date.now() > opts.measureBy) { report.unmeasured = todo.length - k; break; }
+    await Promise.all(todo.slice(k, k + SCAN.termsAtOnce).map((x) => measure(x.w, x.i)));
+    await saveProgress();
   }
   await saveProgress();
   await recordHealth([...health.values()]);
@@ -203,7 +214,8 @@ async function runDiscovery(deps: ResearchDeps, max: number, cooldown: Set<strin
     const r = await researchCandidate({ origin: "scout", term: c.term, kindHint: c.kind as Kind, tickersHint: c.tickers, observation: null, trigger: triggerFor(c, et.date) }, deps);
     report.researched.push(r.outcome === "card" ? { term: c.term, outcome: `card: ${r.card.status}`, cardId: r.card.id } : { term: c.term, outcome: r.outcome, reason: r.reason });
     if (r.outcome === "card" && r.card.status !== "not_promoted") {
-      await store.addWatch({ term: c.term, kind: c.kind, tickers: c.tickers, addedBy: "scout", status: (await store.loadSettings()).autoApproveTerms === false ? "proposed" : "active", note: `discovered ${et.date}: ${c.why.slice(0, 200)}` });
+      // A discovered phrase is proposed, never made active: it waits for the user. A headline or a sentence is not a term.
+      if (!termProblem(c.term)) await store.addWatch({ term: c.term, kind: c.kind, tickers: c.tickers, addedBy: "scout", status: "proposed", note: `discovered ${et.date}: ${c.why.slice(0, 200)}` });
     }
     if (r.outcome === "capped") report.stoppedEarly = r.reason; // queued; the rest are queued too
   }

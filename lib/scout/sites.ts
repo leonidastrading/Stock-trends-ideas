@@ -6,6 +6,7 @@
  * the newest ten articles or PDF reports now. Everything read is also kept as a digest (stocks, summary, claims)
  * that research, Dots, the chat and cards use (lib/scout/site-digest.ts).
  */
+import { articleOutcomes, pickArticles } from "./site-pick";
 import { articleText, cleanSiteUrl, readSite, type Article } from "../sources/site";
 import type { ImportItem } from "./importer";
 import type { ResearchDeps } from "./research";
@@ -19,6 +20,8 @@ export const SITES = {
   /** Ideas sent to research per site per day. */
   maxIdeasPerRead: 3,
   maxSites: 25,
+  /** A site read for this many days with no idea from it is flagged for removal. */
+  quietDays: 14,
 };
 
 const host = (url: string) => new URL(url).hostname.replace(/^www\./, "");
@@ -76,8 +79,9 @@ export async function checkSite(site: store.Site, deps: ResearchDeps, deliver: (
     await store.siteChecked(site.id, "ok", `no new articles (${read.articles.length} on the ${read.via === "feed" ? "feed" : "page"})`, feed);
     return { site: site.label, status: "ok", newArticles: 0 };
   }
-  const now = newOnes.slice(0, SITES.maxArticlesPerRead);
-  await store.setArticleOutcome(newOnes.slice(SITES.maxArticlesPerRead).map((a) => a.url), `skipped: more than ${SITES.maxArticlesPerRead} new in one day`);
+  // More new articles than are read in a day: the most market-relevant are read (a cheap pass in code), not the first on the page.
+  const { read: now, skipped } = pickArticles(newOnes, SITES.maxArticlesPerRead);
+  await store.setArticleOutcome(skipped.map((a) => a.url), `skipped: ${newOnes.length} new in one day and ${SITES.maxArticlesPerRead} more relevant ones were read`);
   const withText = await Promise.all(now.map(async (a) => ({ ...a, text: read.via === "feed" && a.summary.length > 600 ? a.summary : await articleText(a.url, 3000, fetchImpl) })));
   // Kept as digests for research, Dots, the chat and cards (best effort; a spent budget leaves them out).
   await import("./site-digest").then(({ digestArticles }) => digestArticles(site, withText, deps)).catch(() => 0);
@@ -100,9 +104,11 @@ export async function checkSite(site: store.Site, deps: ResearchDeps, deliver: (
   try {
     const { ideasFrom } = await import("./inbox");
     const { items } = await ideasFrom(articlesDocument(site.label, withText), `new articles on ${site.label}`, deps);
+    // Each article's own result, from the ideas as the model returned them (before every article's link is attached to every idea).
+    const outcomes = articleOutcomes(withText, items.slice(0, SITES.maxIdeasPerRead));
     const ideas = items.slice(0, SITES.maxIdeasPerRead).map((it) => ({ ...it, source: "site" as const, sources: [...new Set([...(it.sources ?? []), ...now.map((a) => a.url)])].slice(0, 10) }));
     const sent = ideas.length ? await deliver(ideas, site.label.slice(0, 40)) : "no tradeable idea";
-    await store.setArticleOutcome(now.map((a) => a.url), ideas.length ? `read: ${ideas.map((i) => i.term).join("; ")}` : "read: no tradeable idea");
+    for (const [url, outcome] of outcomes) await store.setArticleOutcome([url], outcome);
     await store.siteChecked(site.id, "ok", `${newOnes.length} new, ${now.length} read, ${ideas.length} idea(s) sent to research`, feed);
     return { site: site.label, status: "ok", newArticles: newOnes.length, read: now.length, ideas: ideas.length, sent };
   } catch (err) {
@@ -149,7 +155,7 @@ export async function readLatest(site: store.Site, deps: ResearchDeps, deliver: 
       const { items } = await ideasFrom(articlesDocument(site.label, withText), `the latest articles on ${site.label}`, deps);
       const ideas = items.slice(0, LATEST.ideas).map((it) => ({ ...it, source: "site" as const, sources: [...new Set([...(it.sources ?? []), ...latest.map((a) => a.url)])].slice(0, 10) }));
       parts.push(ideas.length ? await deliver(ideas, site.label.slice(0, 40)) : "no tradeable idea");
-      await store.setArticleOutcome(latest.map((a) => a.url), ideas.length ? `read (latest ${n}): ${ideas.map((i) => i.term).join("; ")}` : `read (latest ${n}): no tradeable idea`);
+      for (const [url, outcome] of articleOutcomes(withText, items.slice(0, LATEST.ideas), `read (latest ${n})`)) await store.setArticleOutcome([url], outcome);
     }
   } catch (err) {
     parts.push(`ideas not read: ${err instanceof Error ? err.message.slice(0, 120) : String(err)}`);
@@ -168,5 +174,8 @@ export async function checkSites(deps: ResearchDeps, deadline: number, deliver: 
     if (deadline - Date.now() < 45_000) break;
     out.push(await checkSite(s, deps, deliver, fetchImpl));
   }
+  // Feeds that have been read for two weeks and produced no idea, named so the user can remove them.
+  const quiet = await store.quietSites(SITES.quietDays).catch(() => []);
+  if (quiet.length) console.log(`websites with no idea in ${SITES.quietDays} days: ${quiet.map((q) => `${q.label} (${q.read} articles read)`).join(", ")}`);
   return out;
 }

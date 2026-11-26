@@ -8,7 +8,7 @@ import { etLabelAgo } from "@/lib/time";
 const when = (iso: string | null) => (iso ? etLabelAgo(iso) : "never");
 
 /** Settings → Your websites. */
-export default function SitesEditor({ sites, articles }: { sites: Site[]; articles: SiteArticle[] }) {
+export default function SitesEditor({ sites, articles, quiet = {} }: { sites: Site[]; articles: SiteArticle[]; /** Sites read for two weeks with no idea from them: site id → articles read. */ quiet?: Record<number, number> }) {
   const [url, setUrl] = useState("");
   const [label, setLabel] = useState("");
   const [kind, setKind] = useState<"ideas" | "rumors">("ideas");
@@ -62,7 +62,7 @@ export default function SitesEditor({ sites, articles }: { sites: Site[]; articl
             {sites.map((s) => (
               <tr key={s.id} style={s.active ? undefined : { opacity: 0.55 }}>
                 <td style={{ minWidth: 220 }}>
-                  <a href={s.url} target="_blank" rel="noreferrer">{s.label}</a> <span className={`tag ${s.kind === "rumors" ? "late" : ""}`}>{s.kind === "rumors" ? "rumors" : "ideas"}</span>{!s.active && <span className="tag">paused</span>}<div className="small muted">{s.url}</div>
+                  <a href={s.url} target="_blank" rel="noreferrer">{s.label}</a> <span className={`tag ${s.kind === "rumors" ? "late" : ""}`}>{s.kind === "rumors" ? "rumors" : "ideas"}</span>{!s.active && <span className="tag">paused</span>}{quiet[s.id] ? <span className="tag warn" title="Its articles have been read for two weeks and none led to an idea. Consider removing it, or pausing it.">no idea in 14 days ({quiet[s.id]} read)</span> : null}<div className="small muted">{s.url}</div>
                   <div className="small" style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <button className="small" disabled={busy === `check${s.id}` || !s.active} title={`Read ${s.label} now for new articles (this site only)`} onClick={() => act(`check${s.id}`, { action: "check", id: s.id })}>{busy === `check${s.id}` ? "Reading…" : "Check this site"}</button>
                     <button className="small" disabled={busy === `latest${s.id}`} title={`Read the newest 10 articles or PDF reports on ${s.label} now, including ones already there: kept for research, Dots, chat and cards; ${s.kind === "rumors" ? "claims to the Rumors tab" : "trade ideas to research"}`} onClick={() => act(`latest${s.id}`, { action: "latest", id: s.id })}>{busy === `latest${s.id}` ? "Starting…" : "Read latest 10"}</button>

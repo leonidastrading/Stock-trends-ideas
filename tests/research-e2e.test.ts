@@ -101,12 +101,12 @@ describe("research → card → track", () => {
     expect((await store.spendOn("2026-11-10")).calls).toBe(calls);
   });
 
-  it("human observations are tagged, proposed to the watch-list, and the daily cap stops the scout", async () => {
+  it("human observations are tagged, and the daily cap stops the scout", async () => {
     replies.push(JSON.stringify(sampleCard({ title: "Everyone at the course has it", origin: "scout" })));
     const r = await researchCandidate({ origin: "human", term: "course gadget", kindHint: "consumer", tickersHint: [], observation: "Everyone at the course has Y." }, deps);
     expect(r.outcome === "card" && r.card.origin).toBe("human");
     expect(r.outcome === "card" && r.card.card.origin).toBe("human");
-    expect((await store.watchlist("active")).map((w) => w.term)).toContain("Everyone at the course has it"); // auto-approved by default
+    expect((await store.watchlist()).map((w) => w.term)).not.toContain("Everyone at the course has it"); // a card's title is not a term
 
     await store.saveSettings({ ...(await store.loadSettings()), dailyCapUsd: 0.01 });
     const capped = await researchCandidate({ origin: "scout", term: "late one", kindHint: null, tickersHint: [], observation: null }, deps);
@@ -162,22 +162,23 @@ describe("research → card → track", () => {
 });
 
 describe("watch-list upkeep", () => {
-  it("approves the scout's waiting proposals, retires its quiet terms after 30 days, never touches yours", async () => {
+  it("leaves proposals waiting, retires the scout's quiet terms and its headlines, never touches yours", async () => {
     await store.addWatch({ term: "waiting idea", kind: "consumer", tickers: ["TTWO"], addedBy: "scout", status: "proposed" });
     await store.addWatch({ term: "old quiet idea", kind: "consumer", tickers: ["XYZ"], addedBy: "scout", status: "active" });
+    await store.addWatch({ term: "Three insiders buy shares again after a 55% fall", kind: "event", tickers: ["OPAL"], addedBy: "scout", status: "active" });
     await store.addWatch({ term: "my old term", kind: "consumer", tickers: ["ABC"], addedBy: "vadim", status: "active" });
     await query(`UPDATE watchlist SET added_at = now() - interval '40 days' WHERE term IN ('old quiet idea', 'my old term')`);
-    expect(await store.watchlistUpkeep()).toEqual({ approved: 1, retired: 1 });
+    const r = await store.watchlistUpkeep();
+    expect(r.why).toMatchObject({ "quiet for 30 days": 1, "longer than four words": 1 });
+    expect(r.after.active).toBe(r.before.active - 2);
     const by = new Map((await store.watchlist()).map((w) => [w.term, w.status]));
-    expect([by.get("waiting idea"), by.get("old quiet idea"), by.get("my old term")]).toEqual(["active", "retired", "active"]);
+    expect([by.get("waiting idea"), by.get("old quiet idea"), by.get("Three insiders buy shares again after a 55% fall"), by.get("my old term")]).toEqual(["proposed", "retired", "retired", "active"]);
   });
 
-  it("with auto-approve off, new terms wait for you", async () => {
-    await store.saveSettings({ ...(await store.loadSettings()), autoApproveTerms: false, dailyCapUsd: 5 });
+  it("a card's title is never made a watch-list term", async () => {
     replies.push(JSON.stringify(sampleCard({ title: "Manual approval please", origin: "scout", tickers: [{ ...sampleCard().tickers[0], symbol: "GE" }] })));
     await researchCandidate({ origin: "human", term: "manual gadget", kindHint: "consumer", tickersHint: [], observation: "Seen at the mall." }, deps);
-    expect((await store.watchlist("proposed")).map((w) => w.term)).toContain("Manual approval please");
-    await store.saveSettings({ ...(await store.loadSettings()), autoApproveTerms: true });
+    expect((await store.watchlist()).map((w) => w.term)).not.toContain("Manual approval please");
   });
 
   it("the Home search finds a stock's cards, newest first, and nothing for an unknown one", async () => {
