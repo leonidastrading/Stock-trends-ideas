@@ -108,6 +108,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
           <a className="tag source-tag" href={fromUrl} target={/^https?:/.test(fromUrl) ? "_blank" : undefined} rel="noreferrer" title={`${from.note} · ${c.origin === "human" ? "human-originated" : "found by the scout"} · click to open`}>{from.tag} ↗</a>
           <span className="small muted" title={`card #${c.id} · ${c.model} · version ${c.versionId}`}>{fmtEtAgo(c.createdAt)}</span>
         </div>
+        <a className="chip card-pdf-btn" href={`/api/card-pdf/${c.id}`} download title="Download this card as a PDF">PDF ↓</a>
         {gateReason(c.status, c.gateNotes) && <div className="small warn" style={{ marginTop: 4 }}><b>{c.status === "late" ? "Late" : "Not promoted"}:</b> {gateReason(c.status, c.gateNotes)}.</div>}
         {track?.invalidatedAt && (
           <div className="invalidated-banner">
@@ -153,7 +154,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
             : <>Next earnings: loading — reload in a moment</>}
           {beforeExit ? <span className="tag warn" style={{ marginLeft: 6 }}>before this card&apos;s exit ({fmtDay(track!.deadlineDate)})</span> : null}
         </div>
-        <h2 style={{ margin: "6px 0 2px" }}>{k.title}</h2>
+        {/* No headline here: it nearly always repeated the thesis just below (the title still names the card in lists and links). */}
         {hasDatabase() && <Suspense fallback={null}><CompanyAbout symbol={c.primaryTicker} sector={c.sector} /></Suspense>}
         <div className={`card-thesis card-thesis-${c.direction}`}><span className="card-thesis-label">{c.direction === "long" ? "▲" : "▼"} Thesis</span> {thesis}</div>
         {/* Every score as a percentage (the 0-10 ratings x 10); tap the row for what they mean. "lateness" is shown as "early" (100% = nobody is talking about it yet). */}

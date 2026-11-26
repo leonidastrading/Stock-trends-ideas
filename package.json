@@ -22,6 +22,7 @@
     "fflate": "^0.8.3",
     "lightweight-charts": "4.2.3",
     "next": "^16.4.3",
+    "pdf-lib": "^1.17.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "unpdf": "^0.12.1",
