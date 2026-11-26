@@ -53,12 +53,27 @@ export async function peekSymbols(symbols: string[], days: number, now = new Dat
   return out;
 }
 
-export async function runCardPeek(origin: string, peek: { rev: number; ids: number[]; symbols?: string[]; days?: number } = CARD_PEEK): Promise<number> {
-  if (!peek.ids.length && !peek.symbols?.length) return 0;
+/** Each earnings-drift row measured again on the report day: the first numbers and setup against the corrected ones, a line each. */
+export async function peekEarningsFixes(): Promise<string[]> {
+  const { query } = await import("../db");
+  const rows = await query(`SELECT s.symbol, s.report_date::text AS report_date, s.reaction_date::text AS first_day, f.reaction_date::text AS fixed_day, s.setup AS setup0, f.setup AS setup1, s.numbers AS n0, f.numbers AS n1, f.created_at
+    FROM earnings_scan_fixes f JOIN earnings_scans s ON s.id = f.scan_id ORDER BY s.report_date DESC, s.symbol LIMIT 80`);
+  const v = (n: Record<string, unknown> | null, k: string) => (n && n[k] !== null && n[k] !== undefined ? String(n[k]) : "-");
+  const out = [`peek earnings fixes: ${rows.length} rows measured again on the report day; setup changed on ${rows.filter((r) => (r.setup0 ?? null) !== (r.setup1 ?? null)).length}`];
+  for (const r of rows) {
+    const a = r.n0 as Record<string, unknown> | null, b = r.n1 as Record<string, unknown> | null;
+    out.push(`peek earnings fix ${r.symbol} reported ${String(r.report_date).slice(0, 10)}: measured ${String(r.first_day).slice(0, 10)} -> ${String(r.fixed_day).slice(0, 10)}; setup ${r.setup0 ?? "none"} -> ${r.setup1 ?? "none"}; run-up 10d ${v(a, "runup_10d_pct")}% -> ${v(b, "runup_10d_pct")}%; reaction ${v(a, "reaction_pct")}% -> ${v(b, "reaction_pct")}%; volume x${v(a, "volume_ratio")} -> x${v(b, "volume_ratio")}`);
+  }
+  return out;
+}
+
+export async function runCardPeek(origin: string, peek: { rev: number; ids: number[]; symbols?: string[]; days?: number; earningsFixes?: boolean } = CARD_PEEK): Promise<number> {
+  if (!peek.ids.length && !peek.symbols?.length && !peek.earningsFixes) return 0;
   const key = `card-peek:${peek.rev}`;
   if (await store.cacheGet(key).catch(() => null)) return 0;
   await store.cachePut(key, { at: new Date().toISOString(), ids: peek.ids });
   let n = 0;
+  if (peek.earningsFixes) for (const line of await peekEarningsFixes().catch((e) => [`peek earnings fixes failed: ${e instanceof Error ? e.message : e}`])) { console.log(line); n++; }
   if (peek.symbols?.length) for (const line of await peekSymbols(peek.symbols, peek.days ?? 10)) { console.log(line); n++; }
   for (const id of peek.ids) {
     const card = await store.getCard(id).catch(() => null);

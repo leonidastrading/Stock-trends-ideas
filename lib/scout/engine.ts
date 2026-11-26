@@ -190,6 +190,7 @@ export async function runTrack(now = new Date()) {
     const pushed = await pushReviews(reviews as Array<{ cardId: number; verdict?: string }>).catch((err) => `push failed: ${err instanceof Error ? err.message : String(err)}`);
     // The earnings-drift desk: tonight's reports through the numbers, exits moved to known report dates, paper tracks, cards.
     const earnings = await earningsNight(data, now, started + 200_000);
+    console.log(`earnings night: ${Object.entries(earnings).map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`).join(" | ").slice(0, 1500)}`);
     // Then housekeeping in time-limited slices, so the core job always finishes inside the function's limit.
     const upkeep = await maintenance(started + 240_000, now);
     const detail = { ...r, reviews, pushedReviews: pushed, earnings, upkeep };
