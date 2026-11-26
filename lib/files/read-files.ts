@@ -1,7 +1,7 @@
 /**
  * Reading uploaded files in the browser, shared by the Rumors and Investigate uploads: zips opened (nested too),
- * text and Office files read here, PDFs read here (scanned ones on the server, where the model reads the pages, a
- * long or heavy scan a few pages at a time),
+ * text and Office files read here, PDFs read here (a scanned one is drawn page by page and the model reads the
+ * pictures),
  * images shrunk to JPEG and read by the model. Each file reports its progress as a step.
  */
 import { decodeText, kindOf, looksBinary, officeText, unzipFiles } from "./unpack";
@@ -37,7 +37,7 @@ async function readOnServer(init: RequestInit): Promise<string> {
   return String(j.text ?? "");
 }
 
-/** A PDF's text: read in the browser when it has a text layer, else on the server (scanned pages go to the model, a long or heavy scan in parts). */
+/** A PDF's text: read in the browser when it has a text layer; a scanned one is drawn page by page and the model reads each page. */
 async function pdfText(name: string, bytes: Uint8Array, onNote: (note: string) => void = () => undefined): Promise<string> {
   try {
     const { extractText, getDocumentProxy } = await import("unpdf");
@@ -50,25 +50,28 @@ async function pdfText(name: string, bytes: Uint8Array, onNote: (note: string) =
     form.set("file", new Blob([bytes.slice()], { type: "application/pdf" }), name);
     return readOnServer({ body: form });
   };
-  // A scan: split it, so a heavy file fits the upload limit and a long one is read a few pages at a time.
-  const { pagesLabel, splitPdf } = await import("./split-pdf");
-  const split = await splitPdf(bytes).catch(() => null);
-  if (!split) {
-    if (bytes.length > MAX_SERVER_PDF) throw new Error(`scanned PDF over ${MAX_SERVER_PDF / 1e6} MB that could not be split (protected or damaged?): upload the pages as images`);
+  // A scan: the model reads the pages as pictures, drawn here one at a time (the way a dropped photo goes).
+  const texts: string[] = [];
+  let failed = 0, lastError = "";
+  let drawn: { pages: number; drawn: number } | null = null;
+  try {
+    const { eachPdfPage } = await import("./pdf-pages");
+    drawn = await eachPdfPage(bytes, async (jpeg, page, pages) => {
+      onNote(`scanned: the model is reading page ${page} of ${pages}`);
+      try {
+        texts.push(`[${name}, page ${page}]\n${await readOnServer({ headers: { "content-type": "application/json" }, body: JSON.stringify({ mediaType: "image/jpeg", data: jpeg, part: `page ${page} of ${pages}` }) })}`);
+      } catch (err) { failed++; lastError = err instanceof Error ? err.message : String(err); }
+      // Nothing is getting through (the daily AI cap, or the service is down): stop instead of failing page after page.
+      if (failed >= 3 && !texts.length) throw new Error(lastError);
+    });
+  } catch (err) {
+    if (failed) throw err;
+    // The pages could not be drawn here: send the file itself when it is small enough.
+    if (bytes.length > MAX_SERVER_PDF) throw new Error(`scanned PDF whose pages could not be drawn in this browser (${err instanceof Error ? err.message.slice(0, 80) : "unknown"}): upload the pages as images`);
     return whole();
   }
-  if (split.parts.length <= 1 && bytes.length <= MAX_SERVER_PDF && !split.unread) return whole();
-  if (!split.parts.length) throw new Error("scanned PDF whose pages are each over the upload limit: upload the pages as smaller images");
-  const texts: string[] = [];
-  let failed = 0;
-  for (const [k, part] of split.parts.entries()) {
-    onNote(`scanned: the model is reading ${pagesLabel(part)} of ${split.pages} (part ${k + 1} of ${split.parts.length})`);
-    const form = new FormData();
-    form.set("file", new Blob([part.bytes.slice()], { type: "application/pdf" }), name);
-    form.set("part", `${pagesLabel(part)} of ${split.pages}`);
-    try { texts.push(`[${name}, ${pagesLabel(part)}]\n${await readOnServer({ body: form })}`); } catch (err) { failed++; if (!texts.length && k === split.parts.length - 1) throw err; }
-  }
-  const left = [split.unread ? `the last ${split.unread} pages were not read (only the first ${split.parts.at(-1)!.to} are)` : "", split.tooBig.length ? `page${split.tooBig.length === 1 ? "" : "s"} ${split.tooBig.join(", ")} too large to send` : "", failed ? `${failed} part${failed === 1 ? "" : "s"} could not be read` : ""].filter(Boolean);
+  if (!texts.length) throw new Error(lastError || "no page could be read");
+  const left = [drawn.pages > drawn.drawn ? `only the first ${drawn.drawn} of ${drawn.pages} pages were read` : "", failed ? `${failed} page${failed === 1 ? "" : "s"} could not be read (${lastError.slice(0, 120)})` : ""].filter(Boolean);
   if (left.length) texts.push(`[${name}: ${left.join("; ")}]`);
   return texts.join("\n\n");
 }

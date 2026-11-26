@@ -22,7 +22,15 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const STATUS_RANK: Record<string, number> = { promoted: 0, late: 1, not_promoted: 2 };
-const SORTS = [{ value: "best", label: "Best first" }, { value: "newest", label: "Newest first" }, { value: "oldest", label: "Oldest first" }, { value: "confidence", label: "Highest confidence" }, { value: "confidence_low", label: "Lowest confidence" }, { value: "catalyst", label: "Catalyst soonest" }];
+/** What to sort by, and the two orders each can be shown in (the first is the default). */
+const SORTS = [
+  { value: "best", label: "Best", fwd: "Best first", rev: "Worst first" },
+  { value: "newest", label: "Date", fwd: "Newest first", rev: "Oldest first" },
+  { value: "confidence", label: "Confidence", fwd: "Highest first", rev: "Lowest first" },
+  { value: "catalyst", label: "Catalyst date", fwd: "Soonest first", rev: "Latest first" },
+];
+/** Earlier links: the reversed orders used to be sorts of their own. */
+const OLD_SORTS: Record<string, string> = { oldest: "newest", confidence_low: "confidence" };
 /** The periods on offer; ALL_DAYS reaches back before the first card. */
 const ALL_DAYS = 3650;
 const PERIODS = [7, 30, 90, 365, ALL_DAYS];
@@ -57,13 +65,14 @@ function fromLine(player: Player, term: string, src: { tag: string; url: string 
   return <>{src ? <a href={src.url}>{src.tag}</a> : PLAYER_LABEL[player]}{what ? ` · ${what}` : ""} <span className="muted">(scored as {PLAYER_LABEL[player]})</span></>;
 }
 
-type SP = { days?: string; source?: string; status?: string; sort?: string; conf?: string; cap?: string; short?: string; dir?: string; penny?: string; page?: string; card?: string } & Partial<Record<ScoreParam, string>>;
+type SP = { days?: string; source?: string; status?: string; sort?: string; rev?: string; conf?: string; cap?: string; short?: string; dir?: string; penny?: string; page?: string; card?: string } & Partial<Record<ScoreParam, string>>;
 
 export default async function IdeasPage({ searchParams }: { searchParams: Promise<SP> }) {
   if (!hasDatabase()) return <SetupNotice />;
   const sp = await searchParams;
   const days = PERIODS.includes(Number(sp.days)) ? Number(sp.days) : 7;
-  const sort = SORTS.some((s) => s.value === sp.sort) ? sp.sort! : "best";
+  const sort = SORTS.some((s) => s.value === sp.sort) ? sp.sort! : OLD_SORTS[sp.sort ?? ""] ?? "best";
+  const rev = sp.rev === "1" || !!OLD_SORTS[sp.sort ?? ""];
   // Each filter group takes any number of values (comma-separated in the address); none = any.
   const many = (v: string | undefined, ok: (x: string) => boolean) => new Set((v ?? "").split(",").map((x) => x.trim()).filter((x) => x && ok(x)));
   const sel: Record<string, Set<string>> = {
@@ -76,7 +85,7 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
     source: many(sp.source, (x) => (PLAYERS as readonly string[]).includes(x)),
   };
   const joined = (k: string) => (sel[k].size ? [...sel[k]].join(",") : undefined);
-  const params: Record<string, string | undefined> = { days: days === 7 ? undefined : String(days), sort: sort === "best" ? undefined : sort, ...Object.fromEntries(Object.keys(sel).map((k) => [k, joined(k)])), penny: sp.penny, page: sp.page };
+  const params: Record<string, string | undefined> = { days: days === 7 ? undefined : String(days), sort: sort === "best" ? undefined : sort, rev: rev ? "1" : undefined, ...Object.fromEntries(Object.keys(sel).map((k) => [k, joined(k)])), penny: sp.penny, page: sp.page };
 
   const [cards, candidates, tracks, fb, recent] = await Promise.all([store.cardsSince(days), store.candidatesSince(days), store.allTracks(), store.latestFeedback(), store.cardsSince(120)]);
   const [reviews, profiles] = await Promise.all([store.allReviews(), profilesForCards(cards)]);
@@ -124,13 +133,14 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
   // One list of every card in the window: filtered by source and status, sorted, 10 a page.
   const wantedId = Number(sp.card);
   const base = cards.filter((c) => (!repeats.has(c.id) || c.id === wantedId) && (showPenny || !penny.has(c.id) || c.id === wantedId));
+  // A catalyst still to come, else none (those go last in either order).
+  const due = (c: { catalystDate: string | null }) => (c.catalystDate && c.catalystDate >= today ? c.catalystDate : null);
+  const flip = rev ? -1 : 1;
   const rows = base.filter((c) => passes(c) || c.id === wantedId).sort((a, b) =>
-    sort === "newest" ? b.createdAt.localeCompare(a.createdAt)
-      : sort === "oldest" ? a.createdAt.localeCompare(b.createdAt)
-      : sort === "confidence" ? b.card.confidence - a.card.confidence || b.rankScore - a.rankScore
-      : sort === "confidence_low" ? a.card.confidence - b.card.confidence || a.rankScore - b.rankScore
-      : sort === "catalyst" ? (a.catalystDate && a.catalystDate >= today ? a.catalystDate : "9999").localeCompare(b.catalystDate && b.catalystDate >= today ? b.catalystDate : "9999") || b.rankScore - a.rankScore
-        : STATUS_RANK[a.status] - STATUS_RANK[b.status] || b.rankScore - a.rankScore || b.createdAt.localeCompare(a.createdAt));
+    sort === "newest" ? flip * b.createdAt.localeCompare(a.createdAt)
+      : sort === "confidence" ? flip * (b.card.confidence - a.card.confidence || b.rankScore - a.rankScore)
+      : sort === "catalyst" ? (due(a) && due(b) ? flip * due(a)!.localeCompare(due(b)!) : Number(!due(a)) - Number(!due(b))) || b.rankScore - a.rankScore
+        : flip * (STATUS_RANK[a.status] - STATUS_RANK[b.status] || b.rankScore - a.rankScore || b.createdAt.localeCompare(a.createdAt)));
   const wanted = Number(sp.card);
   const at = wanted ? rows.findIndex((c) => c.id === wanted) : -1;
   const page = paginate(rows, at >= 0 ? Math.floor(at / PAGE) + 1 : Number(sp.page ?? 1), PAGE);
@@ -141,14 +151,14 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
     options: g.options.map((o) => ({ ...o, count: base.filter((c) => passes(c, g.param) && g.keyOf(c) === o.value).length })),
   }));
   // What is filtered, in words, for the folded filters line.
-  const summary = [periodLabel(days), SORTS.find((x) => x.value === sort)?.label ?? "",
+  const summary = [periodLabel(days), (() => { const x = SORTS.find((o) => o.value === sort)!; return `${x.label}: ${(rev ? x.rev : x.fwd).toLowerCase()}`; })(),
     ...GROUPS.filter((g) => sel[g.param].size).map((g) => `${g.title.toLowerCase()}: ${g.options.filter((o) => sel[g.param].has(o.value)).map((o) => o.label).join(" or ")}`),
     `${rows.length} card${rows.length === 1 ? "" : "s"}`].filter(Boolean).join(" · ");
 
   return (
     <>
       <h1>Ideas</h1>
-      <RememberFilters keys={["days", "sort", "status", "source", "conf", "cap", "short", "dir", ...SCORE_FILTERS.map((f) => f.param)]} />
+      <RememberFilters keys={["days", "sort", "rev", "status", "source", "conf", "cap", "short", "dir", ...SCORE_FILTERS.map((f) => f.param)]} />
       <TickerSearch />
       <details className="card notice small section">
         <summary><b>How this page works</b></summary>
@@ -159,7 +169,7 @@ export default async function IdeasPage({ searchParams }: { searchParams: Promis
       </details>
       <span id="cards" />
       {/* All the filters fold away (remembered); tick any number per group, then Apply. */}
-      <IdeasFilters days={String(days)} sort={sort} sorts={SORTS} groups={filterGroups} summary={summary} keep={{ penny: sp.penny ?? "" }} />
+      <IdeasFilters days={String(days)} sort={sort} rev={rev} sorts={SORTS} groups={filterGroups} summary={summary} keep={{ penny: sp.penny ?? "" }} />
       {penny.size > 0 && <p className="small muted">{showPenny ? <>Showing {penny.size} short{penny.size === 1 ? "" : "s"} on stocks under $5 (the scout does not suggest these). <a href={hrefWith(params, { penny: undefined })}>Hide them</a></> : <>{penny.size} short{penny.size === 1 ? "" : "s"} on stocks under $5 hidden (the scout does not suggest these). <a href={hrefWith(params, { penny: "1" })}>Show</a></>}</p>}
       <div className="toolbar" style={{ justifyContent: "space-between" }}><CollapseAll /><Pager params={params} name="page" page={page.page} pages={page.pages} total={page.total} label="cards" hash="#cards" /></div>
       {page.items.map((c) => {

@@ -14,28 +14,31 @@ const writeFlag = (k: string, v: boolean) => { try { localStorage.setItem(k, v ?
  * The Ideas filters as one form: any number of choices per group (none = any), applied together with Apply.
  * Whether the panel and its Scores section are open is remembered in this browser, across refreshes and Apply.
  */
-export default function IdeasFilters({ days, sort, sorts, groups, summary, keep }: {
-  days: string; sort: string; sorts: Array<{ value: string; label: string }>; groups: FilterGroup[]; summary: string; keep: Record<string, string>;
+export default function IdeasFilters({ days, sort, rev, sorts, groups, summary, keep }: {
+  days: string; sort: string; /** The reversed order of the chosen sort (oldest first, lowest first, ...). */ rev: boolean;
+  sorts: Array<{ value: string; label: string; fwd: string; rev: string }>; groups: FilterGroup[]; summary: string; keep: Record<string, string>;
 }) {
   const router = useRouter();
   const applied = useMemo(() => Object.fromEntries(groups.map((g) => [g.param, g.selected])), [groups]);
   const [sel, setSel] = useState<Record<string, string[]>>(applied);
   const [d, setD] = useState(days);
   const [s, setS] = useState(sort);
+  const [r, setR] = useState(rev);
   const [open, setOpen] = useState(false);
   const [scoresOpen, setScoresOpen] = useState(false);
   useEffect(() => { setOpen(readFlag(OPEN_KEY)); setScoresOpen(readFlag(SCORES_KEY) || groups.some((g) => g.scores && g.selected.length)); }, [groups]);
-  useEffect(() => { setSel(applied); setD(days); setS(sort); }, [applied, days, sort]);
+  useEffect(() => { setSel(applied); setD(days); setS(sort); setR(rev); }, [applied, days, sort, rev]);
 
   const toggle = (param: string, value: string) => setSel((old) => {
     const cur = old[param] ?? [];
     return { ...old, [param]: cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value] };
   });
-  const changed = d !== days || s !== sort || groups.some((g) => [...(sel[g.param] ?? [])].sort().join(",") !== [...g.selected].sort().join(","));
-  const apply = (next = sel, nd = d, ns = s) => {
+  const changed = d !== days || s !== sort || r !== rev || groups.some((g) => [...(sel[g.param] ?? [])].sort().join(",") !== [...g.selected].sort().join(","));
+  const apply = (next = sel, nd = d, ns = s, nr = r) => {
     const q = new URLSearchParams();
     if (nd && nd !== "7") q.set("days", nd);
     if (ns && ns !== "best") q.set("sort", ns);
+    if (nr) q.set("rev", "1");
     for (const g of groups) if ((next[g.param] ?? []).length) q.set(g.param, next[g.param].join(","));
     for (const [k, v] of Object.entries(keep)) if (v) q.set(k, v);
     router.push(`/ideas?${q.toString() || "all=1"}#cards`);
@@ -67,8 +70,14 @@ export default function IdeasFilters({ days, sort, sorts, groups, summary, keep 
       </div>
       <div className="toolbar">
         <span className="filter-links small">
-          <span className="filter-title">Sort</span>
+          <span className="filter-title">Sort by</span>
           {sorts.map((o) => <button type="button" key={o.value} className={`chip${s === o.value ? " active" : ""}`} onClick={() => setS(o.value)}>{o.label}</button>)}
+        </span>
+      </div>
+      <div className="toolbar">
+        <span className="filter-links small">
+          <span className="filter-title">Order</span>
+          {(() => { const o = sorts.find((x) => x.value === s) ?? sorts[0]; return [[false, o.fwd], [true, o.rev]].map(([v, l]) => <button type="button" key={String(v)} className={`chip${r === v ? " active" : ""}`} onClick={() => setR(v as boolean)}>{l as string}</button>); })()}
         </span>
       </div>
       {groups.filter((g) => !g.scores).map(chips)}
