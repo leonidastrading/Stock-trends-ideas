@@ -1116,6 +1116,14 @@ CREATE TABLE IF NOT EXISTS site_digests (
 );
 CREATE INDEX IF NOT EXISTS site_digests_tickers_idx ON site_digests USING gin (tickers);
 
+-- Daytrade: Stocktwits' trending ten, read every five minutes.
+CREATE TABLE IF NOT EXISTS daytrade_snaps (
+  id serial PRIMARY KEY,
+  taken_at timestamptz NOT NULL DEFAULT now(),
+  items jsonb NOT NULL
+);
+CREATE INDEX IF NOT EXISTS daytrade_snaps_taken_idx ON daytrade_snaps (taken_at DESC);
+
 CREATE TABLE IF NOT EXISTS emails_sent (
   key text PRIMARY KEY,
   subject text NOT NULL,

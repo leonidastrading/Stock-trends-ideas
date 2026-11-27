@@ -13,6 +13,7 @@ export const JOBS = {
   sitewatch: { everyMin: 30, about: "quiet edits to the websites of open-card companies" },
   evidence: { everyMin: 10, about: "saving cited web pages to the Wayback Machine" },
   topnews: { everyMin: 30, about: "News tab: the ten most important stories of the last 24 hours" },
+  daytrade: { everyMin: 4, about: "Daytrade: Stocktwits' trending ten, read and kept every five minutes" },
   sttrending: { everyMin: 10, about: "Stocktwits' trending ten at 9 AM and 3 PM ET" },
   listings: { everyMin: 180, about: "cards written before their stock listed (IPOs): start the paper track once it trades" },
   petitions: { everyMin: 360, rev: 2, about: "FDA citizen petitions on regulations.gov (short sellers' weekly)" },

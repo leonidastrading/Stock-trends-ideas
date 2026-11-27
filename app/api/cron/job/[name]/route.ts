@@ -27,6 +27,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ name: strin
       case "evidence": result = await import("@/lib/scout/evidence-archive").then(({ runEvidenceArchive }) => runEvidenceArchive()); break;
       case "topnews": result = await import("@/lib/scout/top-news").then(({ runTopNews }) => runTopNews(deps)); break;
       case "sttrending": result = await import("@/lib/scout/st-trending").then(({ runStTrending }) => runStTrending({ data: deps.data ?? null, now: deps.now })); break;
+      case "daytrade": result = await import("@/lib/scout/daytrade").then(({ runDaytrade }) => runDaytrade({ data: deps.data ?? null })); break;
       case "listings": result = await import("@/lib/scout/listing-wait").then(({ runListingWatch }) => runListingWatch(deps.data ?? null, deps.now)); break;
       case "petitions": result = await import("@/lib/scout/petitions").then(({ runPetitionWatch }) => runPetitionWatch(deps.env, deps.now)); break;
       case "fdaletters": result = await import("@/lib/scout/fda-letters").then(({ runFdaLetters }) => runFdaLetters(deps.env, deps.now)); break;
@@ -52,7 +53,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ name: strin
     // Each job's state goes on the health panel (Settings) and on Home when it is not reporting.
     await import("@/lib/scout/health").then(({ reportHealth, saysFailed }) => reportHealth(`job:${name}`, !saysFailed(result!), result!)).catch(() => undefined);
     // The finished study answers every 5 minutes: not worth a log line each time.
-    if (!/^(rating|panel) study: (done|waiting)|^earnings repair: no rows|^pr desk: (0 logged, 0 outcomes|another pass)|^long term: all |^filing check: nothing new/.test(result!)) console.log(result!);
+    if (!/^(rating|panel) study: (done|waiting)|^earnings repair: no rows|^pr desk: (0 logged, 0 outcomes|another pass)|^long term: all |^filing check: nothing new|^daytrade: /.test(result!)) console.log(result!);
     return NextResponse.json({ status: "ok", result: result! });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
