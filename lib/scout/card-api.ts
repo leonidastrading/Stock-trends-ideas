@@ -3,7 +3,7 @@
  * (SCOUT_API_TOKEN) instead of the site login. Pure parts here; the route does the reading.
  */
 import { createHash, timingSafeEqual } from "node:crypto";
-import { STAGE_LABEL, type CrowdingRow } from "./crowding";
+import { CROWDING_MIN_BASELINE_DAYS, STAGE_LABEL, type CrowdingRow } from "./crowding";
 import type { StoredCard, Track } from "./store";
 
 export { isCardApiRequest } from "./card-api-path";
@@ -35,6 +35,8 @@ export function isoDay(v: string): string | null {
 
 const reading = (r: CrowdingRow | null) => r && compact({
   measured_on: isoDay(r.measuredOn), score: r.score, stage: r.stage, stage_label: r.stage !== null ? STAGE_LABEL[r.stage] : null,
+  // Said when the stage leaves Stocktwits chatter out (the stock's own baseline is under 20 days old).
+  stage_basis: r.stage !== null && r.parts?.attention && r.parts.attention.days < CROWDING_MIN_BASELINE_DAYS ? "news, searches and price only: the stock's Stocktwits baseline is under 20 days old" : null,
   stocktwits_bullish_share: r.parts?.attention?.bullishShare ?? null, stocktwits_posts_per_hour: r.parts?.attention?.perHour ?? null,
   news_stories_30d: r.parts?.news?.stories30d ?? null, move_30d_pct: r.parts?.run?.move30 ?? null, pct_vs_200d_average: r.parts?.extension?.pctAbove ?? null,
 });

@@ -39,10 +39,16 @@ describe("prediction markets worth showing", () => {
 });
 
 describe("crowding score", () => {
-  it("is not given while the stock's own baseline is still building", () => {
+  it("leaves chatter out while the stock's own baseline is still building, and still gives a stage", () => {
     const parts = (days: number): CrowdingParts => ({ attention: { perHour: 6, baseline: days ? 2 : null, z: days ? 1.8 : null, days, bullishShare: null }, news: { stories30d: 12, baseline30d: 4, ratio: 2.8 }, run: { move30: 22, move90: 40, offHigh20: -2 } } as unknown as CrowdingParts);
-    expect(crowdingScore(parts(0)).score).toBeNull();
-    expect(crowdingScore(parts(CROWDING_MIN_BASELINE_DAYS - 1)).score).toBeNull();
-    expect(crowdingScore(parts(CROWDING_MIN_BASELINE_DAYS)).score).not.toBeNull();
+    // Under 20 days the chatter reading is left out, and the stage comes from the other parts: a new stock still gets one.
+    const thin = crowdingScore(parts(CROWDING_MIN_BASELINE_DAYS - 1)), full = crowdingScore(parts(CROWDING_MIN_BASELINE_DAYS));
+    expect(thin).toMatchObject({ withoutChatter: true });
+    expect(thin.stage).not.toBeNull();
+    expect(thin.parts.attention).toBeUndefined();
+    expect(thin.score).toBe(crowdingScore({ ...parts(0), attention: null }).score);
+    expect(crowdingScore(parts(0)).stage).not.toBeNull();
+    expect(full.parts.attention).toBeDefined();
+    expect(full.withoutChatter).toBeUndefined();
   });
 });

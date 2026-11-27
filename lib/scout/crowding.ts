@@ -62,19 +62,24 @@ export function components(p: CrowdingParts): Record<string, number> {
 /** Days of the stock's own Stocktwits history needed before a crowding score is given. */
 export const CROWDING_MIN_BASELINE_DAYS = 20;
 
-/** Pure: score (average of the parts, needs two) and stage. */
-export function crowdingScore(p: CrowdingParts): { score: number | null; stage: number | null; parts: Record<string, number> } {
-  const parts = components(p);
+/**
+ * Pure: score (average of the parts, needs two) and stage. While the stock's own Stocktwits baseline is still
+ * building (under 20 days), the chatter reading is left out: a spike against no baseline is not a reading. The score
+ * and stage then come from the other parts (news, searches, price against its average, the run), so a new stock still
+ * gets a stage; `withoutChatter` says so. (For a day the whole score was withheld instead, and new cards went out
+ * with no stage at all.)
+ */
+export function crowdingScore(p: CrowdingParts): { score: number | null; stage: number | null; parts: Record<string, number>; withoutChatter?: boolean } {
+  const thin = !!p.attention && p.attention.days < CROWDING_MIN_BASELINE_DAYS;
+  const parts = components(thin ? { ...p, attention: null } : p);
   const vals = Object.values(parts);
-  if (vals.length < 2) return { score: null, stage: null, parts };
-  // No score while the stock's own Stocktwits baseline is still building (a score against no baseline is not a reading).
-  if (p.attention && p.attention.days < CROWDING_MIN_BASELINE_DAYS) return { score: null, stage: null, parts };
+  if (vals.length < 2) return { score: null, stage: null, parts, ...(thin ? { withoutChatter: true } : {}) };
   const score = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
-  const z = p.attention?.z ?? null;
+  const z = thin ? null : p.attention?.z ?? null;
   const move30 = p.run?.move30 ?? 0;
   const off = p.run?.offHigh20 ?? 0;
   const stage = score >= 55 && off <= -12 ? 4 : score >= 65 || (z !== null && z >= CROWDING.trimZ && Math.abs(move30) >= CROWDING.trimRun30) ? 3 : score >= 45 ? 2 : score >= 25 ? 1 : 0;
-  return { score, stage, parts };
+  return { score, stage, parts, ...(thin ? { withoutChatter: true } : {}) };
 }
 
 /** Pure: early (stage 0–1, the report's best entries), middle (2) or late (3–4). */
@@ -173,7 +178,13 @@ export async function measureCrowding(symbol: string, data: MarketData | null, n
 
 export interface CrowdingRow { cardId: number; symbol: string; kind: "entry" | "daily"; measuredOn: string; score: number | null; stage: number | null; parts: CrowdingParts & { scaled?: Record<string, number> } }
 
-const toRow = (r: Record<string, unknown>): CrowdingRow => ({ cardId: Number(r.card_id), symbol: String(r.symbol), kind: r.kind as "entry" | "daily", measuredOn: String(r.measured_on).slice(0, 10), score: r.score === null ? null : Number(r.score), stage: r.stage === null ? null : Number(r.stage), parts: r.parts as CrowdingRow["parts"] });
+/** A stored reading. One saved with no stage (while the whole score was withheld for a thin Stocktwits baseline) gets its stage from its own stored parts. */
+const toRow = (r: Record<string, unknown>): CrowdingRow => {
+  const parts = r.parts as CrowdingRow["parts"];
+  let score = r.score === null ? null : Number(r.score), stage = r.stage === null ? null : Number(r.stage);
+  if (stage === null && parts) { const again = crowdingScore(parts); score = again.score; stage = again.stage; }
+  return { cardId: Number(r.card_id), symbol: String(r.symbol), kind: r.kind as "entry" | "daily", measuredOn: String(r.measured_on).slice(0, 10), score, stage, parts };
+};
 
 async function saveRow(cardId: number, symbol: string, kind: "entry" | "daily", now: Date, p: CrowdingParts): Promise<CrowdingRow> {
   const s = crowdingScore(p);
