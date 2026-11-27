@@ -55,7 +55,7 @@ export default async function UpgradesPage() {
                 <td className="small">{u.entryPrice ? <>entered {u.entryDate} @ <b>${u.entryPrice.toFixed(2)}</b>{u.basis === "open" ? <span className="muted"> (open)</span> : null}{u.prevClose ? <span className="muted"> · ${u.prevClose.toFixed(2)} before the upgrade</span> : null}</> : <span className="muted">enters at the next open{u.prevClose ? ` · $${u.prevClose.toFixed(2)} before the upgrade` : ""}</span>}</td>
                 <td className={`num ${tone(r?.ret)}`}>{pct(r?.ret)}</td>
                 <td className={`num ${tone(r?.vsSpy)}`}>{pct(r?.vsSpy)}</td>
-                <td className="small">{cardsOn(u.symbol).length ? <CardChips cards={cardsOn(u.symbol)} max={3} /> : <span className="muted">none</span>}</td>
+                <td className="small">{cardsOn(u.symbol).length ? <CardChips cards={cardsOn(u.symbol)} max={3} symbol={u.symbol} /> : <span className="muted">none</span>}</td>
                 <td className="small"><ResearchButton symbol={u.symbol} term={`${u.symbol} upgrade`} kind="event" from={{ label: "Upgrades", url: "/upgrades" }} observation={`${u.brokers.join(" and ") || "A broker"} upgraded ${u.symbol} to ${u.to}${u.from ? ` from ${u.from}` : ""} on ${u.day}: "${u.headline}".${u.prevClose ? ` The stock closed at $${u.prevClose.toFixed(2)} before the upgrade.` : ""} Stocks tend to keep rising for weeks after an upgrade. Is that likely here, or is the move already done?`} /></td>
               </tr>
             ))}</tbody>

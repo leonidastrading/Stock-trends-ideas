@@ -1,4 +1,5 @@
 import { KIND_ABOUT, KIND_LABEL, SCOUT, type Kind } from "@/config/scout";
+import { CardChip, splitBySymbol } from "@/components/CardChips";
 import CardSignals from "@/components/CardSignals";
 import CardNews from "@/components/CardNews";
 import CardFundamentals from "@/components/CardFundamentals";
@@ -183,7 +184,12 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
         <dt>Why not priced</dt><dd>{k.why_not_priced}</dd>
         <dt>Tickers</dt>
         <dd>{k.tickers.map((t, i) => <div key={t.symbol}><b><Ticker symbol={t.symbol} className={c.direction === "long" ? "pos" : "neg"}>{c.direction === "long" ? "▲" : "▼"} {t.symbol}</Ticker></b> {i === 0 ? <span className="tag">tracked on paper</span> : null}
-          {otherCards(t.symbol.toUpperCase()).slice(0, 6).map((b) => <a key={b.id} className="tag card-number" style={{ marginLeft: 4 }} href={`/cards/${b.id}`} title={`Card #${b.id}, ${b.direction} ${b.primaryTicker}, ${b.status.replace("_", " ")}, ${fmtEtAgo(b.createdAt)}`}><span className={b.direction === "long" ? "pos" : "neg"}>{b.direction === "long" ? "▲" : "▼"}</span> #{b.id} <span className="muted">{fmtDay(toEt(new Date(b.createdAt)).date).replace(/, \d{4}$/, "")}</span></a>)} <span className="small muted">({t.sector.replace("_", " ")}{t.revenue_share_pct === null ? ", share unknown" : `, ${t.revenue_share_pct}% of revenue${t.share_is_estimate ? " (estimate)" : ""}`})</span> — {t.why}</div>)}</dd>
+          {(() => {
+            // Cards written about this stock first; cards that only name it as a related stock are marked as such.
+            const { direct, related } = splitBySymbol(otherCards(t.symbol.toUpperCase()), t.symbol);
+            const day = (b: { createdAt: string }) => fmtDay(toEt(new Date(b.createdAt)).date).replace(/, \d{4}$/, "");
+            return [...direct.map((b) => <CardChip key={b.id} c={b} label={day(b)} />), ...related.map((b) => <CardChip key={b.id} c={b} related label={day(b)} />)].slice(0, 6);
+          })()} <span className="small muted">({t.sector.replace("_", " ")}{t.revenue_share_pct === null ? ", share unknown" : `, ${t.revenue_share_pct}% of revenue${t.share_is_estimate ? " (estimate)" : ""}`})</span> — {t.why}</div>)}</dd>
         <dt>Lateness</dt>
         <dd className={k.lateness.already_obvious ? "warn" : ""}>{pct(k.lateness.stock_move_30d_pct)} over 30 days, {pct(k.lateness.stock_move_90d_pct)} over 90 days, {k.lateness.news_stories_30d} mainstream stories in 30 days{k.lateness.already_obvious ? " — already obvious" : ""}</dd>
         <CardSignals cardId={c.id} symbol={c.primaryTicker} />

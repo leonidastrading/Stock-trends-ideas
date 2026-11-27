@@ -38,7 +38,7 @@ export default async function DriftList({ entries, cards, data, listed = [] }: {
                 <td className={`num ${r ? (r.ret >= 0 ? "pos" : "neg") : "muted"}`}>{r ? pct(r.ret) : e.entryPrice ? "no price" : "—"}{r && snaps[e.symbol]?.delayed ? <span className="muted small" title="Priced from the whole market, 15 minutes delayed"> ·15m</span> : null}</td>
                 <td className={`num ${r?.vsSpy == null ? "muted" : r.vsSpy >= 0 ? "pos" : "neg"}`}>{r?.vsSpy == null ? "—" : pct(r.vsSpy)}</td>
                 <td className="small">{e.exitBy ?? "—"}</td>
-                <td className="small">{cardsOn(e.symbol).length ? <CardChips cards={cardsOn(e.symbol)} max={3} /> : <span className="muted">none</span>}</td>
+                <td className="small">{cardsOn(e.symbol).length ? <CardChips cards={cardsOn(e.symbol)} max={3} symbol={e.symbol} /> : <span className="muted">none</span>}</td>
                 <td className="small">{listed.includes(e.symbol) ? <DriftResearch symbol={e.symbol} again={cardsOn(e.symbol).length > 0} small /> : <span className="muted" title="Only stocks still on the list can be researched from here">off the list</span>}</td>
               </tr>
             ))}</tbody>

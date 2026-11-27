@@ -28,7 +28,7 @@ export default async function SiteChanges() {
           {w.read?.headline ? <div><b>{w.read.headline}</b></div> : null}
           {w.read?.findings.length ? <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>{w.read.findings.map((f, i) => <li key={i}>{f.what} <span className="muted history-note">“{f.quote}”</span></li>)}</ul> : null}
           {!w.read && <details><summary>{w.removed.length} lines removed, {w.added.length} added (not read by the AI)</summary><ul>{w.removed.slice(0, 8).map((l, i) => <li key={`r${i}`} className="neg">− {l}</li>)}{w.added.slice(0, 8).map((l, i) => <li key={`a${i}`} className="pos">+ {l}</li>)}</ul></details>}
-          {cardsOn(w.symbol).length > 0 && <div>Scout cards on {w.symbol}: <CardChips cards={cardsOn(w.symbol)} max={6} /></div>}
+          {cardsOn(w.symbol).length > 0 && <div>Scout cards on {w.symbol}: <CardChips cards={cardsOn(w.symbol)} max={6} symbol={w.symbol} /></div>}
         </div>
       ))}
     </section>

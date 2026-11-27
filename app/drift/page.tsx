@@ -121,7 +121,7 @@ export default async function DriftPage({ searchParams }: { searchParams: Promis
             <div className="small" style={{ marginTop: 4 }}>
               <span style={{ marginRight: 8 }}><DriftResearch symbol={s.symbol} again={mine.length > 0} /></span>
               {mine.map((c) => <a key={c.id} href={`/cards/${c.id}`} style={{ marginRight: 8 }}>card #{c.id} ({c.status.replace("_", " ")})</a>)}
-              {others.length > 0 && <span style={{ marginLeft: 8 }}><span className="muted">{mine.length ? "Other cards" : "Cards already"} on {s.symbol}: </span><CardChips cards={others} max={6} /></span>}
+              {others.length > 0 && <span style={{ marginLeft: 8 }}><span className="muted">{mine.length ? "Other cards" : "Cards already"} on {s.symbol}: </span><CardChips cards={others} max={6} symbol={s.symbol} /></span>}
             </div>
             {s.headlines.length > 0 && (
               <details className="small"><summary>Bad headlines ({s.headlines.length})</summary>

@@ -66,7 +66,7 @@ async function Petitions({ cardsOn }: { cardsOn: (sym: string | null) => store.C
       <td className="small">{p.request ?? <span className="muted">(request not read)</span>}</td>
       <td className="small">{p.filed}</td>
       <td className="small"><span className={`tag ${STATUS_CLASS[p.status] ?? ""}`}>{p.status}</span>{p.statusDate ? <div className="muted">{p.statusDate}</div> : null}{p.past180 ? <div className="warn">open {p.daysOpen} days (past 180)</div> : null}</td>
-      <td className="small">{p.symbols.length ? p.symbols.map((s) => <span key={s} style={{ marginRight: 6 }}><Ticker symbol={s} /> <CardChips cards={cardsOn(s)} max={3} /></span>) : <span className="muted">—</span>}</td>
+      <td className="small">{p.symbols.length ? p.symbols.map((s) => <span key={s} style={{ marginRight: 6 }}><Ticker symbol={s} /> <CardChips cards={cardsOn(s)} max={3} symbol={s} /></span>) : <span className="muted">—</span>}</td>
     </tr>
   );
   const recent = (w?.recent ?? []).filter((p) => !w?.shortSellers.some((s) => s.docketId === p.docketId));

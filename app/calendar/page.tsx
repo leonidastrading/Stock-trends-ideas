@@ -152,7 +152,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           <h2>Your cards reporting this week</h2>
           <div className="table-wrap"><table>
             <thead><tr><th>When</th><th>Stock</th><th>Estimate</th><th>Cards</th></tr></thead>
-            <tbody>{mine.map((r) => <tr key={`${r.reportDate}-${r.symbol}`}><td className="small">{weekday(r.reportDate).slice(0, 3)} {shortDate(r.reportDate)} · {r.timing === "before_open" ? "before open" : r.timing === "after_close" ? "after close" : "time not confirmed"}</td><td><Ticker symbol={r.symbol} /> <span className="small muted">{r.name}{cap(r.marketCap) ? ` · ${cap(r.marketCap)}` : ""}</span></td><td className="small">EPS {eps(r.epsEstimate)}{r.epsActual !== null ? <> · reported {eps(r.epsActual)}</> : null}</td><td><CardChips cards={cardsOn(r.symbol)} max={4} /></td></tr>)}</tbody>
+            <tbody>{mine.map((r) => <tr key={`${r.reportDate}-${r.symbol}`}><td className="small">{weekday(r.reportDate).slice(0, 3)} {shortDate(r.reportDate)} · {r.timing === "before_open" ? "before open" : r.timing === "after_close" ? "after close" : "time not confirmed"}</td><td><Ticker symbol={r.symbol} /> <span className="small muted">{r.name}{cap(r.marketCap) ? ` · ${cap(r.marketCap)}` : ""}</span></td><td className="small">EPS {eps(r.epsEstimate)}{r.epsActual !== null ? <> · reported {eps(r.epsActual)}</> : null}</td><td><CardChips cards={cardsOn(r.symbol)} max={4} symbol={r.symbol} /></td></tr>)}</tbody>
           </table></div>
         </section>
       )}

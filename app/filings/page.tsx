@@ -55,11 +55,11 @@ export default async function FilingsPage() {
         <div className="table-wrap"><table>
           <thead><tr><th>Stock</th><th>Status</th><th>Details</th><th>Cards</th><th className="small">Since</th></tr></thead>
           <tbody>
-            {flagged.map((w) => <tr key={w.symbol}><td><Ticker symbol={w.symbol} /></td><td><span className={`tag ${w.status === "late_vs_usual" ? "late" : "error"}`}>{WATCH_LABEL[w.status]}</span></td><td className="small">{w.message}</td><td className="small">{cardsOn(w.symbol).length ? <CardChips cards={cardsOn(w.symbol)} max={3} /> : <span className="muted">—</span>}</td><td className="small muted">{fmtEtAgo(w.checkedAt)}</td></tr>)}
+            {flagged.map((w) => <tr key={w.symbol}><td><Ticker symbol={w.symbol} /></td><td><span className={`tag ${w.status === "late_vs_usual" ? "late" : "error"}`}>{WATCH_LABEL[w.status]}</span></td><td className="small">{w.message}</td><td className="small">{cardsOn(w.symbol).length ? <CardChips cards={cardsOn(w.symbol)} max={3} symbol={w.symbol} /> : <span className="muted">—</span>}</td><td className="small muted">{fmtEtAgo(w.checkedAt)}</td></tr>)}
             {flagged.length === 0 && <tr><td colSpan={5} className="muted small">Nothing late: {watch.length ? `all ${watch.length} card stocks checked are on time.` : "no checks yet (they run with the hourly upkeep)."}</td></tr>}
           </tbody>
         </table></div>
-        {watch.length > flagged.length && <details className="small"><summary>On time ({watch.length - flagged.length})</summary><ul>{watch.filter((w) => w.status === "ok").map((w) => <li key={w.symbol}><b>{w.symbol}</b>: {w.message} <CardChips cards={cardsOn(w.symbol)} max={3} /></li>)}</ul></details>}
+        {watch.length > flagged.length && <details className="small"><summary>On time ({watch.length - flagged.length})</summary><ul>{watch.filter((w) => w.status === "ok").map((w) => <li key={w.symbol}><b>{w.symbol}</b>: {w.message} <CardChips cards={cardsOn(w.symbol)} max={3} symbol={w.symbol} /></li>)}</ul></details>}
       </section>
 
       <FilingChanges />

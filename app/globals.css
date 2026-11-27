@@ -396,6 +396,8 @@ main { overflow-wrap: break-word; }
 /* The card's number at the start of its header: a link to the card. */
 .tag.card-number { font-weight: 700; color: var(--text-primary); text-decoration: none; }
 .tag.card-number:hover { text-decoration: underline; }
+/* A card about another stock that only names this one as related: not a call on it. */
+.tag.card-number.related { border-style: dashed; font-weight: 500; opacity: 0.8; }
 
 /* Positioning: a 3-year percentile bar (0 = most short, 100 = most long). */
 .cot-bar { position: relative; display: inline-block; width: 120px; height: 8px; margin-right: 6px; border-radius: 4px; vertical-align: middle; background: linear-gradient(90deg, var(--neg) 0 10%, rgba(128,128,128,0.25) 10% 90%, var(--pos) 90% 100%); }

@@ -39,7 +39,7 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
       <CardView c={c} track={track} feedback={feedback} opposing={opp} review={review} actions={<CardActions cardId={c.id} canSend={c.status !== "not_promoted"} sent={!!track?.tappedAt} open={!!track && !track.exitDate && !track.invalidatedAt} swingConfigured={swingConfigured()} excluded={!!track?.excluded} />} />
       <section className="card">
         <h2>Other cards on {c.primaryTicker}</h2>
-        {others.length ? <CardChips cards={others} max={40} /> : <p className="small muted">None in the last year.</p>}
+        {others.length ? <CardChips cards={others} max={40} symbol={c.primaryTicker} /> : <p className="small muted">None in the last year.</p>}
       </section>
     </>
   );
