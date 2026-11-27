@@ -5,9 +5,9 @@
  * stocks is logged too (to answer "why was there no card on X"). The log is the Vercel project's own.
  */
 export const CARD_PEEK = {
-  rev: 6, ids: [] as number[],
+  rev: 7, ids: [] as number[],
   /** Also log every earnings-drift row that was measured again on the report day (first numbers against corrected ones). */
   earningsFixes: false,
   /** Stocks to look up instead of card numbers: every card, research attempt and story-desk read on them in the last `days` days, a line each. */
-  symbols: ["LEN", "TOL"] as string[], days: 10,
+  symbols: ["TSLA", "VRTX", "MO", "COST", "PATH"] as string[], days: 3,
 };
