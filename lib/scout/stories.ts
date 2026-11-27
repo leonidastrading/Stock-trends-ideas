@@ -417,7 +417,7 @@ export interface StoriesReport {
 }
 
 /** Detect today's stories, lay out the trades, research each as an event card. Safe to run hourly: a story's trade is researched once per 3 days. */
-export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesReport> {
+export async function runStories(deps: ResearchDeps, max = 4, opts: { /** Only the filings the scout has just read (the five-minute filing check): nothing else is detected or read. */ primaryOnly?: boolean } = {}): Promise<StoriesReport> {
   const et = toEt(deps.now);
   const report: StoriesReport = { date: et.date, headlinesRead: 0, detected: [], triage: [], researched: [], error: null };
   if (!deps.data) {
@@ -475,6 +475,13 @@ export async function runStories(deps: ResearchDeps, max = 4): Promise<StoriesRe
       }
     }
   } catch (err) { console.warn(`primary filings: ${err instanceof Error ? err.message : String(err)}`); }
+  if (opts.primaryOnly) {
+    // The five-minute filing check: only the filings just handed over go to the desk; the rest wait for the full scan.
+    const mine = stories.filter((x) => x.primary);
+    stories.length = 0;
+    stories.push(...mine);
+    if (!stories.length) return report;
+  }
   const readToday = new Set(events.filter((e) => e.etDate === et.date).map((e) => e.key));
   const storyCounts = await store.tickerCounts(stories.filter((s) => !s.key.startsWith("macro:")).map((s) => s.key), addDays(et.date, -6), et.date);
   for (const s of stories) {

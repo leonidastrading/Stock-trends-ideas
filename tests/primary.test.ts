@@ -88,3 +88,14 @@ describe("opening the filings (PGlite)", () => {
     expect((await primaryFilings([k8("NEWX", "4.02", "2026-11-25T12:59:00Z", 7)], { ...deps, env: {} as NodeJS.ProcessEnv })).size).toBe(0);
   });
 });
+
+import { filingCheck } from "@/lib/scout/primary";
+
+describe("the five-minute filing check", () => {
+  it("says so and never calls the desk when there is no declared SEC user agent", async () => {
+    let called = 0;
+    const line = await filingCheck({ data: null, env: {} as NodeJS.ProcessEnv, now: new Date("2026-11-27T15:00:00Z") }, async () => { called++; return { detected: [], researched: [], error: null }; });
+    expect(line).toContain("SEC_USER_AGENT is not set");
+    expect(called).toBe(0);
+  });
+});

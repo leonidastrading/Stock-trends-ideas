@@ -136,3 +136,21 @@ export async function releaseText(url: string, fetchImpl?: typeof fetch, max = P
   const text = htmlText(html).replace(/\s+/g, " ").trim();
   return text.length > 400 ? text.slice(0, max) : null;
 }
+
+/**
+ * The five-minute filing check. The story desk's full scan runs every 45 minutes (it costs an AI call each time), so
+ * a filing read only then could wait most of an hour. This looks at the SEC's live list every five minutes, which
+ * costs nothing; only when a material 8-K is there that has not been read does it call the desk, for that filing alone.
+ */
+export async function filingCheck(deps: { data: MarketData | null; env: NodeJS.ProcessEnv; now: Date; fetchImpl?: typeof fetch }, runDesk: () => Promise<{ detected: unknown[]; researched: Array<{ term: string; outcome: string }>; error: string | null }>): Promise<string> {
+  if (!deps.env.SEC_USER_AGENT?.trim()) return "filing check: SEC_USER_AGENT is not set";
+  const { fastNews } = await import("../sources/wires");
+  const items = await fastNews(deps.env, deps.fetchImpl, deps.now);
+  const open = filingsToOpen(items, deps.now);
+  const unread: NewsItem[] = [];
+  for (const n of open) if (!(await store.cacheGet(`primary:${n.id}`).catch(() => null))) unread.push(n);
+  const live = items.filter((n) => n.source === "SEC 8-K").length;
+  if (!unread.length) return `filing check: nothing new (${live} live 8-Ks, ${open.length} with an item that can be news by itself in the last ${PRIMARY.freshMinutes / 60} hours, all read)`;
+  const r = await runDesk();
+  return `filing check: ${unread.length} unread (${unread.slice(0, 6).map((n) => `${n.symbols[0]} ${itemsOf(n).join("/")}`).join(", ")}); ${r.detected.length} handed to the desk, ${r.researched.length} researched${r.researched.length ? ` (${r.researched.map((x) => `${x.term.slice(0, 50)}: ${x.outcome}`).join("; ")})` : ""}${r.error ? ` · ${r.error}` : ""}`;
+}

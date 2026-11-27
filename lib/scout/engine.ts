@@ -126,7 +126,7 @@ export async function runStoriesJob(deps = defaultDeps()) {
   try {
     // Trades the desk has no time to research in this call's 5 minutes are queued and done within minutes.
     const r = await runStories({ ...deps, startBy: deps.startBy ?? started + STORY_RESEARCH_BY });
-    console.log(`stories: ${r.headlinesRead} headlines (${r.fromStream ?? "?"} stream${r.streamSources ? `: ${r.streamSources}` : ""}; ${r.fromFast ?? "?"} fast), ${r.detected.length} detected, ${r.researched.length} researched${r.nearest ? ` · ${r.nearest}` : ""}${r.error ? ` · ${r.error}` : ""}`);
+    console.log(`stories: ${r.headlinesRead} headlines (${r.fromStream ?? "?"} stream${r.streamSources ? `: ${r.streamSources}` : ""}; ${r.fromFast ?? "?"} fast), ${r.detected.length} detected, ${r.researched.length} researched${r.nearest ? ` · ${r.nearest}` : ""}${r.triage.length ? ` · read: ${r.triage.slice(0, 6).map((t) => `${t.key} (${t.skipped ? `no trade: ${t.skipped.slice(0, 90)}` : `${t.trades.length} trade${t.trades.length === 1 ? "" : "s"}`})`).join("; ")}` : ""}${r.researched.length ? ` · ${r.researched.slice(0, 6).map((x) => `${x.term.slice(0, 40)}: ${x.outcome}${x.reason ? ` (${x.reason.slice(0, 70)})` : ""}`).join("; ")}` : ""}${r.error ? ` · ${r.error}` : ""}`);
     // The filings desk: at most one new filing signal researched per call (three a day), if the story scan left time.
     const filings = Date.now() - started < 120_000
       ? await import("./filings").then(({ runFilingResearch }) => runFilingResearch(deps, 1)).catch((err) => ({ error: err instanceof Error ? err.message : String(err) }))

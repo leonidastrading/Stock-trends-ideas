@@ -35,6 +35,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ name: strin
       case "upgrades": result = await import("@/lib/scout/upgrades").then(({ runUpgrades }) => runUpgrades(deps.data ?? null, deps.now)); break;
       case "driftlist": result = deps.data ? `drift list book: ${await import("@/lib/scout/drift-list").then(({ updateListBook }) => updateListBook(deps.data!, deps.now))}` : "drift list book: waiting for market data (Alpaca keys)"; break;
       case "prdesk": result = await import("@/lib/scout/pr-desk").then(({ runPrDesk }) => runPrDesk({ data: deps.data ?? null, now: deps.now })); break;
+      case "filingcheck": result = await import("@/lib/scout/primary").then(async ({ filingCheck }) => filingCheck({ data: deps.data ?? null, env: deps.env, now: deps.now }, async () => (await import("@/lib/scout/stories")).runStories({ ...deps, startBy: Date.now() + 150_000 }, 2, { primaryOnly: true }))); break;
       case "longterm": result = await import("@/lib/scout/long-term").then(({ runLongTerm }) => runLongTerm(deps.env)); break;
       case "watchlist": result = await import("@/lib/scout/store").then(({ watchlistUpkeep }) => watchlistUpkeep()).then((r) => `watch-list: ${r.before.active} active and ${r.before.proposed} proposed before, ${r.after.active} active and ${r.after.proposed} proposed after; ${r.retired} retired${r.retired ? ` (${Object.entries(r.why).map(([k, n]) => `${n} ${k}`).join(", ")})` : ""}`); break;
       case "earningsrepair": result = deps.data ? `earnings repair: ${await import("@/lib/scout/earnings").then(({ repairLateScans }) => repairLateScans(deps.data!, deps.now, 60))}` : "earnings repair: waiting for market data (Alpaca keys)"; break;
@@ -51,7 +52,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ name: strin
     // Each job's state goes on the health panel (Settings) and on Home when it is not reporting.
     await import("@/lib/scout/health").then(({ reportHealth, saysFailed }) => reportHealth(`job:${name}`, !saysFailed(result!), result!)).catch(() => undefined);
     // The finished study answers every 5 minutes: not worth a log line each time.
-    if (!/^(rating|panel) study: (done|waiting)|^earnings repair: no rows|^pr desk: (0 logged, 0 outcomes|another pass)|^long term: all /.test(result!)) console.log(result!);
+    if (!/^(rating|panel) study: (done|waiting)|^earnings repair: no rows|^pr desk: (0 logged, 0 outcomes|another pass)|^long term: all |^filing check: nothing new/.test(result!)) console.log(result!);
     return NextResponse.json({ status: "ok", result: result! });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
