@@ -4,6 +4,7 @@
  */
 import { createHash, timingSafeEqual } from "node:crypto";
 import { CROWDING_MIN_BASELINE_DAYS, STAGE_LABEL, type CrowdingRow } from "./crowding";
+import { sizeTagOf } from "./card";
 import type { StoredCard, Track } from "./store";
 
 export { isCardApiRequest } from "./card-api-path";
@@ -51,6 +52,7 @@ export function cardForApi(c: StoredCard, t: Track | null, crowd: { entry: Crowd
     created_at: c.createdAt,
     status: c.status,
     promoted: c.status === "promoted",
+    size_basis: sizeTagOf(c.gateNotes),
     origin: c.origin,
     kind: c.kind,
     title: card.title,

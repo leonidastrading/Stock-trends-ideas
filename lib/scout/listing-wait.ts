@@ -10,6 +10,7 @@
 import { SCOUT, SECTORS, type Sector } from "@/config/scout";
 import type { DailyBar, MarketData } from "../alpaca";
 import { addDays, toEt } from "../time";
+import { sizeVerdict } from "./card";
 import { namesMatch, notCommon } from "./identity";
 import * as store from "./store";
 
@@ -29,9 +30,8 @@ export function waitingForListing(c: Pick<store.StoredCard, "status" | "gateNote
 
 /** Pure: the gates the card skipped because there was no price, run now on the listed stock. Null when it passes. */
 export function gateNow(c: Pick<store.StoredCard, "direction" | "card">, bars: DailyBar[]): string | null {
-  const primary = c.card.tickers[0];
-  if (primary.revenue_share_pct === null) return `materiality: no revenue-share estimate for ${primary.symbol}`;
-  if (primary.revenue_share_pct < SCOUT.minRevenueSharePct) return `materiality: ${primary.revenue_share_pct}% of revenue (gate ${SCOUT.minRevenueSharePct}%)`;
+  const size = sizeVerdict(c.card);
+  if (!size.pass) return size.note;
   if (c.direction === "short") {
     const sorted = bars.slice().sort((a, b) => a.date.localeCompare(b.date));
     const last = sorted[sorted.length - 1];

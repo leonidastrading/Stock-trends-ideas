@@ -26,6 +26,20 @@ export const tickerSchema = z.object({
   sector: z.enum(SECTOR_KEYS),
 });
 
+/**
+ * What the trade depends on, for the size gate. "whole_company": the catalyst and the exit are company-wide results
+ * and the theme is the reason to look. "line": the trade works only if that product or line itself grows; then a
+ * line under the size gate needs a measured figure for the line itself. Absent on cards before it existed.
+ */
+export const sizeBasisSchema = z.object({
+  depends_on: z.enum(["whole_company", "line"]),
+  why: z.string().max(400),
+  line_figure: z.string().max(300).nullable(),
+  line_figure_source: z.string().max(200).nullable(),
+  line_figure_as_of: z.string().max(20).nullable(),
+});
+export type SizeBasis = z.infer<typeof sizeBasisSchema>;
+
 export const latenessSchema = z.object({
   news_stories_30d: z.number().min(0),
   stock_move_30d_pct: z.number(),
@@ -52,6 +66,7 @@ export const cardSchema = z.object({
   confidence: z.number().min(0).max(100),
   /** How a trader might express it given the expected path and timing. Advice only; tracking is in shares. Absent on cards before it existed. */
   expression: z.string().max(600).optional(),
+  size_basis: sizeBasisSchema.optional(),
   unknowns: z.array(z.string()),
 });
 export type Card = z.infer<typeof cardSchema>;
@@ -67,7 +82,7 @@ export type CardTicker = z.infer<typeof tickerSchema>;
 export const CARD_JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["title", "thesis", "kind", "origin", "observation", "evidence", "tickers", "why_not_priced", "lateness", "catalyst", "direction", "invalidation", "time_limit_days", "scores", "confidence", "expression", "unknowns"],
+  required: ["title", "thesis", "kind", "origin", "observation", "evidence", "tickers", "why_not_priced", "lateness", "catalyst", "direction", "invalidation", "time_limit_days", "scores", "confidence", "expression", "size_basis", "unknowns"],
   properties: {
     title: { type: "string", description: "12 words or fewer, in plain English a non-expert gets at a glance: what happened and what it means for which company (e.g. 'FBI warns of a new AI hacking tool; could lift demand for CrowdStrike'). No trader jargon (read-through, print, beat-and-raise, TAM) and no unexplained acronyms or code names" },
     thesis: { type: "string", description: "The thesis as ONE plain-English sentence of 35 words or fewer that a non-expert understands at a glance: start with the one word Long or Short and the ticker (one side only: never 'Long nothing; Short X'), then what happened, why the stock should keep moving, and by when (e.g. 'Long PANW: the 26% drop already prices in the fears, so a clean earnings report around Nov 19 should spark a rebound against the market within 30 days'; 'Short PLXS: the stock fell 10% after a senior executive left without explanation, and falls on unexplained departures tend to continue for weeks, so it should lag the market over the next 28 days'). Say the cause in everyday words rather than naming a mechanism ('news drift', 'unwind', 'read-through', 'premium leaking out'). Only the card's own facts; acronyms spelled out." },
@@ -108,6 +123,17 @@ export const CARD_JSON_SCHEMA = {
     },
     confidence: { type: "number", description: "0-100: probability the primary ticker, in the stated direction, beats SPY from the next open to the exit" },
     expression: { type: "string", description: "How to trade it given the expected path and timing, one or two sentences: shares, or an options structure with the time to expiry the move needs; not a recommendation" },
+    size_basis: {
+      type: "object", additionalProperties: false, required: ["depends_on", "why", "line_figure", "line_figure_source", "line_figure_as_of"],
+      description: "What the trade depends on, for the size gate",
+      properties: {
+        depends_on: { type: "string", enum: ["whole_company", "line"], description: "whole_company: the catalyst and the invalidation you wrote are company-wide results (total sales, earnings, guidance, the whole stock recovering from a sell-off). line: the trade pays only if this product or line itself grows" },
+        why: { type: "string", description: "One sentence: which results decide the trade" },
+        line_figure: { type: ["string", "null"], description: "For depends_on = line only: one measured figure for the line itself, with its number (what the company disclosed for it, or its measured growth). null when there is none or for whole_company" },
+        line_figure_source: { type: ["string", "null"], description: "Where that figure is from: one of the measurements given, or a company filing, release or call you can name. null with no figure" },
+        line_figure_as_of: { type: ["string", "null"], description: "YYYY-MM-DD of that figure. null with no figure" },
+      },
+    },
     unknowns: { type: "array", items: { type: "string" } },
   },
 } as const;
@@ -152,7 +178,8 @@ export class NoEvidenceError extends Error {}
 /**
  * Apply the gates, in order:
  *  1. evidence: every item needs a source and a date; items without are dropped; none left = no card;
- *  2. materiality: the primary ticker's line under 10% of revenue, or no estimate at all, is logged but not promoted;
+ *  2. materiality: the primary ticker's line under 10% of revenue, or no estimate at all, is logged but not promoted,
+ *     unless the trade depends on company-wide results, or the card gives a measured figure for the line (sizeVerdict);
  *  3. lateness: measured 30-day move above 30% or more than 20 stories in 30 days = already obvious = "late".
  * The card's lateness block is replaced with the measured numbers where they exist.
  */
@@ -169,6 +196,44 @@ export function isPennyShort(c: { direction: string; gateNotes: string[] }, pric
   if (c.direction !== "short") return false;
   if (c.gateNotes.some((n) => n.startsWith(PENNY_SHORT_NOTE) || /is under \$5\b/.test(n))) return true;
   return price !== undefined && price !== null && price < SCOUT.minShortPrice;
+}
+
+export type SizeTag = "whole_company" | "small_today";
+export interface SizeVerdict { pass: boolean; note: string | null; tag: SizeTag | null }
+const SIZE_NOTE: Record<SizeTag, string> = { whole_company: "size: whole-company trade", small_today: "size: small today" };
+
+/**
+ * Pure: the size gate. A card passes when its line is at least 10% of the primary ticker's revenue. Under that, it
+ * passes in two cases, each with its own note so the Scoreboard can score the group apart:
+ *  - the trade depends on company-wide results (the theme is the reason to look, total sales or earnings decide it);
+ *  - the line is small today but the card gives a measured figure for the line itself, with a source and a date.
+ */
+export function sizeVerdict(card: Pick<Card, "tickers" | "size_basis">): SizeVerdict {
+  const primary = card.tickers[0], share = primary.revenue_share_pct, basis = card.size_basis;
+  if (share !== null && share >= SCOUT.minRevenueSharePct) return { pass: true, note: null, tag: null };
+  const line = share === null ? "has no revenue-share estimate" : `is about ${share}% of ${primary.symbol} revenue`;
+  if (basis?.depends_on === "whole_company") return { pass: true, tag: "whole_company", note: `${SIZE_NOTE.whole_company}: ${basis.why.trim().replace(/[.\s]+$/, "") || "company-wide results decide it"}; the theme itself ${line} (gate: ${SCOUT.minRevenueSharePct}%)` };
+  if (share === null) return { pass: false, tag: null, note: `materiality: no revenue-share estimate for ${primary.symbol}` };
+  const fig = basis?.line_figure?.trim() ?? "", src = basis?.line_figure_source?.trim() ?? "", asOf = basis?.line_figure_as_of?.trim() ?? "";
+  if (basis?.depends_on === "line" && /\d/.test(fig) && src && /^\d{4}-\d{2}-\d{2}$/.test(asOf) && !Number.isNaN(Date.parse(asOf))) {
+    return { pass: true, tag: "small_today", note: `${SIZE_NOTE.small_today}: the line ${line} (gate: ${SCOUT.minRevenueSharePct}%), promoted on a figure for the line itself: ${fig} (${src}, ${asOf}; the researcher's citation)` };
+  }
+  return { pass: false, tag: null, note: `materiality: line is ${share}% of ${primary.symbol} revenue (gate: ${SCOUT.minRevenueSharePct}%)` };
+}
+
+/** Pure: which size exception a stored card passed on, from its gate notes (null: none, or a card from before the exceptions). */
+export function sizeTagOf(gateNotes: string[]): SizeTag | null {
+  return gateNotes.some((n) => n.startsWith(SIZE_NOTE.whole_company)) ? "whole_company" : gateNotes.some((n) => n.startsWith(SIZE_NOTE.small_today)) ? "small_today" : null;
+}
+
+/** Pure: the size group a card is scored in on the Scoreboard. */
+export const SIZE_GROUPS = ["10% of revenue or more", "whole-company trade on a small theme", "small today, with a figure for the line", "held back for size"] as const;
+export function sizeGroup(c: { gateNotes: string[]; card: Pick<Card, "tickers"> }): (typeof SIZE_GROUPS)[number] | null {
+  const tag = sizeTagOf(c.gateNotes);
+  if (tag) return tag === "whole_company" ? SIZE_GROUPS[1] : SIZE_GROUPS[2];
+  if (c.gateNotes.some((n) => n.startsWith("materiality: "))) return SIZE_GROUPS[3];
+  const share = c.card.tickers[0]?.revenue_share_pct ?? null;
+  return share !== null && share >= SCOUT.minRevenueSharePct ? SIZE_GROUPS[0] : null;
 }
 
 export function applyGates(input: Card, measured: MeasuredLateness, opts: GateOptions = {}): GateResult {
@@ -206,14 +271,11 @@ export function applyGates(input: Card, measured: MeasuredLateness, opts: GateOp
   if (measured.hasPrices === false) {
     status = "not_promoted";
     notes.push(`no US price data for ${primary.symbol} (foreign or unlisted symbol?): not tracked`);
-  } else if (primary.revenue_share_pct === null) {
-    status = "not_promoted";
-    notes.push(`materiality: no revenue-share estimate for ${primary.symbol}`);
-  } else if (primary.revenue_share_pct < SCOUT.minRevenueSharePct) {
-    status = "not_promoted";
-    notes.push(`materiality: line is ${primary.revenue_share_pct}% of ${primary.symbol} revenue (gate: ${SCOUT.minRevenueSharePct}%)`);
-  } else if (lateness.already_obvious) {
-    status = "late";
+  } else {
+    const size = sizeVerdict({ tickers: [primary, ...input.tickers.slice(1)], size_basis: input.size_basis });
+    if (size.note) notes.push(size.note);
+    if (!size.pass) status = "not_promoted";
+    else if (lateness.already_obvious) status = "late";
   }
   // Shorts that are impractical or dangerous to hold: cheap stocks and fresh run-ups (borrow cost, squeezes).
   // No shorts under $5, whatever else the card failed (the note is what hides it from the Ideas list).

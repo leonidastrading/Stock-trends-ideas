@@ -4,6 +4,7 @@ import CardSignals from "@/components/CardSignals";
 import CardNews from "@/components/CardNews";
 import CardFundamentals from "@/components/CardFundamentals";
 import { gateReason } from "@/lib/scout/gate-reason";
+import { sizeTagOf } from "@/lib/scout/card";
 import CardInvestigate from "@/components/CardInvestigate";
 import CompanyLogo from "@/components/CompanyLogo";
 import RecheckLine from "@/components/RecheckLine";
@@ -111,6 +112,8 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
           <a className="tag card-number" href={`/cards/${c.id}`} title="Link to this card">#{c.id}</a>
           <span className={`tag ${c.status}`}>{c.status.replace("_", " ")}</span>
           {c.status === "not_promoted" && track && <span className="tag late" title="Not promoted when written because the stock did not trade yet; the paper track started at the next open after it listed (scored with the late cards)">tracked from listing</span>}
+          {sizeTagOf(c.gateNotes) === "small_today" && <span className="tag warn" title="The line this card is about is under 10% of the company's revenue today. It was promoted on a measured figure for the line itself (see the gate notes) and is scored as its own group on the Scoreboard." style={{ cursor: "help" }}>small today</span>}
+          {sizeTagOf(c.gateNotes) === "whole_company" && <span className="tag" title="The theme is under 10% of the company's revenue today, but the trade is decided by company-wide results (see the gate notes). Scored as its own group on the Scoreboard." style={{ cursor: "help" }}>whole-company trade</span>}
           <span className="tag" title={KIND_ABOUT[c.kind as Kind] ?? "The kind of idea"} style={{ cursor: "help" }}>{KIND_LABEL[c.kind as Kind] ?? c.kind}</span>
           <a className="tag source-tag" href={fromUrl} target={/^https?:/.test(fromUrl) ? "_blank" : undefined} rel="noreferrer" title={`${from.note} · ${c.origin === "human" ? "human-originated" : "found by the scout"} · click to open`}>{from.tag} ↗</a>
           <span className="small muted" title={`card #${c.id} · ${c.model} · version ${c.versionId}`}>{fmtEtAgo(c.createdAt)}</span>

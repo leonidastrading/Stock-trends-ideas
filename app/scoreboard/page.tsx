@@ -1,9 +1,10 @@
 import SetupNotice from "@/components/SetupNotice";
-import { KIND_LABEL, type Kind } from "@/config/scout";
+import { KIND_LABEL, SCOUT, type Kind } from "@/config/scout";
 import { hasDatabase } from "@/lib/db";
 import { loadIdeas } from "@/lib/scout/ideas-load";
 import { boardLines, byKind, byVerdict, calibration, PLAYER_LABEL, PLAYERS, playerOf, score, splitBy, STAKE, storiesOf, STORY_DAYS, STUDY_ONLY, toRound, verdictGroup, type Line, type Round, type SplitRow } from "@/lib/scout/scoreboard";
 import { ruleRows } from "@/lib/scout/rule-books";
+import { SIZE_GROUPS, sizeGroup } from "@/lib/scout/card";
 import type { RuleLine } from "@/lib/scout/rule-lines";
 import { crowdingFor, STAGE_LABEL, timing } from "@/lib/scout/crowding";
 import * as store from "@/lib/scout/store";
@@ -120,6 +121,8 @@ export default async function ScoreboardPage({ searchParams }: { searchParams: P
   // Shorts by whether the shares could be borrowed when entered (read from the day this was first recorded).
   const borrowOf = new Map(tracks.map((t) => [t.cardId, t.borrow ?? null]));
   const byBorrow = splitBy(rounds.filter((r) => r.direction === "short"), (r) => borrowOf.get(r.cardId) ?? null, ["easy", "hard", "not shortable"]);
+  // The size gate and its two exceptions (from November 27, 2026), each scored as its own group.
+  const bySize = splitBy(rounds, (r) => { const c = cardById.get(r.cardId); return c ? sizeGroup(c) : null; }, [...SIZE_GROUPS]);
   const measured = rounds.filter((r) => entryOf(r)).length;
   const active = PLAYERS.filter((p) => rounds.some((r) => r.player === p));
   const recent = rounds.filter((r) => r.closed && r.points !== null).sort((a, b) => (b.exitDate ?? "").localeCompare(a.exitDate ?? "")).slice(0, 40);
@@ -234,6 +237,12 @@ export default async function ScoreboardPage({ searchParams }: { searchParams: P
         <h3 style={{ marginTop: "1rem" }}>Shorts by whether the shares could be borrowed when entered</h3>
         <p className="small secondary">A paper short ignores borrow. From November 26, 2026 each new short records the broker&apos;s reading on its entry day: on the easy-to-borrow list, shortable but hard to borrow (a fee, or no fill), or not shortable. Older shorts have no reading and are left out. If the money is in the hard-to-borrow rows, it is not money a real account could have made.</p>
         <SplitTable title="Borrow at entry" rows={byBorrow} />
+      </section>
+
+      <section className="card" id="size">
+        <h2>Does the size gate cost money? Results by how big the idea is for the company</h2>
+        <p className="small secondary">A card is promoted when the line it is about is at least {SCOUT.minRevenueSharePct}% of the company&apos;s revenue. From November 27, 2026 a smaller line is also promoted in two cases: the trade is decided by company-wide results (the theme is the reason to look), or the card gives a measured figure for the line itself (&quot;small today&quot;). Cards held back for size are still tracked on paper. If the two exception rows do no better than the held-back row, the exceptions are not earning their place.</p>
+        <SplitTable title="Size" rows={bySize} />
       </section>
 
       <section className="card">
