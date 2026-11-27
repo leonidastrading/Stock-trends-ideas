@@ -99,6 +99,13 @@ export async function primaryFilings(items: NewsItem[], deps: { data: MarketData
   const ua = deps.env.SEC_USER_AGENT?.trim();
   if (!ua) return out;
   const open = filingsToOpen(items, deps.now);
+  // Once an hour, what the reader is seeing, so a quiet morning can be told from a reader that is not working.
+  if (await store.tryLock("primary:heartbeat", 60).catch(() => false)) {
+    const live = items.filter((n) => n.source === "SEC 8-K");
+    const recent = live.filter((n) => Date.parse(n.ts) >= deps.now.getTime() - PRIMARY.freshMinutes * 60000);
+    const today = (await store.cacheGet<{ n: number }>(`primary:count:${toEt(deps.now).date}`).catch(() => null))?.data?.n ?? 0;
+    console.log(`primary filings: ${live.length} live 8-Ks in the news list, ${recent.length} from the last ${PRIMARY.freshMinutes / 60} hours, ${open.length} with an item that can be news by itself (${open.slice(0, 6).map((n) => `${n.symbols[0]} ${itemsOf(n).join("/")}`).join(", ") || "none"}); ${today} handed to the desk today`);
+  }
   if (!open.length) return out;
   const day = toEt(deps.now).date, countKey = `primary:count:${day}`;
   let used = (await store.cacheGet<{ n: number }>(countKey).catch(() => null))?.data?.n ?? 0;
