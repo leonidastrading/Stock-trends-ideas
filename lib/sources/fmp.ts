@@ -151,7 +151,14 @@ export async function secFacts(symbol: string, env: NodeJS.ProcessEnv, fetchImpl
   const headers = { "user-agent": ua, "accept-encoding": "gzip, deflate" };
   const cik = await cikFor(symbol, headers, fetchImpl).catch(() => null);
   if (!cik) return "no-company";
-  const res = await fetchImpl(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik.padStart(10, "0")}.json`, { headers }).catch(() => null);
+  return secFactsByCik(cik, env, fetchImpl);
+}
+
+/** A company's XBRL facts by its SEC number (no ticker lookup). "no-company": the SEC has no facts for it. Null: no answer. */
+export async function secFactsByCik(cik: string, env: NodeJS.ProcessEnv, fetchImpl: typeof fetch): Promise<Record<string, Record<string, { units?: Record<string, Fact[]> }>> | "no-company" | null> {
+  const ua = env.SEC_USER_AGENT?.trim();
+  if (!ua) return null;
+  const res = await fetchImpl(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik.padStart(10, "0")}.json`, { headers: { "user-agent": ua, "accept-encoding": "gzip, deflate" } }).catch(() => null);
   if (!res || res.status === 404) return "no-company";
   if (!res.ok) return null;
   return ((await res.json().catch(() => null)) as { facts?: Record<string, Record<string, { units?: Record<string, Fact[]> }>> } | null)?.facts ?? null;

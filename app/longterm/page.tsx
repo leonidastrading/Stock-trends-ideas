@@ -3,13 +3,15 @@ import SetupNotice from "@/components/SetupNotice";
 import Ticker from "@/components/Ticker";
 import { marketDataFromEnv } from "@/lib/alpaca";
 import { hasDatabase } from "@/lib/db";
-import { CHECK_ABOUT, CHECK_LABEL, LONG_TERM, LONG_TERM_SYMBOLS, longTermRows, priceOf, type Check, type CheckId, type LongTermRow } from "@/lib/scout/long-term";
+import { CHECK_ABOUT, CHECK_LABEL, LONG_TERM, longTermRows, longTermUniverse, priceOf, type Check, type CheckId, type LongTermRow } from "@/lib/scout/long-term";
 import * as store from "@/lib/scout/store";
 import { fmtEtAgo } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+/** Rows shown in the longer lists (the fair-price list is shown whole). */
+const SHOW = 150;
 const ORDER: CheckId[] = ["returns", "profitable", "growth", "debt", "cash", "margin", "dilution"];
 const num = (x: number | null | undefined, suffix = "") => (x === null || x === undefined ? "—" : `${x}${suffix}`);
 const sectorName = (s: string | null) => (s ?? "").replace(/_/g, " ");
@@ -48,7 +50,7 @@ function Table({ rows, cardsOn, showMiss = false }: { rows: Priced[]; cardsOn: (
         const miss = r.checks.filter((c) => c.pass === false);
         return (
           <tr key={r.symbol}>
-            <td><Ticker symbol={r.symbol} /> <div className="small muted">{r.name ?? ""}{r.name ? " · " : ""}{sectorName(r.sector)} · {m.years} years to {m.lastYear.slice(0, 4)}</div></td>
+            <td><Ticker symbol={r.symbol} /> <div className="small muted">{[r.name, sectorName(r.sector) || null, r.rank ? `#${r.rank} by size` : null, `${m.years} years to ${m.lastYear.slice(0, 4)}`].filter(Boolean).join(" · ")}</div></td>
             <td><Ticks checks={r.checks} /><div className="small muted">{r.passed} of {r.asked}</div></td>
             {showMiss && <td className="small">{miss.map((c) => <div key={c.id}><b>{CHECK_LABEL[c.id]}:</b> {c.detail}</div>)}</td>}
             <td className="num">{num(m.avgRoe, "%")}<div className="small muted">{m.minRoe === null ? "" : `low ${m.minRoe}%`}</div></td>
@@ -69,7 +71,8 @@ function Table({ rows, cardsOn, showMiss = false }: { rows: Priced[]; cardsOn: (
 /** Long term: companies that pass a Buffett-style check of their own annual reports, with today's price against their profit. */
 export default async function LongTermPage() {
   if (!hasDatabase()) return <SetupNotice />;
-  const [all, briefs] = await Promise.all([longTermRows().catch(() => [] as LongTermRow[]), store.cardBriefsSince(180).catch(() => [] as store.CardBrief[])]);
+  const [all, briefs, universe] = await Promise.all([longTermRows().catch(() => [] as LongTermRow[]), store.cardBriefsSince(180).catch(() => [] as store.CardBrief[]), longTermUniverse().catch(() => [])]);
+  const size = universe.length || LONG_TERM.size;
   const cardsOn = (s: string) => briefs.filter((b) => b.primaryTicker === s || b.tickers.includes(s));
   const measured = all.filter((r) => r.metrics);
   const short = measured.filter((r) => r.verdict !== "no");
@@ -87,28 +90,30 @@ export default async function LongTermPage() {
     <>
       <h1>Long term</h1>
       <section className="card notice small">
-        Companies that pass a Warren Buffett style check of their own annual reports. As far as numbers can show it, he looks for a business that earns a high return on its owners&apos; money year after year, makes money every year, grows, carries little debt, turns its profit into cash, keeps a good share of each sales dollar and does not water down its owners, and then for a sensible price: &quot;a wonderful company at a fair price&quot;. Each company in the scout&apos;s {LONG_TERM_SYMBOLS.length}-stock universe is checked by code against up to {LONG_TERM.maxYears} fiscal years of its annual reports (the SEC&apos;s own data). No AI, and nothing is traded.
+        Companies that pass a Warren Buffett style check of their own annual reports. As far as numbers can show it, he looks for a business that earns a high return on its owners&apos; money year after year, makes money every year, grows, carries little debt, turns its profit into cash, keeps a good share of each sales dollar and does not water down its owners, and then for a sensible price: &quot;a wonderful company at a fair price&quot;. The {size.toLocaleString("en-US")} largest companies on the SEC&apos;s list of listed companies are each checked by code against up to {LONG_TERM.maxYears} fiscal years of their annual reports (the SEC&apos;s own data). No AI, and nothing is traded.
         <div style={{ marginTop: 6 }}><b>What this cannot judge, and he weighs most:</b> whether the advantage will last, whether the managers are able and honest, and whether you understand the business. Treat a pass as a short list to read about, not as a buy. The price column uses last year&apos;s profit, which says nothing about next year&apos;s.</div>
-        <div className="muted" style={{ marginTop: 6 }}>{all.length} of {LONG_TERM_SYMBOLS.length} companies screened{newest ? `, the latest ${fmtEtAgo(newest)}` : ""}{all.length < LONG_TERM_SYMBOLS.length ? `. The first pass through the whole list takes about a day (${LONG_TERM.perRun} companies every 20 minutes); the lists below fill in as it goes.` : `; each is screened again every ${LONG_TERM.refreshDays} days.`} {failed} failed two or more checks and {noHistory} have too little history on file; neither is listed.</div>
+        <div className="muted" style={{ marginTop: 6 }}>{all.length.toLocaleString("en-US")} of {size.toLocaleString("en-US")} companies screened{newest ? `, the latest ${fmtEtAgo(newest)}` : ""}{all.length < size ? `. The first pass through the whole list takes about a day (${LONG_TERM.perRun} companies every 10 minutes, largest first); the lists below fill in as it goes.` : `; each is screened again every ${LONG_TERM.refreshDays} days.`} {failed.toLocaleString("en-US")} failed two or more checks and {noHistory.toLocaleString("en-US")} have too little history on file (or are funds); neither is listed.</div>
       </section>
 
       <section className="card">
         <h2>Passes every check, at a fair price <span className="small muted">({fair.length})</span></h2>
         <p className="small secondary">Every check that could be made is passed, and the stock costs {LONG_TERM.fairPe} times last year&apos;s profit or less. Cheapest first.</p>
-        {fair.length ? <Table rows={fair} cardsOn={cardsOn} /> : <p className="small muted">{all.length ? "None right now." : "Nothing screened yet: the first companies appear within 20 minutes of the scheduler's next daytime pass."}</p>}
+        {fair.length ? <Table rows={fair} cardsOn={cardsOn} /> : <p className="small muted">{all.length ? "None right now." : "Nothing screened yet: the first companies appear within 10 minutes of the scheduler's next daytime pass."}</p>}
       </section>
 
       <section className="card">
         <h2>Passes every check, but the price is full <span className="small muted">({dear.length})</span></h2>
         <p className="small secondary">The same quality, costing more than {LONG_TERM.fairPe} times last year&apos;s profit (over {LONG_TERM.richPe} is marked expensive), or with no usable price figure. A list to watch for a fall, not to chase.</p>
-        {dear.length ? <Table rows={dear} cardsOn={cardsOn} /> : <p className="small muted">None right now.</p>}
+        {dear.length ? <Table rows={dear.slice(0, SHOW)} cardsOn={cardsOn} /> : <p className="small muted">None right now.</p>}
+        {dear.length > SHOW && <p className="small muted">The {SHOW} cheapest of {dear.length} are shown.</p>}
       </section>
 
       <section className="card">
         <details>
           <summary><b>One check short</b> <span className="small muted">({oneShort.length})</span></summary>
           <p className="small secondary">Passes all but one of the checks that could be made. The missed check is named: some misses matter less than others (a dip in one year&apos;s return is not the same as heavy debt).</p>
-          {oneShort.length ? <Table rows={oneShort} cardsOn={cardsOn} showMiss /> : <p className="small muted">None right now.</p>}
+          {oneShort.length ? <Table rows={oneShort.slice(0, SHOW)} cardsOn={cardsOn} showMiss /> : <p className="small muted">None right now.</p>}
+          {oneShort.length > SHOW && <p className="small muted">The {SHOW} cheapest of {oneShort.length} are shown.</p>}
         </details>
       </section>
 

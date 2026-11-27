@@ -4,8 +4,9 @@
  * What he has said he looks for, as far as numbers can show it: a business that earns a high return on its owners'
  * money year after year, makes money every year, grows, carries little debt, turns its profits into cash, keeps a
  * good share of each sales dollar, and does not water down its owners. Then a sensible price ("a wonderful company
- * at a fair price"). Each company in the scout's 390-stock universe is checked by code against up to ten fiscal
- * years of its annual reports (the SEC's XBRL data). No AI, nothing traded.
+ * at a fair price"). The 3,000 largest companies on the SEC's own list of listed companies (it is ordered by size)
+ * are each checked by code against up to ten fiscal years of their annual reports (the SEC's XBRL data). No AI,
+ * nothing traded.
  *
  * What a screen cannot judge, and he weighs most: whether the advantage will last (the moat), whether management is
  * able and honest, and whether you understand the business. A pass here is a short list to read about, not a buy.
@@ -25,9 +26,11 @@ export const LONG_TERM = {
   growth: 5, debtYears: 4, cashShare: 0.7, cashYears: 0.9, margin: 10, dilution: 5,
   /** A price-to-earnings ratio at or under this is "fair" here; over `rich` is expensive. */
   fairPe: 25, richPe: 35,
-  perRun: 10, refreshDays: 30,
+  /** How many companies are screened: the largest on the SEC's list, one share class each. */
+  size: 3000,
+  perRun: 45, refreshDays: 30, runSeconds: 200,
   /** Raise when the checks change: every company is then screened again, not left for a month on the old reading. */
-  rev: 2,
+  rev: 3,
   /** A return on equity above this means equity has been bought back to almost nothing: the figure says little. */
   roeMeaningless: 100,
 };
@@ -204,16 +207,61 @@ export function priceOf(m: Pick<Metrics, "netIncome" | "freeCash" | "shares" | "
   return { pe: r1(pe), earningsYieldPct: r1(100 / pe), freeCashYieldPct: m.freeCash !== null ? r1((m.freeCash / cap) * 100) : null, tag: pe <= LONG_TERM.fairPe ? "fair" : pe <= LONG_TERM.richPe ? "full" : "expensive" };
 }
 
-export interface LongTermRow { symbol: string; sector: Sector | null; name: string | null; computedAt: string; metrics: Metrics | null; checks: Check[]; passed: number; asked: number; verdict: Verdict; error: string | null }
+export interface LongTermRow { symbol: string; sector: Sector | null; name: string | null; /** Place on the SEC's size-ordered list (1 is the largest). */ rank: number | null; computedAt: string; metrics: Metrics | null; checks: Check[]; passed: number; asked: number; verdict: Verdict; error: string | null }
 
 const SECTOR_OF = new Map<string, Sector>(Object.entries(UNIVERSE).flatMap(([s, syms]) => syms.map((x) => [x, s as Sector] as [string, Sector])));
-/** The stocks screened: the scout's own universe, without the sector funds. */
-export const LONG_TERM_SYMBOLS = [...SECTOR_OF.keys()].filter((s) => !(Object.values(SECTORS) as string[]).includes(s));
+const FUNDS = new Set<string>(Object.values(SECTORS));
+
+const BANK_OR_INSURER = ["InterestAndDividendIncomeOperating", "InterestExpenseDeposits", "ProvisionForLoanAndLeaseLosses", "ProvisionForLoanLeaseAndOtherLosses", "PremiumsEarnedNet", "PolicyholderBenefitsAndClaimsIncurredNet", "Deposits", "LoansAndLeasesReceivableNetReportedAmount"];
+const PROPERTY_TRUST = ["RealEstateInvestmentPropertyNet", "RealEstateInvestmentPropertyAtCost", "RealEstateInvestmentPropertyAccumulatedDepreciation"];
+/**
+ * Pure: is this a bank, an insurer or a property trust, from what it reports? (A company outside the scout's own
+ * sector list has no sector on file; these are the kinds whose debt, cash flow and margin mean something else.)
+ */
+export function kindFromFacts(facts: Facts): Sector | null {
+  const has = (names: string[]) => names.filter((n) => Object.keys(facts["us-gaap"]?.[n]?.units ?? {}).length > 0).length;
+  if (has(BANK_OR_INSURER) >= 2) return "financials";
+  if (has(PROPERTY_TRUST) >= 1) return "real_estate";
+  return null;
+}
+
+export interface Listed { symbol: string; cik: string; name: string; rank: number }
+
+/**
+ * Pure: the companies to screen from the SEC's list (largest first): one entry per company (a second share class
+ * such as GOOG beside GOOGL is the same company), plain symbols only, and no sector funds.
+ */
+export function largestCompanies(list: Array<{ cik: string; ticker: string; title: string }>, size = LONG_TERM.size): Listed[] {
+  const seen = new Set<string>();
+  const out: Listed[] = [];
+  for (const x of list) {
+    if (out.length >= size) break;
+    if (seen.has(x.cik) || !/^[A-Z]{1,5}(\.[A-Z])?$/.test(x.ticker) || FUNDS.has(x.ticker)) continue;
+    seen.add(x.cik);
+    out.push({ symbol: x.ticker, cik: x.cik, name: x.title, rank: out.length + 1 });
+  }
+  return out;
+}
+
+/** The list being screened, kept for a week (the SEC's file is about a megabyte). */
+export async function longTermUniverse(env: NodeJS.ProcessEnv = process.env, fetchImpl?: typeof fetch): Promise<Listed[]> {
+  const hit = await store.cacheGet<Listed[]>("longterm:universe").catch(() => null);
+  if (hit?.data?.length && Date.now() - Date.parse(hit.updatedAt) < 7 * 86400_000) return hit.data;
+  const ua = env.SEC_USER_AGENT?.trim();
+  if (!ua) return hit?.data ?? [];
+  const { secTickerList } = await import("../sources/edgar");
+  const list = largestCompanies(await secTickerList(ua, fetchImpl));
+  if (list.length) await store.cachePut("longterm:universe", list).catch(() => undefined);
+  return list.length ? list : hit?.data ?? [];
+}
+
+/** A listed name as people write it ("APPLE INC" → "Apple Inc"). */
+const nice = (t: string) => (t === t.toUpperCase() ? t.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase()) : t);
 
 const toRow = (r: Record<string, unknown>): LongTermRow => {
   const checks = (r.checks as Check[]) ?? [];
   const v = verdictOf(checks);
-  return { symbol: String(r.symbol), sector: (r.sector as Sector) ?? null, name: (r.name as string) ?? null, computedAt: new Date(r.computed_at as string).toISOString(), metrics: (r.metrics as Metrics) ?? null, checks, passed: v.passed, asked: v.asked, verdict: r.metrics ? v.verdict : "no", error: (r.error as string) ?? null };
+  return { symbol: String(r.symbol), sector: (r.sector as Sector) ?? null, name: (r.name as string) ?? null, rank: r.rank === null || r.rank === undefined ? null : Number(r.rank), computedAt: new Date(r.computed_at as string).toISOString(), metrics: (r.metrics as Metrics) ?? null, checks, passed: v.passed, asked: v.asked, verdict: r.metrics ? v.verdict : "no", error: (r.error as string) ?? null };
 };
 
 /** The companies screened under the current checks (rows from an older set of checks are not shown while they wait to be redone). */
@@ -222,49 +270,55 @@ export async function longTermRows(): Promise<LongTermRow[]> {
 }
 
 /**
- * One pass (its own job): a few companies not screened in the last 30 days, oldest first. The whole universe takes
- * about a day of passes the first time, then each company is screened again monthly (a new annual report changes it).
+ * One pass (its own job): the largest companies not screened in the last 30 days, biggest first, until the pass's
+ * time is up. The whole list takes about a day of passes the first time; then each company is screened again
+ * monthly (a new annual report changes it).
  */
 export async function runLongTerm(env: NodeJS.ProcessEnv = process.env, fetchImpl: typeof fetch = fetch, max = LONG_TERM.perRun): Promise<string> {
   if (!env.SEC_USER_AGENT?.trim()) return "long term: SEC_USER_AGENT is not set";
+  const universe = await longTermUniverse(env, fetchImpl === fetch ? undefined : fetchImpl);
+  if (!universe.length) return "long term: the SEC's company list could not be read";
   // A row from an older set of checks counts as never screened.
   const done = new Map((await q(`SELECT symbol, computed_at, rev FROM long_term`)).map((r) => [String(r.symbol), Number(r.rev ?? 0) === LONG_TERM.rev ? Date.parse(r.computed_at as string) : 0]));
   const stale = Date.now() - LONG_TERM.refreshDays * 86400_000;
-  const due = LONG_TERM_SYMBOLS.filter((s) => (done.get(s) ?? 0) < stale).sort((a, b) => (done.get(a) ?? 0) - (done.get(b) ?? 0)).slice(0, max);
-  if (!due.length) return `long term: all ${LONG_TERM_SYMBOLS.length} companies screened in the last ${LONG_TERM.refreshDays} days`;
-  const names = await store.symbolInfo(due).catch(() => new Map<string, store.SymbolInfo>());
-  const { secFacts } = await import("../sources/fmp");
-  let ok = 0;
+  const due = universe.filter((c) => (done.get(c.symbol) ?? 0) < stale).sort((a, b) => (done.get(a.symbol) ?? 0) - (done.get(b.symbol) ?? 0) || a.rank - b.rank).slice(0, max);
+  if (!due.length) return `long term: all ${universe.length} companies screened in the last ${LONG_TERM.refreshDays} days`;
+  const { secFactsByCik } = await import("../sources/fmp");
+  const started = Date.now();
+  let ok = 0, read = 0;
   const passed: string[] = [], seen: string[] = [];
-  for (const s of due) {
-    const sector = SECTOR_OF.get(s) ?? null;
+  for (const c of due) {
+    if (Date.now() - started > LONG_TERM.runSeconds * 1000) break;
+    let sector = SECTOR_OF.get(c.symbol) ?? null;
     let metrics: Metrics | null = null, checks: Check[] = [], error: string | null = null;
     try {
-      const facts = await secFacts(s, env, fetchImpl);
-      if (facts === "no-company") error = "no annual reports found at the SEC under this symbol";
+      const facts = await secFactsByCik(c.cik, env, fetchImpl);
+      if (facts === "no-company") error = "no annual reports found at the SEC for this company";
       else if (!facts) throw new Error("the SEC did not answer");
       else {
+        sector ??= kindFromFacts(facts);
         const r = longTermChecks(fiscalYears(facts), sector, reportingCurrency(facts));
         if (!r) error = `fewer than ${LONG_TERM.minYears} fiscal years of net income on file`;
         else {
           metrics = r.metrics; checks = r.checks; ok++;
           const v = verdictOf(checks);
-          if (v.verdict === "passes") passed.push(s);
-          // One compact reading per company in the log, so the numbers can be checked by eye.
-          seen.push(`${s} ${v.passed}/${v.asked} (return ${metrics.avgRoe ?? "?"}%, growth ${metrics.growthPct ?? "?"}%, debt ${metrics.debtYears ?? "?"}y, margin ${metrics.avgMargin ?? "?"}%, shares ${metrics.sharesPct5y ?? "?"}%, ${metrics.years}y)`);
+          if (v.verdict === "passes") passed.push(c.symbol);
+          // A compact reading for the first few of a pass, so the numbers can be checked by eye in the log.
+          if (seen.length < 12) seen.push(`${c.symbol} #${c.rank} ${v.passed}/${v.asked} (return ${metrics.avgRoe ?? "?"}%, growth ${metrics.growthPct ?? "?"}%, debt ${metrics.debtYears ?? "?"}y, margin ${metrics.avgMargin ?? "?"}%, shares ${metrics.sharesPct5y ?? "?"}%, ${metrics.years}y)`);
         }
       }
     } catch (e) {
       // Not recorded: the company is tried again on a later pass.
-      console.warn(`long term ${s}: ${e instanceof Error ? e.message.slice(0, 120) : e}`);
+      console.warn(`long term ${c.symbol}: ${e instanceof Error ? e.message.slice(0, 120) : e}`);
       continue;
     }
+    read++;
     await q(
-      `INSERT INTO long_term (symbol, sector, name, computed_at, metrics, checks, error, rev) VALUES ($1, $2, $3, now(), $4, $5, $6, $7)
-       ON CONFLICT (symbol) DO UPDATE SET sector = EXCLUDED.sector, name = COALESCE(EXCLUDED.name, long_term.name), computed_at = now(), metrics = EXCLUDED.metrics, checks = EXCLUDED.checks, error = EXCLUDED.error, rev = EXCLUDED.rev`,
-      [s, sector, names.get(s)?.name ?? null, metrics ? JSON.stringify(metrics) : null, JSON.stringify(checks), error, LONG_TERM.rev],
+      `INSERT INTO long_term (symbol, sector, name, computed_at, metrics, checks, error, rev, cik, rank) VALUES ($1, $2, $3, now(), $4, $5, $6, $7, $8, $9)
+       ON CONFLICT (symbol) DO UPDATE SET sector = EXCLUDED.sector, name = EXCLUDED.name, computed_at = now(), metrics = EXCLUDED.metrics, checks = EXCLUDED.checks, error = EXCLUDED.error, rev = EXCLUDED.rev, cik = EXCLUDED.cik, rank = EXCLUDED.rank`,
+      [c.symbol, sector, nice(c.name), metrics ? JSON.stringify(metrics) : null, JSON.stringify(checks), error, LONG_TERM.rev, c.cik, c.rank],
     );
   }
   const total = Number((await q(`SELECT count(*) AS n FROM long_term WHERE rev = $1`, [LONG_TERM.rev]))[0]?.n ?? 0);
-  return `long term: ${due.length} companies read, ${ok} with enough history${passed.length ? `, passing every check: ${passed.join(", ")}` : ""} · ${seen.join("; ")} · ${total} of ${LONG_TERM_SYMBOLS.length} screened so far`;
+  return `long term: ${read} companies read, ${ok} with enough history${passed.length ? `, passing every check: ${passed.join(", ")}` : ""} · ${seen.join("; ")} · ${total} of ${universe.length} screened so far`;
 }

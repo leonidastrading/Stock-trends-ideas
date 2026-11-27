@@ -117,3 +117,23 @@ describe("what the first live run showed", () => {
     expect(r.metrics.avgRoe).toBeNull();
   });
 });
+
+import { kindFromFacts, largestCompanies } from "@/lib/scout/long-term";
+
+describe("the companies screened", () => {
+  it("are the largest on the SEC's list, one share class each, without funds or odd symbols", () => {
+    const list = [
+      { cik: "1045810", ticker: "NVDA", title: "NVIDIA CORP" }, { cik: "1652044", ticker: "GOOGL", title: "Alphabet Inc." }, { cik: "1652044", ticker: "GOOG", title: "Alphabet Inc." },
+      { cik: "1067983", ticker: "BRK.B", title: "BERKSHIRE HATHAWAY INC" }, { cik: "884394", ticker: "XLK", title: "SELECT SECTOR SPDR TRUST" }, { cik: "999", ticker: "ABCDEF", title: "Odd Symbol Co" }, { cik: "320193", ticker: "AAPL", title: "Apple Inc." },
+    ];
+    expect(largestCompanies(list, 3).map((c) => [c.symbol, c.rank])).toEqual([["NVDA", 1], ["GOOGL", 2], ["BRK.B", 3]]);
+    expect(largestCompanies(list).map((c) => c.symbol)).toEqual(["NVDA", "GOOGL", "BRK.B", "AAPL"]);
+  });
+  it("tells a bank or insurer and a property trust from what they report", () => {
+    const f = (names: string[]) => ({ "us-gaap": Object.fromEntries(names.map((n) => [n, { units: { USD: [{ end: "2025-12-31", val: 1 }] } }])) });
+    expect(kindFromFacts(f(["InterestAndDividendIncomeOperating", "Deposits", "NetIncomeLoss"]))).toBe("financials");
+    expect(kindFromFacts(f(["PremiumsEarnedNet", "PolicyholderBenefitsAndClaimsIncurredNet"]))).toBe("financials");
+    expect(kindFromFacts(f(["RealEstateInvestmentPropertyNet", "Revenues"]))).toBe("real_estate");
+    expect(kindFromFacts(f(["Revenues", "NetIncomeLoss", "Deposits"]))).toBeNull(); // one bank-like line is not a bank
+  });
+});
