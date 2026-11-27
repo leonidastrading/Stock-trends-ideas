@@ -35,6 +35,9 @@ import { thesisFor } from "@/lib/scout/thesis";
 // One read per page render, shared by every card on it.
 const recentBriefs = cache(() => store.cardBriefsSince(60).catch(() => [] as store.CardBrief[]));
 const favoriteIds = cache(() => store.favorites().then((f) => new Set(f.map((x) => x.cardId))).catch(() => new Set<number>()));
+/** Open calls and the industries on file, once per page, for the "opposite call on a peer" note. */
+const openCallsNow = cache(() => store.allTracks().then(async (t) => (await import("@/lib/scout/conflicts")).openCalls(t)).catch(() => []));
+const industriesNow = cache(() => import("@/lib/scout/peers").then(({ industries }) => industries()).catch(() => ({})));
 const allTheses = cache(() => import("@/lib/scout/thesis").then(({ cardTheses }) => cardTheses()).catch(() => new Map<number, string>()));
 
 const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) + ` (${dayAgo(d)})`;
@@ -95,6 +98,8 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
   const company = k.tickers.find((t) => t.symbol === c.primaryTicker)?.company ?? null;
   // Warn when the symbol trades as something other than the company's stock (a reused ticker).
   const wrong = !!info?.name && (info.tradable === false || !!notCommon(info.name) || (!!company && !namesMatch(company, info.name)));
+  // Open calls the other way on companies in the same industry (only while this card's own call is open).
+  const peerAgainst = hasDatabase() && track && !track.exitDate ? (await import("@/lib/scout/peers")).peerConflicts(c.primaryTicker, c.direction, (await openCallsNow()).filter((x) => x.cardId !== c.id), await industriesNow()) : [];
   const today = toEt(new Date()).date;
   const nextE = info?.nextEarnings && daysBetween(today, info.nextEarnings) >= -3 ? info.nextEarnings : null;
   const beforeExit = nextE && track && !track.exitDate && nextE <= track.deadlineDate;
@@ -148,6 +153,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
               ⚠ dangerous to short: {q.price < SCOUT.minShortPrice ? `under $${SCOUT.minShortPrice}` : `up ${q.changePct}% ${sessionLabel(q)}`}; defined-risk puts or no trade
             </span>
           ) : null}
+          {peerAgainst.length > 0 && <span className="tag warn" style={{ marginLeft: 8 }} title="Companies in the same industry mostly rise and fall together. Held at once, opposite calls on two of them largely cancel into 'this one beats that one'.">⚠ opposite call on a peer ({peerAgainst[0].label || "same industry"}): {peerAgainst.slice(0, 5).map((p) => <a key={p.cardId} href={`/cards/${p.cardId}`}>#{p.cardId} {p.direction} {p.symbol} </a>)}</span>}
           {opposing?.length ?<span className="tag warn" style={{ marginLeft: 8 }}>⚠ opposite call on {c.primaryTicker}: {opposing.map((id) => <a key={id} href={`/cards/${id}`}>#{id} </a>)}</span> : null}</div>
         <div className="small secondary">
           {nextE ? <>Next earnings <b>~{fmtDay(nextE)}</b> <span className="muted">({info!.nextBasis})</span></>

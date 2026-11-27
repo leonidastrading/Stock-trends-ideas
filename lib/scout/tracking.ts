@@ -104,6 +104,8 @@ export async function runPriceCheck(data: MarketData, now: Date): Promise<string
   const notes = await priceCheckNotes(data, tracks, toEt(now).date);
   // Whether each new short could have been borrowed, read on the day it was entered.
   const borrow = await import("./price-sanity").then(({ recordBorrow }) => recordBorrow(data, toEt(now).date)).catch((e) => `borrow: failed (${e instanceof Error ? e.message.slice(0, 80) : e})`);
+  // The industry of every stock with an open call, kept on file for the "opposite call on a peer" check.
+  await import("./peers").then(({ fillIndustries }) => fillIndustries(tracks.filter((t) => !t.exitDate).map((t) => t.symbol))).catch(() => 0);
   const flagged = (await store.allTracks()).filter((t) => t.priceCheck);
   return `price check: ${tracks.filter((t) => !t.exitDate && t.entryDate).length} open calls, ${notes.length} adjusted or flagged${notes.length ? ` (${notes.join("; ").slice(0, 600)})` : ""}; ${flagged.length} price unverified${flagged.length ? `: ${flagged.map((t) => `#${t.cardId} ${t.symbol}`).join(", ").slice(0, 300)}` : ""}; ${borrow}`;
 }

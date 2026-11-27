@@ -187,7 +187,16 @@ async function researchNow(input: ResearchInput, deps: ResearchDeps): Promise<Re
     + (earningsCall ? `\n\n${earningsCall}` : "")
     + (shareCount ? `\n\n${shareCount}` : "")
     + (backdrop ? `\n\n${backdrop}` : "")
-    + (await import("./conflicts").then(({ openCallsText }) => { const t = openCallsText(calls); return t ? `\n\n${t}` : ""; }));
+    + (await import("./conflicts").then(({ openCallsText }) => { const t = openCallsText(calls); return t ? `\n\n${t}` : ""; }))
+    // Open calls on companies in the same industry: a call the other way from one of them has to be explained.
+    + (input.tickersHint[0] ? await import("./peers").then(async ({ fillIndustries, industries, peerCalls, peersText }) => {
+      await fillIndustries([input.tickersHint[0]], deps.env, 1, deps.fetchImpl);
+      const peers = peerCalls(input.tickersHint[0], calls, await industries());
+      if (!peers.length) return "";
+      const theses = await import("./thesis").then(({ cardTheses }) => cardTheses()).catch(() => new Map<number, string>());
+      const t = peersText(input.tickersHint[0].toUpperCase(), peers, (id) => theses.get(id));
+      return t ? `\n\n${t}` : "";
+    }).catch(() => "") : "");
 
   // Call the model; one retry on a parse/validation failure with the error fed back.
   let card: Card | null = null;
@@ -238,6 +247,12 @@ async function researchNow(input: ResearchInput, deps: ResearchDeps): Promise<Re
   const conflicts = (await import("./conflicts")).dropContradictions(card, calls);
   card = conflicts.card;
   identity.notes.push(...conflicts.notes);
+  // A card that ends up opposite an open call on a company in the same industry says so (it is not blocked).
+  await import("./peers").then(async ({ fillIndustries, industries, peerConflicts, peerNote }) => {
+    await fillIndustries([card.tickers[0].symbol], deps.env, 1, deps.fetchImpl);
+    const note = peerNote(peerConflicts(card.tickers[0].symbol, card.direction, calls, await industries()));
+    if (note) identity.notes.push(note);
+  }).catch(() => undefined);
 
   // Gates, with lateness measured by code for the ticker that will be tracked.
   const measured = await measureLateness(deps.data, card.tickers[0].symbol, deps.now);
