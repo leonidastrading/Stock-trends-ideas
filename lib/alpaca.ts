@@ -18,6 +18,7 @@ const ALLOWED: Record<string, RegExp[]> = {
 };
 
 export { decodeEntities } from "./entities";
+import { isEnglishHeadline } from "./language";
 import { decodeEntities } from "./entities";
 
 export interface AlpacaCreds {
@@ -232,6 +233,8 @@ export class AlpacaClient {
       for (const n of resp.news ?? []) {
         const posted = new Date(n.created_at).toISOString();
         const headline = decodeEntities(n.headline ?? "");
+        // A translation of a press release (the wires publish each in several languages) is not a second piece of news.
+        if (!isEnglishHeadline(headline, n.url)) continue;
         // A re-post of earlier news is dated when the news happened, so nothing treats it as fresh.
         const from = repostedFrom(headline, posted);
         out.push({ id: n.id, ts: from ?? posted, headline, summary: decodeEntities(n.summary ?? ""), symbols: n.symbols ?? [], source: n.source ?? "", url: n.url ?? "", ...(from ? { repostedAt: posted } : {}) });

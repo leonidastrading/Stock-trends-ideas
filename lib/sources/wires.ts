@@ -3,6 +3,7 @@
  * and other news the moment it is out), the SEC's live list of 8-K filings, and Finnhub's market news when a key is set.
  * Each source is best effort: one that fails or is slow is skipped. Items carry a US ticker or are dropped.
  */
+import { isEnglishHeadline } from "../language";
 import { decodeEntities } from "../entities";
 import type { NewsItem } from "../alpaca";
 import { getJson, getText } from "../http";
@@ -41,6 +42,8 @@ export function wireItems(xml: string, source: string, base: string): NewsItem[]
   return parseFeed(xml, base).flatMap((a) => {
     const sym = tickerInRelease(`${a.title} ${a.summary}`);
     if (!sym || !a.published) return [];
+    // The wires publish each release again in other languages: only the English one is news here.
+    if (!isEnglishHeadline(a.title, a.url)) return [];
     return [{ id: hashId(a.url), ts: a.published, headline: a.title, summary: a.summary.slice(0, 600), symbols: [sym], source, url: a.url }];
   });
 }
