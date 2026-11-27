@@ -110,7 +110,10 @@ export function pickFacts(facts: Record<string, Record<string, { units?: Record<
 /** Pure: the last `n` periods of a fact: full years (about 12 months) or quarters (about 3 months), latest filing per period end. */
 export function periodFacts(rows: Fact[], period: "annual" | "quarter", n = 5): Fact[] {
   const days = (r: Fact) => (r.start ? (Date.parse(r.end) - Date.parse(r.start)) / 86400_000 : NaN);
-  const keep = rows.filter((r) => (period === "annual" ? days(r) > 330 && days(r) < 400 : days(r) > 80 && days(r) < 100));
+  let keep = rows.filter((r) => (period === "annual" ? days(r) > 330 && days(r) < 400 : days(r) > 80 && days(r) < 100));
+  // A full year is a fiscal year only when it comes from an annual report. Some companies also print "twelve months
+  // ended" figures in every quarterly report (Amazon does): those are rolling years, one a quarter, not fiscal years.
+  if (period === "annual") { const fromAnnual = keep.filter((r) => /^(10-K|20-F|40-F)/i.test(r.form ?? "")); if (fromAnnual.length) keep = fromAnnual; }
   const byEnd = new Map<string, Fact>();
   for (const r of keep) { const prev = byEnd.get(r.end); if (!prev || (r.filed ?? "") > (prev.filed ?? "")) byEnd.set(r.end, r); }
   return [...byEnd.values()].sort((a, b) => a.end.localeCompare(b.end)).slice(-n);
@@ -172,7 +175,7 @@ async function get(path: string, key: string, fetchImpl: typeof fetch): Promise<
 /** The income statement and EPS history for one stock, cached a day. Errors are returned, not thrown. */
 export async function fundamentals(symbol: string, period: "annual" | "quarter", today: string, env: NodeJS.ProcessEnv = process.env, fetchImpl: typeof fetch = fetch): Promise<Fundamentals> {
   const key = env.FMP_API_KEY?.trim() ?? "";
-  const cacheKey = `fmp3:${symbol}:${period}`;
+  const cacheKey = `fmp4:${symbol}:${period}`;
   const hit = await store.cacheGet<Fundamentals>(cacheKey).catch(() => null);
   if (hit && Date.now() - Date.parse(hit.updatedAt) < 24 * 3600_000 && !hit.data.error) return hit.data;
   const s = encodeURIComponent(symbol);

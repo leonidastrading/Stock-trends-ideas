@@ -98,3 +98,22 @@ describe("fiscal years from the SEC's facts", () => {
     expect(r.metrics.freeCash).toBe(140);
   });
 });
+
+import { periodFacts } from "@/lib/sources/fmp";
+
+describe("what the first live run showed", () => {
+  it("a fiscal year comes from an annual report, not from the rolling twelve months a quarterly report prints (Amazon)", () => {
+    const fy = (y: number, val: number) => ({ start: `${y}-01-01`, end: `${y}-12-31`, val, form: "10-K", filed: `${y + 1}-02-02` });
+    const ttm = (start: string, end: string, val: number) => ({ start, end, val, form: "10-Q", filed: end });
+    const rows = [fy(2021, 33), fy(2022, -3), fy(2023, 30), fy(2024, 59), ttm("2024-04-01", "2025-03-31", 65), ttm("2024-07-01", "2025-06-30", 70), ttm("2024-10-01", "2025-09-30", 76)];
+    expect(periodFacts(rows, "annual", 10).map((r) => r.end)).toEqual(["2021-12-31", "2022-12-31", "2023-12-31", "2024-12-31"]);
+    // A company with no annual-report rows on file is left as it was.
+    expect(periodFacts(rows.slice(4), "annual", 10)).toHaveLength(3);
+  });
+  it("shows no return on equity when buybacks have left almost no equity (O'Reilly read 290%)", () => {
+    const ys = steady().map((y, i) => ({ ...y, equity: i > 4 ? 60 : y.equity }));
+    const r = longTermChecks(ys, "consumer_discretionary")!;
+    expect(r.checks.find((c) => c.id === "returns")).toMatchObject({ pass: null });
+    expect(r.metrics.avgRoe).toBeNull();
+  });
+});

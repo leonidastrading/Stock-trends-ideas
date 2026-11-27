@@ -26,6 +26,10 @@ export const LONG_TERM = {
   /** A price-to-earnings ratio at or under this is "fair" here; over `rich` is expensive. */
   fairPe: 25, richPe: 35,
   perRun: 10, refreshDays: 30,
+  /** Raise when the checks change: every company is then screened again, not left for a month on the old reading. */
+  rev: 2,
+  /** A return on equity above this means equity has been bought back to almost nothing: the figure says little. */
+  roeMeaningless: 100,
 };
 
 type Facts = Record<string, Record<string, { units?: Record<string, Fact[]> }>>;
@@ -138,9 +142,11 @@ export function longTermChecks(years: FiscalYear[], sector: Sector | null, curre
     if (close <= 0 || (open !== null && open <= 0)) { negativeEquity = true; return; }
     roes.push((y.netIncome! / ((close + (open ?? close)) / 2)) * 100);
   });
-  const avgRoe = roes.length ? r1(mean(roes)) : null, minRoe = roes.length ? r1(Math.min(...roes)) : null;
+  // Equity bought back to nothing (or below zero) makes the return on it meaningless: no figure is shown for it.
+  const hollow = negativeEquity || roes.some((x) => x > LONG_TERM.roeMeaningless);
+  const avgRoe = roes.length && !hollow ? r1(mean(roes)) : null, minRoe = roes.length && !hollow ? r1(Math.min(...roes)) : null;
   const bar = special ? LONG_TERM.roeFinancial : LONG_TERM.roe;
-  if (negativeEquity) checks.push({ id: "returns", pass: null, detail: "shareholders' equity is below zero in some years (usually after large buybacks), so a return on it cannot be measured" });
+  if (hollow) checks.push({ id: "returns", pass: null, detail: negativeEquity ? "shareholders' equity is below zero in some years (usually after large buybacks), so a return on it cannot be measured" : "shareholders' equity has been bought back to almost nothing, so a return on it says little" });
   else if (roes.length < LONG_TERM.minYears) checks.push({ id: "returns", pass: null, detail: "equity is not reported for enough years" });
   else {
     const steady = special || roes.filter((x) => x >= LONG_TERM.roeFloor).length / roes.length >= LONG_TERM.roeFloorShare;
@@ -210,8 +216,9 @@ const toRow = (r: Record<string, unknown>): LongTermRow => {
   return { symbol: String(r.symbol), sector: (r.sector as Sector) ?? null, name: (r.name as string) ?? null, computedAt: new Date(r.computed_at as string).toISOString(), metrics: (r.metrics as Metrics) ?? null, checks, passed: v.passed, asked: v.asked, verdict: r.metrics ? v.verdict : "no", error: (r.error as string) ?? null };
 };
 
+/** The companies screened under the current checks (rows from an older set of checks are not shown while they wait to be redone). */
 export async function longTermRows(): Promise<LongTermRow[]> {
-  return (await q(`SELECT * FROM long_term ORDER BY symbol`)).map(toRow);
+  return (await q(`SELECT * FROM long_term WHERE rev = $1 ORDER BY symbol`, [LONG_TERM.rev])).map(toRow);
 }
 
 /**
@@ -220,7 +227,8 @@ export async function longTermRows(): Promise<LongTermRow[]> {
  */
 export async function runLongTerm(env: NodeJS.ProcessEnv = process.env, fetchImpl: typeof fetch = fetch, max = LONG_TERM.perRun): Promise<string> {
   if (!env.SEC_USER_AGENT?.trim()) return "long term: SEC_USER_AGENT is not set";
-  const done = new Map((await q(`SELECT symbol, computed_at FROM long_term`)).map((r) => [String(r.symbol), Date.parse(r.computed_at as string)]));
+  // A row from an older set of checks counts as never screened.
+  const done = new Map((await q(`SELECT symbol, computed_at, rev FROM long_term`)).map((r) => [String(r.symbol), Number(r.rev ?? 0) === LONG_TERM.rev ? Date.parse(r.computed_at as string) : 0]));
   const stale = Date.now() - LONG_TERM.refreshDays * 86400_000;
   const due = LONG_TERM_SYMBOLS.filter((s) => (done.get(s) ?? 0) < stale).sort((a, b) => (done.get(a) ?? 0) - (done.get(b) ?? 0)).slice(0, max);
   if (!due.length) return `long term: all ${LONG_TERM_SYMBOLS.length} companies screened in the last ${LONG_TERM.refreshDays} days`;
@@ -252,11 +260,11 @@ export async function runLongTerm(env: NodeJS.ProcessEnv = process.env, fetchImp
       continue;
     }
     await q(
-      `INSERT INTO long_term (symbol, sector, name, computed_at, metrics, checks, error) VALUES ($1, $2, $3, now(), $4, $5, $6)
-       ON CONFLICT (symbol) DO UPDATE SET sector = EXCLUDED.sector, name = COALESCE(EXCLUDED.name, long_term.name), computed_at = now(), metrics = EXCLUDED.metrics, checks = EXCLUDED.checks, error = EXCLUDED.error`,
-      [s, sector, names.get(s)?.name ?? null, metrics ? JSON.stringify(metrics) : null, JSON.stringify(checks), error],
+      `INSERT INTO long_term (symbol, sector, name, computed_at, metrics, checks, error, rev) VALUES ($1, $2, $3, now(), $4, $5, $6, $7)
+       ON CONFLICT (symbol) DO UPDATE SET sector = EXCLUDED.sector, name = COALESCE(EXCLUDED.name, long_term.name), computed_at = now(), metrics = EXCLUDED.metrics, checks = EXCLUDED.checks, error = EXCLUDED.error, rev = EXCLUDED.rev`,
+      [s, sector, names.get(s)?.name ?? null, metrics ? JSON.stringify(metrics) : null, JSON.stringify(checks), error, LONG_TERM.rev],
     );
   }
-  const total = Number((await q(`SELECT count(*) AS n FROM long_term`))[0]?.n ?? 0);
+  const total = Number((await q(`SELECT count(*) AS n FROM long_term WHERE rev = $1`, [LONG_TERM.rev]))[0]?.n ?? 0);
   return `long term: ${due.length} companies read, ${ok} with enough history${passed.length ? `, passing every check: ${passed.join(", ")}` : ""} · ${seen.join("; ")} · ${total} of ${LONG_TERM_SYMBOLS.length} screened so far`;
 }

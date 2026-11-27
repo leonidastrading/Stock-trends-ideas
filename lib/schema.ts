@@ -764,6 +764,7 @@ CREATE TABLE IF NOT EXISTS long_term (
   checks jsonb NOT NULL DEFAULT '[]',
   error text
 );
+ALTER TABLE long_term ADD COLUMN IF NOT EXISTS rev integer NOT NULL DEFAULT 0;
 -- Whether a paper short could have been borrowed when it was entered: easy | hard | not shortable (null: not recorded).
 ALTER TABLE tracks ADD COLUMN IF NOT EXISTS borrow text;
 ALTER TABLE drift_list ADD COLUMN IF NOT EXISTS borrow text;
