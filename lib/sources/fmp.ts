@@ -61,7 +61,7 @@ export function parseEarnings(rows: unknown, today: string, past = 4): EpsRow[] 
 
 // ------------------------------------------------- free fallbacks: the SEC's XBRL facts and Finnhub's EPS history
 
-type Fact = { start?: string; end: string; val: number; form?: string; fp?: string; filed?: string };
+export type Fact = { start?: string; end: string; val: number; form?: string; fp?: string; filed?: string };
 const REVENUE = ["Revenues", "RevenuesNetOfInterestExpense", "RevenueFromContractWithCustomerExcludingAssessedTax", "SalesRevenueNet", "RevenueFromContractWithCustomerIncludingAssessedTax", "Revenue"];
 /** A bank that reports no total: interest and dividend income plus non-interest income is its revenue. */
 const BANK_PARTS = [["InterestAndDividendIncomeOperating", "InterestIncomeOperating"], ["NoninterestIncome"]];
@@ -141,7 +141,7 @@ export function finnhubEps(hist: unknown, next: unknown, today: string): EpsRow[
   return [...past.map((r) => ({ label: q(r.date), ...r })), ...(up ? [{ label: "next", date: up.date, actual: null, estimate: up.estimate }] : [])];
 }
 
-async function secFacts(symbol: string, env: NodeJS.ProcessEnv, fetchImpl: typeof fetch): Promise<Record<string, Record<string, { units?: Record<string, Fact[]> }>> | "no-company" | null> {
+export async function secFacts(symbol: string, env: NodeJS.ProcessEnv, fetchImpl: typeof fetch): Promise<Record<string, Record<string, { units?: Record<string, Fact[]> }>> | "no-company" | null> {
   const ua = env.SEC_USER_AGENT?.trim();
   if (!ua) return null;
   const { cikFor } = await import("./edgar");

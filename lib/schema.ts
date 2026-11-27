@@ -754,6 +754,16 @@ CREATE TABLE IF NOT EXISTS drift_list (
   PRIMARY KEY (symbol, event_date)
 );
 ALTER TABLE bubble_events ADD COLUMN IF NOT EXISTS dropped text;
+-- Long term: each company's Buffett-style check from its own annual reports (one row per stock, refreshed monthly).
+CREATE TABLE IF NOT EXISTS long_term (
+  symbol text PRIMARY KEY,
+  sector text,
+  name text,
+  computed_at timestamptz NOT NULL DEFAULT now(),
+  metrics jsonb,
+  checks jsonb NOT NULL DEFAULT '[]',
+  error text
+);
 -- Whether a paper short could have been borrowed when it was entered: easy | hard | not shortable (null: not recorded).
 ALTER TABLE tracks ADD COLUMN IF NOT EXISTS borrow text;
 ALTER TABLE drift_list ADD COLUMN IF NOT EXISTS borrow text;
