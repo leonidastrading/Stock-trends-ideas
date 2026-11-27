@@ -767,6 +767,14 @@ CREATE TABLE IF NOT EXISTS long_term (
 ALTER TABLE long_term ADD COLUMN IF NOT EXISTS rev integer NOT NULL DEFAULT 0;
 ALTER TABLE long_term ADD COLUMN IF NOT EXISTS cik text;
 ALTER TABLE long_term ADD COLUMN IF NOT EXISTS rank integer;
+-- Long term: the top 25 as kept, once when first screened and then every January.
+CREATE TABLE IF NOT EXISTS long_term_lists (
+  year integer PRIMARY KEY,
+  set_at timestamptz NOT NULL DEFAULT now(),
+  rev integer NOT NULL DEFAULT 0,
+  picks jsonb NOT NULL,
+  counts jsonb
+);
 -- Whether a paper short could have been borrowed when it was entered: easy | hard | not shortable (null: not recorded).
 ALTER TABLE tracks ADD COLUMN IF NOT EXISTS borrow text;
 ALTER TABLE drift_list ADD COLUMN IF NOT EXISTS borrow text;
