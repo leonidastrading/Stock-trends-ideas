@@ -31,7 +31,7 @@ export const LONG_TERM = {
   /** A company takes about an eighth of a second to read, so a pass is bounded by its time, not this count. */
   perRun: 400, refreshDays: 30, runSeconds: 200,
   /** Raise when the checks change: every company is then screened again, not left for a month on the old reading. */
-  rev: 3,
+  rev: 4,
   /** A return on equity above this means equity has been bought back to almost nothing: the figure says little. */
   roeMeaningless: 100,
 };
@@ -41,7 +41,7 @@ export interface FiscalYear { end: string; netIncome: number | null; revenue: nu
 
 const NET_INCOME = ["NetIncomeLoss", "ProfitLossAttributableToOwnersOfParent", "NetIncomeLossAvailableToCommonStockholdersBasic", "ProfitLoss"];
 const EQUITY = ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest", "EquityAttributableToOwnersOfParent", "Equity"];
-const DEBT = ["LongTermDebtNoncurrent", "LongTermDebt", "LongTermDebtAndCapitalLeaseObligations", "LongTermNotesPayable", "SeniorNotes", "NoncurrentPortionOfNoncurrentBondsIssued", "Borrowings"];
+const DEBT = ["LongTermDebt", "LongTermDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligations", "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities", "DebtAndCapitalLeaseObligations", "DebtInstrumentCarryingAmount", "LongTermNotesPayable", "SeniorNotes", "SeniorLongTermNotes", "UnsecuredLongTermDebt", "SecuredLongTermDebt", "SecuredDebt", "NotesPayable", "ConvertibleNotesPayableNoncurrent", "LongTermLineOfCredit", "NoncurrentPortionOfNoncurrentBondsIssued", "Borrowings", "LongtermBorrowings"];
 const CASH_OPS = ["NetCashProvidedByUsedInOperatingActivities", "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations", "CashFlowsFromUsedInOperatingActivities"];
 const CAPEX = ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets", "PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities"];
 const SHARES = ["WeightedAverageNumberOfDilutedSharesOutstanding", "WeightedAverageNumberOfSharesOutstandingBasic", "WeightedAverageShares"];
@@ -55,6 +55,16 @@ function instantAt(facts: Facts, names: string[], end: string): number | null {
     if (near.length) return near[0].val;
   }
   return null;
+}
+
+/**
+ * Pure: long-term debt on a date: the largest of the debt lines the company reports there. Companies tag their debt
+ * under different names and often tag a small part separately; the first name found read Marriott's and Domino's
+ * debt as nothing. The largest line is the total, or the nearest thing to it that is reported.
+ */
+function debtAt(facts: Facts, end: string): number | null {
+  const found = DEBT.map((n) => instantAt(facts, [n], end)).filter((v): v is number => v !== null);
+  return found.length ? Math.max(...found) : null;
 }
 
 /** Pure: a full-year figure for the year ending on a date. */
@@ -78,7 +88,7 @@ export function fiscalYears(facts: Facts): FiscalYear[] {
   const revRows = rev ? periodFacts(rev.rows, "annual", 40) : [];
   return periodFacts(ni.rows, "annual", LONG_TERM.maxYears).map((y) => ({
     end: y.end, netIncome: y.val, revenue: revRows.find((r) => r.end === y.end)?.val ?? null,
-    equity: instantAt(facts, EQUITY, y.end), debt: instantAt(facts, DEBT, y.end),
+    equity: instantAt(facts, EQUITY, y.end), debt: debtAt(facts, y.end),
     cashFromOps: yearAt(facts, CASH_OPS, y.end), capex: yearAt(facts, CAPEX, y.end), shares: yearAt(facts, SHARES, y.end, (u) => u === "shares"),
   }));
 }

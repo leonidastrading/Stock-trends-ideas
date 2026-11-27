@@ -137,3 +137,17 @@ describe("the companies screened", () => {
     expect(kindFromFacts(f(["Revenues", "NetIncomeLoss", "Deposits"]))).toBeNull(); // one bank-like line is not a bank
   });
 });
+
+describe("long-term debt", () => {
+  it("is the largest debt line the company reports, not the first one found (Marriott read as no debt)", () => {
+    const ann = (y: number, val: number) => ({ start: `${y}-01-01`, end: `${y}-12-31`, val, form: "10-K", filed: `${y + 1}-02-10` });
+    const at = (y: number, val: number) => ({ end: `${y}-12-31`, val, form: "10-K", filed: `${y + 1}-02-10` });
+    const ys = [2021, 2022, 2023, 2024, 2025];
+    const facts = { "us-gaap": {
+      NetIncomeLoss: { units: { USD: ys.map((y) => ann(y, 2000)) } },
+      LongTermNotesPayable: { units: { USD: ys.map((y) => at(y, 0)) } },
+      LongTermDebtAndCapitalLeaseObligations: { units: { USD: ys.map((y) => at(y, 13_000)) } },
+    } };
+    expect(fiscalYears(facts).at(-1)!.debt).toBe(13_000);
+  });
+});

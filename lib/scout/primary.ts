@@ -114,9 +114,15 @@ export async function primaryFilings(items: NewsItem[], deps: { data: MarketData
   for (const n of open) {
     if (out.size >= PRIMARY.perRun || used >= PRIMARY.perDay) break;
     const sym = n.symbols[0];
-    if (out.has(sym) || (snaps[sym]?.price ?? 0) < PRIMARY.minPrice) continue;
-    // Each filing is opened once, whatever it turns out to say.
+    if (out.has(sym)) continue;
+    // Each filing is looked at once, whatever it turns out to say.
     if (!(await store.tryLock(`primary:${n.id}`, 4 * 24 * 60).catch(() => false))) continue;
+    // A warrant, unit or right, a stock under $5, or one with no price: passed over, and marked so it is not looked at again.
+    const price = snaps[sym]?.price ?? 0;
+    if (!/^[A-Z]{1,5}$/.test(sym) || price < PRIMARY.minPrice) {
+      console.log(`primary filing ${sym} (items ${itemsOf(n).join(", ")}): passed over, ${!/^[A-Z]{1,5}$/.test(sym) ? "not a company's common stock" : price ? `the stock is $${price}, under $${PRIMARY.minPrice}` : "no price for the stock"}`);
+      continue;
+    }
     const text = await filingText(n.url, ua, deps.fetchImpl).catch(() => null);
     if (!text) continue;
     const why = materialReason(itemsOf(n), text);
