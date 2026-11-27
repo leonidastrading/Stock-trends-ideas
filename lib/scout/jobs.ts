@@ -23,7 +23,7 @@ export const JOBS = {
   driftlist: { everyMin: 10, about: "Drift: a paper short for every setup from the moment it first appeared on the list (no card), and the entries and exits that are due" },
   preearnings: { everyMin: 60, about: "Calendar: warning signs on stocks reporting in the next five sessions (slide, unexplained drop, filing change, short idea, fall through takeover talk), and the reaction after each report" },
   prdesk: { everyMin: 4, about: "Press releases: new headlines from the wires and the news stream in the two daily windows, and each one's results an hour later and at the next two closes" },
-  longterm: { everyMin: 10, about: "Long term: the 3,000 largest listed companies checked against their own annual reports (return on equity, steady profit, growth, debt, cash, margin, dilution), 45 a pass, each again monthly" },
+  longterm: { everyMin: 10, about: "Long term: the 3,000 largest listed companies checked against their own annual reports (return on equity, steady profit, growth, debt, cash, margin, dilution), a few hundred a pass, each again monthly" },
   watchlist: { everyMin: 720, about: "Watch-list upkeep: the scout's terms that are not terms (over four words, a card's title) and its quiet ones retire; at most 60 stay active" },
   earningsrepair: { everyMin: 10, about: "Earnings drift: rows an older scan measured a day late are measured again on the report day, 60 a pass until none are left" },
   pricecheck: { everyMin: 60, about: "Scoreboard: splits since each paper entry, and entries or closes that fail the price check (\"price unverified\")" },

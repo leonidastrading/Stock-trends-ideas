@@ -28,7 +28,8 @@ export const LONG_TERM = {
   fairPe: 25, richPe: 35,
   /** How many companies are screened: the largest on the SEC's list, one share class each. */
   size: 3000,
-  perRun: 45, refreshDays: 30, runSeconds: 200,
+  /** A company takes about an eighth of a second to read, so a pass is bounded by its time, not this count. */
+  perRun: 400, refreshDays: 30, runSeconds: 200,
   /** Raise when the checks change: every company is then screened again, not left for a month on the old reading. */
   rev: 3,
   /** A return on equity above this means equity has been bought back to almost nothing: the figure says little. */
@@ -149,7 +150,7 @@ export function longTermChecks(years: FiscalYear[], sector: Sector | null, curre
   const hollow = negativeEquity || roes.some((x) => x > LONG_TERM.roeMeaningless);
   const avgRoe = roes.length && !hollow ? r1(mean(roes)) : null, minRoe = roes.length && !hollow ? r1(Math.min(...roes)) : null;
   const bar = special ? LONG_TERM.roeFinancial : LONG_TERM.roe;
-  if (hollow) checks.push({ id: "returns", pass: null, detail: negativeEquity ? "shareholders' equity is below zero in some years (usually after large buybacks), so a return on it cannot be measured" : "shareholders' equity has been bought back to almost nothing, so a return on it says little" });
+  if (hollow) checks.push({ id: "returns", pass: null, detail: negativeEquity ? "shareholders' equity is below zero in some years (usually after large buybacks), so a return on it cannot be measured" : "the return on equity is over 100% in some years (equity is small against profit, often after buybacks), so the figure says little" });
   else if (roes.length < LONG_TERM.minYears) checks.push({ id: "returns", pass: null, detail: "equity is not reported for enough years" });
   else {
     const steady = special || roes.filter((x) => x >= LONG_TERM.roeFloor).length / roes.length >= LONG_TERM.roeFloorShare;
