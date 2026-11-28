@@ -22,7 +22,7 @@ const longDate = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("e
 /** Long-term debt against equity as shown: a figure, "none" only for a reported zero, a ceiling when there is no debt line, or "not found". */
 function Debt({ r }: { r: LongTermRow }) {
   const m = r.metrics!, why = r.checks.find((c) => c.id === "debt")?.detail ?? "";
-  if (m.debt !== null && m.debt !== undefined && m.debtToEquity !== null) return <span title={why} style={{ cursor: "help" }}>{m.debt === 0 ? "none" : m.debtToEquity < 0.005 ? "under 1%" : `${Math.round(m.debtToEquity * 100)}%`}</span>;
+  if (m.debt !== null && m.debt !== undefined && m.debtToEquity !== null) return <span title={why} style={{ cursor: "help" }}>{m.debt === 0 ? "none" : m.debtToEquity < 0.005 ? "under 1%" : `${Math.round(m.debtToEquity * 100)}%`}{m.debtKind === "one debt line" && <div className="small muted">one debt line</div>}</span>;
   if (m.debtCeiling !== null && m.debtCeiling !== undefined) return <span title={why} style={{ cursor: "help" }}>at most {Math.round(m.debtCeiling * 100)}%<div className="small muted">no debt line</div></span>;
   return <span className="neg" title={why} style={{ cursor: "help" }}>not found</span>;
 }

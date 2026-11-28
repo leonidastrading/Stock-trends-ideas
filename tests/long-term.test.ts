@@ -144,15 +144,23 @@ describe("long-term debt from the filing's lines", () => {
     const tsm = { "ifrs-full": { NoncurrentPortionOfNoncurrentBondsIssued: { units: { TWD: [at(900)] } }, NoncurrentPortionOfNoncurrentLoansReceived: { units: { TWD: [at(40)] } } } };
     expect(debtAt(tsm, "2025-12-31")).toEqual({ debt: 940, from: "NoncurrentPortionOfNoncurrentBondsIssued + NoncurrentPortionOfNoncurrentLoansReceived", kind: "noncurrent parts" });
   });
-  it("uses a debt line that may include current maturities when that is all there is, taken whole", () => {
+  it("without a noncurrent total, takes the largest line whole, and marks a line for one kind of debt", () => {
     // A financial company: one long-term debt line, no current split.
     expect(read({ LongTermDebt: 3_400 })).toEqual({ debt: 3_400, from: "LongTermDebt", kind: "may include the part due within a year" });
-    // Senior notes or notes payable stand as they are (Evercore, Kinsale).
-    expect(read({ NotesPayable: 370 })).toMatchObject({ debt: 370, from: "NotesPayable" });
+    // Senior notes or notes payable stand as they are (Evercore, Kinsale), marked as one line.
+    expect(read({ NotesPayable: 370 })).toEqual({ debt: 370, from: "NotesPayable", kind: "one debt line" });
     // Nothing is taken off: a "current part" larger than the line found read Western Digital's debt as zero.
-    expect(read({ DebtInstrumentCarryingAmount: 1_600, LongTermDebtCurrent: 2_200 })).toMatchObject({ debt: 1_600, from: "DebtInstrumentCarryingAmount" });
+    expect(read({ DebtInstrumentCarryingAmount: 1_600, LongTermDebtCurrent: 2_200 })).toMatchObject({ debt: 1_600, from: "DebtInstrumentCarryingAmount", kind: "one debt line" });
     // Parts and a gross line both on file: the larger.
     expect(read({ LongTermNotesPayable: 500, LongTermDebt: 2_000 })).toMatchObject({ debt: 2_000, from: "LongTermDebt" });
+  });
+  it("does not let a 'total' hide bonds reported beside it (a filer with bank loans in the total and bonds in a part)", () => {
+    const f2 = { "ifrs-full": { LongtermBorrowings: { units: { MXN: [at(10_000)] } }, NoncurrentPortionOfNoncurrentBondsIssued: { units: { MXN: [at(35_000)] } } } };
+    expect(debtAt(f2, "2025-12-31")).toEqual({ debt: 35_000, from: "NoncurrentPortionOfNoncurrentBondsIssued", kind: "noncurrent parts" });
+    // A total debt far above the noncurrent total, with little due within a year: the noncurrent part cannot be under total less all current liabilities.
+    expect(read({ LongTermDebtNoncurrent: 10_000, DebtLongtermAndShorttermCombinedAmount: 45_000, LiabilitiesCurrent: 8_000 })).toEqual({ debt: 37_000, from: "DebtLongtermAndShorttermCombinedAmount less all current liabilities", kind: "may include the part due within a year" });
+    // The usual case is untouched: total debt less current liabilities is under the noncurrent total.
+    expect(read({ LongTermDebtNoncurrent: 25_000, DebtLongtermAndShorttermCombinedAmount: 36_000, LiabilitiesCurrent: 36_000 })).toMatchObject({ debt: 25_000, from: "LongTermDebtNoncurrent" });
   });
   it("does not take an empty credit line as no debt while another line has a figure", () => {
     expect(read({ LongTermLineOfCredit: 0, SeniorNotes: 5_000 })).toMatchObject({ debt: 5_000, from: "SeniorNotes" });

@@ -38,7 +38,7 @@ export const LONG_TERM = {
   yearsRead: 8,
   perRun: 700, refreshDays: 30, runSeconds: 200,
   /** Raise when the rules change: every company is then screened again and the kept list is set again. */
-  rev: 9,
+  rev: 10,
   /** The kept list is set only while this is on (off while a new set of rules has its first whole read checked by hand). */
   setList: false,
   /** Until this time the read also runs in the scheduler's quiet hours, so a whole read ordered in the evening finishes the same night. */
@@ -58,7 +58,7 @@ export const LONG_TERM = {
 
 type Facts = Record<string, Record<string, { units?: Record<string, Fact[]> }>>;
 /** How the long-term debt figure was found: a noncurrent total, noncurrent parts added up, or a debt line that may include what is due within a year (taken whole, so it can only overstate). */
-export type DebtKind = "noncurrent total" | "noncurrent parts" | "may include the part due within a year";
+export type DebtKind = "noncurrent total" | "noncurrent parts" | "may include the part due within a year" | "one debt line";
 export interface FiscalYear {
   end: string; netIncome: number | null; revenue: number | null; equity: number | null;
   /** Long-term debt (null: no debt line found in the filing), which filing line it is from, and how it was read. */
@@ -80,9 +80,10 @@ const DEBT_NONCURRENT_PARTS: string[][] = [
   ["SubordinatedLongTermDebt"], ["NoncurrentPortionOfNoncurrentBondsIssued"], ["NoncurrentPortionOfNoncurrentLoansReceived"], ["NoncurrentPortionOfNoncurrentNotesAndDebenturesIssued"],
   ["NoncurrentPortionOfNoncurrentSecuredBankLoansReceived"], ["NoncurrentPortionOfNoncurrentUnsecuredBankLoansReceived"], ["NoncurrentPortionOfOtherNoncurrentBorrowings"],
 ];
-/** Debt lines that may include what falls due within a year. Taken whole: taking a "current part" off a line that is not the full total read Western Digital's debt as nothing. */
-const DEBT_GROSS = ["LongTermDebt", "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities", "LongTermDebtAndLeaseObligationIncludingCurrentMaturities", "DebtInstrumentCarryingAmount", "DebtAndCapitalLeaseObligations", "DebtLongtermAndShorttermCombinedAmount", "LongTermDebtFairValue", "Borrowings",
-  "SeniorNotes", "NotesPayable", "SecuredDebt", "UnsecuredDebt", "ConvertibleNotesPayable", "ConvertibleDebt", "SubordinatedDebt", "JuniorSubordinatedNotes", "OtherLongTermDebt", "NotesAndLoansPayable", "LoansPayable", "OtherBorrowings", "FederalHomeLoanBankAdvancesLongTerm", "BondsIssued", "LoansReceived", "DebtInstrumentsIssued", "NotesAndDebenturesIssued", "SubordinatedLiabilities", "DebtInstrumentFaceAmount", "LineOfCredit"];
+/** Debt totals that include what falls due within a year. Taken whole: taking a "current part" off a line that is not the full total read Western Digital's debt as nothing. */
+const DEBT_GROSS = ["LongTermDebt", "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities", "LongTermDebtAndLeaseObligationIncludingCurrentMaturities", "DebtAndCapitalLeaseObligations", "DebtLongtermAndShorttermCombinedAmount", "LongTermDebtFairValue", "Borrowings"];
+/** Lines for one kind of debt or one instrument: a real figure, but it may not be all of the company's debt. */
+const DEBT_SINGLE = ["DebtInstrumentCarryingAmount", "SeniorNotes", "NotesPayable", "SecuredDebt", "UnsecuredDebt", "ConvertibleNotesPayable", "ConvertibleDebt", "SubordinatedDebt", "JuniorSubordinatedNotes", "OtherLongTermDebt", "NotesAndLoansPayable", "LoansPayable", "OtherBorrowings", "FederalHomeLoanBankAdvancesLongTerm", "BondsIssued", "LoansReceived", "DebtInstrumentsIssued", "NotesAndDebenturesIssued", "SubordinatedLiabilities", "DebtInstrumentFaceAmount", "LineOfCredit"];
 
 /** Pure: a balance-sheet figure on (or within ten days of) a date: the latest filing's value. */
 function instantAt(facts: Facts, names: string[], end: string): number | null {
@@ -97,26 +98,33 @@ function instantAt(facts: Facts, names: string[], end: string): number | null {
 
 
 /**
- * Pure: long-term debt on a date, and which filing line it came from. Read in this order:
- *  1. a noncurrent total (long-term debt after current maturities, with or without finance leases): the largest;
- *  2. otherwise the larger of: noncurrent debt reported in parts (notes, convertible notes, credit line, bonds, bank
- *     loans) added up; and the largest debt line that may include current maturities (long-term debt, total debt,
- *     senior notes, notes payable), taken whole. Taking it whole can overstate the debt, never understate it.
- * A zero in one tier is not taken as "no debt" while another tier has a figure (a filer can report an empty credit
- * line beside its notes). Null when the filing has none of these lines: that is "not found", never "none".
+ * Pure: long-term debt on a date, and which filing line it came from. Every reading errs toward more debt:
+ *  - With a noncurrent total (long-term debt after current maturities, with or without finance leases): the larger
+ *    of that total and the noncurrent parts added up (a filer can put its bank loans in the "total" and its bonds
+ *    in a part). And never less than the largest debt line of any kind less all current liabilities: what is not
+ *    due within a year cannot be smaller than that.
+ *  - Without one: the largest of the noncurrent parts added up, a debt total that includes current maturities
+ *    (taken whole), and a line for one kind of debt (which may not be all of it, and is marked so).
+ * A zero in one tier is not taken as "no debt" while another has a figure (an empty credit line beside notes).
+ * Null when the filing has none of these lines: that is "not found", never "none".
  */
 export function debtAt(facts: Facts, end: string): { debt: number | null; from: string | null; kind: DebtKind | null } {
   const at = (n: string) => instantAt(facts, [n], end);
-  const best = (names: string[]) => names.map((n) => ({ n, v: at(n) })).filter((x): x is { n: string; v: number } => x.v !== null).sort((a, b) => b.v - a.v)[0] ?? null;
-  const total = best(DEBT_NONCURRENT_TOTAL);
-  if (total && total.v > 0) return { debt: total.v, from: total.n, kind: "noncurrent total" };
-  const parts = DEBT_NONCURRENT_PARTS.map(best).filter((x): x is { n: string; v: number } => !!x);
-  const partSum = parts.length ? { n: parts.filter((x) => x.v > 0).map((x) => x.n).join(" + ") || parts[0].n, v: parts.reduce((a, x) => a + x.v, 0) } : null;
-  const gross = best(DEBT_GROSS);
-  const found = [partSum && { ...partSum, kind: "noncurrent parts" as DebtKind }, gross && { ...gross, kind: "may include the part due within a year" as DebtKind }, total && { ...total, kind: "noncurrent total" as DebtKind }].filter((x): x is { n: string; v: number; kind: DebtKind } => !!x);
-  if (!found.length) return { debt: null, from: null, kind: null };
-  const top = found.sort((a, b) => b.v - a.v)[0];
-  return { debt: top.v, from: top.n, kind: top.kind };
+  type Line = { n: string; v: number; kind: DebtKind };
+  const best = (names: string[], kind: DebtKind): Line | null => names.map((n) => ({ n, v: at(n), kind })).filter((x): x is Line => x.v !== null).sort((a, b) => b.v - a.v)[0] ?? null;
+  const largest = (xs: Array<Line | null>): Line | null => xs.filter((x): x is Line => !!x).sort((a, b) => b.v - a.v)[0] ?? null;
+  const total = best(DEBT_NONCURRENT_TOTAL, "noncurrent total");
+  const parts = DEBT_NONCURRENT_PARTS.map((names) => best(names, "noncurrent parts")).filter((x): x is Line => !!x);
+  const partSum: Line | null = parts.length ? { n: parts.filter((x) => x.v > 0).map((x) => x.n).join(" + ") || parts[0].n, v: parts.reduce((a, x) => a + x.v, 0), kind: "noncurrent parts" } : null;
+  const gross = best(DEBT_GROSS, "may include the part due within a year"), single = best(DEBT_SINGLE, "one debt line");
+  if (total && total.v > 0) {
+    const noncurrent = largest([total, partSum])!;
+    const any = largest([gross, single]), current = instantAt(facts, ["LiabilitiesCurrent", "CurrentLiabilities"], end);
+    const floor = any && current !== null ? any.v - current : null;
+    return floor !== null && floor > noncurrent.v ? { debt: floor, from: `${any!.n} less all current liabilities`, kind: "may include the part due within a year" } : { debt: noncurrent.v, from: noncurrent.n, kind: noncurrent.kind };
+  }
+  const top = largest([partSum, gross, single, total]);
+  return top ? { debt: top.v, from: top.n, kind: top.kind } : { debt: null, from: null, kind: null };
 }
 
 /**
@@ -264,7 +272,7 @@ export const CHECK_ABOUT: Record<CheckId, string> = {
   roe_last: `Net income of the last fiscal year as a share of shareholders' equity (the average of the year's opening and closing equity): ${LONG_TERM.roe}% or more.`,
   roe_5y: `The same figure for each of the last ${LONG_TERM.years} fiscal years, averaged: ${LONG_TERM.roe}% or more.`,
   margin: `Net income of the last fiscal year as a share of its sales: ${LONG_TERM.margin}% or more. For a bank, sales are interest income plus other income.`,
-  debt: `Long-term debt (after current maturities) at the last fiscal year end is no more than ${Math.round(LONG_TERM.debtToEquity * 100)}% of shareholders' equity. Asked of every company, financials included. The filing's debt lines are read in order: a noncurrent total; otherwise the larger of the noncurrent parts added up and the largest debt line that may include what is due within a year (taken whole, so it can overstate the debt but not understate it). "None" is shown only when the filing reports a debt line of zero. With no debt line at all, the company passes only if everything it owes beyond a year (all noncurrent liabilities, which include any long-term debt) is within the limit; otherwise it fails.`,
+  debt: `Long-term debt (after current maturities) at the last fiscal year end is no more than ${Math.round(LONG_TERM.debtToEquity * 100)}% of shareholders' equity. Asked of every company, financials included. The filing's debt lines are read so as to err toward more debt: a noncurrent total, or the noncurrent parts added up when they come to more; without a noncurrent total, the largest of the parts added up, a debt total that includes what is due within a year (taken whole), and a line for one kind of debt (marked "one debt line": it may not be all of it). "None" is shown only when the filing reports a debt line of zero. With no debt line at all, the company passes only if everything it owes beyond a year (all noncurrent liabilities, which include any long-term debt) is within the limit; otherwise it fails.`,
   growth: "Net income of the last fiscal year is higher than in the fiscal year five years before it.",
 };
 
@@ -344,7 +352,7 @@ export function longTermChecks(years: FiscalYear[], currency: string | null = "U
   checks.push({
     id: "debt", pass: debtPass,
     detail: equityFail ?? (last.equity === null ? "shareholders' equity is not in the report"
-      : last.debt !== null ? (last.debt === 0 ? `the filing reports no long-term debt (${last.debtFrom} is zero)` : `long-term debt is ${last.debt / last.equity! < 0.005 ? "under 1" : Math.round((last.debt / last.equity!) * 100)}% of equity (${last.debtFrom}${last.debtKind === "may include the part due within a year" ? ", which may include the part due within a year" : ""})`)
+      : last.debt !== null ? (last.debt === 0 ? `the filing reports no long-term debt (${last.debtFrom} is zero)` : `long-term debt is ${last.debt / last.equity! < 0.005 ? "under 1" : Math.round((last.debt / last.equity!) * 100)}% of equity (${last.debtFrom}${last.debtKind === "may include the part due within a year" ? ", which may include the part due within a year" : last.debtKind === "one debt line" ? ", a line for one kind of debt: it may not be all of it" : ""})`)
       : ceiling !== null ? `no long-term debt line in the filing; everything owed beyond a year is ${Math.round(ceiling * 100)}% of equity${ceiling <= LONG_TERM.debtToEquity ? ", so long-term debt is within the limit" : ", so the limit cannot be confirmed"}`
       : "no long-term debt figure found in the filing, and its liabilities are not split by when they fall due"),
   });
@@ -698,7 +706,7 @@ async function longTermPass(deps: { env?: NodeJS.ProcessEnv; data?: MarketData |
   const s = screen(rows);
   // The reconciliation lines, once per whole read of a set of rules (and again when `reportRev` is raised).
   if (await store.tryLock(`longterm:report:r${LONG_TERM.rev}:${LONG_TERM.reportRev}`, 60 * 24 * 60)) {
-    for (const sym of LONG_TERM.report) console.log(reportLine(sym, rows, s));
+    for (const sym of [...new Set([...LONG_TERM.report, ...s.passers.map((r) => r.symbol)])]) console.log(reportLine(sym, rows, s));
     const c = s.cutoff;
     console.log(`long term cut-off: company ${s.pool.length} is ${c.last?.symbol} (list #${c.last?.rank}) value ${usd(c.last?.marketValue)} (${c.last?.marketValueFrom}) · last 25 of the pool: ${c.computed} computed, low ${usd(c.low)} middle ${usd(c.mid)} high ${usd(c.high)} · outside the pool above the middle: ${c.outsideAbove.length} (${c.outsideAbove.slice(0, 12).map((x) => `${x.symbol} #${x.rank} ${usd(x.marketValue)}`).join(", ")}) · inside under half: ${c.insideBelowHalf} · foreign annual filers in the pool: ${c.foreignFilers}`);
     console.log(`long term narrowing: pool ${s.pool.length}; under $${LONG_TERM.minPrice}: ${s.underPrice.length}; removed sectors: ${s.removedSector.length}; listed under ${LONG_TERM.minListedYears} years: ${s.young.length} (${s.young.slice(0, 40).map((r) => r.symbol).join(" ")}); checked ${s.checked}; failed ${CHECK_ORDER.map((id) => `${id} ${s.failed[id]}`).join(", ")}; pass all five ${s.passers.length}`);
