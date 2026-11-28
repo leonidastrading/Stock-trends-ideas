@@ -57,7 +57,7 @@ export default async function CongressPage({ searchParams }: { searchParams: Pro
             <tbody>
               {(clusters.length ? clusters : last30.slice(0, 12)).map((a) => (
                 <tr key={a.symbol}>
-                  <td><a href={`/congress?symbol=${a.symbol}`}><b className="accent">{a.symbol}</b></a>{a.cluster && <span className="tag promoted" style={{ marginLeft: 6 }}>cluster</span>}</td>
+                  <td><a href={`/congress?symbol=${a.symbol}`}><b className="accent">{a.symbol}</b></a>{a.cluster && <span className="tag link" style={{ marginLeft: 6 }}>cluster</span>}</td>
                   <td className="small">{a.buyers.join(", ") || <span className="muted">none</span>}{a.sellers.length ? <span className="muted"> · sold by {a.sellers.join(", ")}</span> : null}</td>
                   <td className="num">{a.buys}</td><td className="num">{a.sells}</td><td className="num">{a.buyUsd ? usd(a.buyUsd) : "—"}</td><td className="small">{a.lastFiled}</td>
                 </tr>

@@ -61,7 +61,10 @@ td.num, th.num { text-align: right; }
 .neg { color: var(--neg); }
 .warn { color: var(--warn); }
 .tag { display: inline-block; font-size: 11px; color: var(--text-secondary); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; margin-right: 4px; white-space: nowrap; }
-.tag.promoted { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+/* A promoted card is marked in green everywhere. */
+.tag.promoted { color: var(--pos); border-color: var(--pos); background: color-mix(in srgb, var(--pos) 12%, transparent); }
+/* A blue label that is not a card's status (a link to a card, a marker). */
+.tag.link { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .tag.late { color: var(--warn); border-color: var(--warn); }
 .tag.not_promoted, .tag.rejected, .tag.error, .tag.down { color: var(--neg); border-color: var(--neg); }
 .tag.ok { color: var(--pos); border-color: var(--pos); }
