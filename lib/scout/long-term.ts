@@ -40,7 +40,7 @@ export const LONG_TERM = {
   /** Raise when the rules change: every company is then screened again and the kept list is set again. */
   rev: 10,
   /** The kept list is set only while this is on (off while a new set of rules has its first whole read checked by hand). */
-  setList: false,
+  setList: true,
   /** Until this time the read also runs in the scheduler's quiet hours, so a whole read ordered in the evening finishes the same night. */
   nightReadUntil: "2026-11-28T11:00:00Z",
   /**
