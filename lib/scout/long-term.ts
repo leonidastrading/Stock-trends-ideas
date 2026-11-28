@@ -31,7 +31,15 @@ export const LONG_TERM = {
   yearsRead: 8,
   perRun: 700, refreshDays: 30, runSeconds: 200,
   /** Raise when the rules change: every company is then screened again and the kept list is set again. */
-  rev: 6,
+  rev: 7,
+  /**
+   * Companies read whether or not the SEC's list carries them near the top. The list, as read on November 27, 2026,
+   * had no entry for TSMC in its first 1,800, though it is among the ten largest companies listed in the US. Such
+   * a company has no place on the list, so it is counted inside the pool.
+   */
+  alsoRead: [{ symbol: "TSM", cik: "1046179", name: "Taiwan Semiconductor Manufacturing Co Ltd" }],
+  /** Large foreign listings whose place on the SEC's whole list is logged when the list is read, to see whether any other is missing. */
+  listCheck: ["TSM", "NVS", "TM", "SONY", "UL", "TTE", "BHP", "RIO", "MUFG", "HDB", "IBN", "INFY", "ARM", "SE", "MELI", "SPOT", "NU", "SHOP", "ACN", "LIN", "CB", "MDT", "ETN", "BUD", "SNY", "GSK", "BP", "DEO", "RELX", "TD"],
   /** Always written into the pass's log line when read, to check foreign filers by eye. */
   watch: ["TSM", "ASML", "NVO", "TM", "SAP", "BABA", "PDD", "RY", "HSBC", "AZN", "SHEL", "BRK.B"],
 };
@@ -41,7 +49,7 @@ export interface FiscalYear { end: string; netIncome: number | null; revenue: nu
 
 const NET_INCOME = ["NetIncomeLoss", "ProfitLossAttributableToOwnersOfParent", "NetIncomeLossAvailableToCommonStockholdersBasic", "ProfitLoss"];
 const EQUITY = ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest", "EquityAttributableToOwnersOfParent", "Equity"];
-const DEBT = ["LongTermDebt", "LongTermDebtNoncurrent", "LongTermDebtFairValue", "DebtLongtermAndShorttermCombinedAmount", "ConvertibleNotesPayable", "ConvertibleDebtNoncurrent", "OtherLongTermDebtNoncurrent", "SubordinatedDebt", "FederalHomeLoanBankAdvancesLongTerm", "NotesAndLoansPayable", "LoansPayable", "OtherBorrowings", "OtherLongTermDebt", "BondsIssued", "LongTermDebtAndCapitalLeaseObligations", "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities", "DebtAndCapitalLeaseObligations", "DebtInstrumentCarryingAmount", "LongTermNotesPayable", "SeniorNotes", "SeniorLongTermNotes", "UnsecuredLongTermDebt", "SecuredLongTermDebt", "SecuredDebt", "NotesPayable", "ConvertibleNotesPayableNoncurrent", "LongTermLineOfCredit", "NoncurrentPortionOfNoncurrentBondsIssued", "Borrowings", "LongtermBorrowings"];
+const DEBT = ["LongTermDebt", "LongTermDebtNoncurrent", "LongTermDebtFairValue", "DebtLongtermAndShorttermCombinedAmount", "ConvertibleNotesPayable", "ConvertibleDebtNoncurrent", "OtherLongTermDebtNoncurrent", "SubordinatedDebt", "FederalHomeLoanBankAdvancesLongTerm", "NotesAndLoansPayable", "LoansPayable", "OtherBorrowings", "OtherLongTermDebt", "BondsIssued", "LongTermDebtAndLeaseObligation", "LongTermDebtAndLeaseObligationIncludingCurrentMaturities", "UnsecuredDebt", "DebtInstrumentFaceAmount", "NoncurrentPortionOfNoncurrentLoansReceived", "LoansReceived", "DebtInstrumentsIssued", "SubordinatedLiabilities", "NoncurrentPortionOfNoncurrentNotesAndDebenturesIssued", "NotesAndDebenturesIssued", "LongTermDebtAndCapitalLeaseObligations", "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities", "DebtAndCapitalLeaseObligations", "DebtInstrumentCarryingAmount", "LongTermNotesPayable", "SeniorNotes", "SeniorLongTermNotes", "UnsecuredLongTermDebt", "SecuredLongTermDebt", "SecuredDebt", "NotesPayable", "ConvertibleNotesPayableNoncurrent", "LongTermLineOfCredit", "NoncurrentPortionOfNoncurrentBondsIssued", "Borrowings", "LongtermBorrowings"];
 const CASH_OPS = ["NetCashProvidedByUsedInOperatingActivities", "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations", "CashFlowsFromUsedInOperatingActivities"];
 const CAPEX = ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets", "PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities"];
 const SHARES = ["WeightedAverageNumberOfDilutedSharesOutstanding", "WeightedAverageNumberOfSharesOutstandingBasic", "WeightedAverageShares"];
@@ -291,7 +299,18 @@ export function largestCompanies(list: Array<{ cik: string; ticker: string; titl
   return out;
 }
 
-const UNIVERSE_KEY = `longterm:universe:${LONG_TERM.scan}`;
+const UNIVERSE_KEY = `longterm:universe:${LONG_TERM.scan}:r${LONG_TERM.rev}`;
+
+/** Pure: the entries to read: the largest on the list, and before them any always-read company the list does not carry among those. */
+export function withAlsoRead(top: Listed[], also: Array<{ symbol: string; cik: string; name: string }> = LONG_TERM.alsoRead): Listed[] {
+  const missing = also.filter((a) => !top.some((c) => c.cik === a.cik || c.symbol === a.symbol));
+  return [...missing.map((a) => ({ ...a, rank: 0 })), ...top];
+}
+
+/** Pure: where some large foreign listings sit on the SEC's whole list (its own order, 1 first), or that they are absent. */
+export function listPlaces(list: Array<{ cik: string; ticker: string; title: string }>, symbols: string[] = LONG_TERM.listCheck): string {
+  return symbols.map((s) => { const i = list.findIndex((x) => x.ticker === s); return i < 0 ? `${s} absent` : `${s} ${i + 1}`; }).join(", ");
+}
 /** The list being read, kept for a week (the SEC's file is about a megabyte). */
 export async function longTermUniverse(env: NodeJS.ProcessEnv = process.env, fetchImpl?: typeof fetch): Promise<Listed[]> {
   const hit = await store.cacheGet<Listed[]>(UNIVERSE_KEY).catch(() => null);
@@ -299,8 +318,13 @@ export async function longTermUniverse(env: NodeJS.ProcessEnv = process.env, fet
   const ua = env.SEC_USER_AGENT?.trim();
   if (!ua) return hit?.data ?? [];
   const { secTickerList } = await import("../sources/edgar");
-  const list = largestCompanies(await secTickerList(ua, fetchImpl));
-  if (list.length) await store.cachePut(UNIVERSE_KEY, list).catch(() => undefined);
+  const whole = await secTickerList(ua, fetchImpl);
+  const list = whole.length ? withAlsoRead(largestCompanies(whole)) : [];
+  if (list.length) {
+    const tsmc = whole.map((x, i) => ({ x, i })).filter(({ x }) => x.cik === "1046179" || /taiwan semi/i.test(x.title));
+    console.log(`long term list: ${whole.length} entries on the SEC's list · places: ${listPlaces(whole)} · TSMC by number or name: ${tsmc.map(({ x, i }) => `${x.ticker} ${i + 1} "${x.title}"`).join(", ") || "no entry"}`);
+    await store.cachePut(UNIVERSE_KEY, list).catch(() => undefined);
+  }
   return list.length ? list : hit?.data ?? [];
 }
 
@@ -388,8 +412,7 @@ export async function runLongTerm(deps: { env?: NodeJS.ProcessEnv; data?: Market
   const rows = await longTermRows();
   const s = screen(rows);
   // The watched names as they stand on file, on a line of their own (the pass's own line is too long to read them from).
-  console.log(`long term lookup: ${universe.filter((c) => /taiwan semi/i.test(c.name) || c.cik === "1046179" || c.rank === 14 || /^TSM/.test(c.symbol)).map((c) => `${c.symbol} #${c.rank} cik ${c.cik} "${c.name}"`).join(" | ") || "nothing like TSMC among the entries read"} · ${universe.length} entries, last ${universe.at(-1)?.symbol} #${universe.at(-1)?.rank}`);
-  if (read) console.log(`long term watch: ${LONG_TERM.watch.map((w) => { const r = rows.find((x) => x.symbol === w); const m = r?.metrics; return !r ? `${w} not read yet` : !m ? `${w} #${r.rank}: ${r.error}` : `${w} #${r.rank} ${passesAll(r.checks) ? "PASS" : "no"}${r.removed ? ` [${r.removed}]` : ""} roe ${m.roeLast ?? "?"}/${m.roe5y ?? "?"} margin ${m.margin ?? "?"} d/e ${m.debtToEquity ?? "?"} ${m.currency ?? "?"} ${m.years}y to ${m.lastYear}`; }).join(" | ")}`);
+  if (read) console.log(`long term watch: ${LONG_TERM.watch.map((w) => { const r = rows.find((x) => x.symbol === w); const m = r?.metrics; return !r ? `${w} not read yet` : !m ? `${w} #${r.rank} (${r.name}): ${r.error}` : `${w} #${r.rank} ${passesAll(r.checks) ? "PASS" : "no"}${r.removed ? ` [${r.removed}]` : ""} roe ${m.roeLast ?? "?"}/${m.roe5y ?? "?"} margin ${m.margin ?? "?"} d/e ${m.debtToEquity ?? "?"} ${m.currency ?? "?"} ${m.years}y to ${m.lastYear}`; }).join(" | ")}`);
   // The list is kept once the whole list has been read (a handful the SEC will not answer for do not hold it up).
   let kept = "";
   if (left <= universe.length * 0.01 && s.top.length && !(await q(`SELECT 1 FROM long_term_lists WHERE year = $1 AND rev = $2`, [year, LONG_TERM.rev])).length) {

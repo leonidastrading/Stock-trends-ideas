@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fiscalYears, largestCompanies, listChanges, longTermChecks, passesAll, priceOf, removedSector, reportingCurrency, screen, usListed, type FiscalYear, type LongTermRow } from "@/lib/scout/long-term";
+import { fiscalYears, largestCompanies, listChanges, listPlaces, withAlsoRead, longTermChecks, passesAll, priceOf, removedSector, reportingCurrency, screen, usListed, type FiscalYear, type LongTermRow } from "@/lib/scout/long-term";
 import { periodFacts } from "@/lib/sources/fmp";
 
 const yr = (y: number, o: Partial<FiscalYear>): FiscalYear => ({ end: `${y}-12-31`, netIncome: 0, revenue: null, equity: null, debt: null, cashFromOps: null, capex: null, shares: null, ...o });
@@ -113,6 +113,16 @@ describe("the pool and the final list", () => {
     const c = listChanges(kept, [row("AAA", 1, 30), row("NEW", 2, 40)]);
     expect(c.join.map((r) => r.symbol)).toEqual(["NEW"]);
     expect(c.leave.map((p) => p.symbol)).toEqual(["OLD"]);
+  });
+  it("always reads a company the SEC's list does not carry near the top, and counts it inside the pool (TSMC)", () => {
+    const top = [{ symbol: "AAPL", cik: "320193", name: "Apple Inc.", rank: 1 }, { symbol: "MSFT", cik: "789019", name: "MICROSOFT CORP", rank: 2 }];
+    expect(withAlsoRead(top).map((c) => [c.symbol, c.rank])).toEqual([["TSM", 0], ["AAPL", 1], ["MSFT", 2]]);
+    // Already on the list (by symbol or by SEC number): left where the list has it.
+    const has = [...top, { symbol: "TSM", cik: "1046179", name: "TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD", rank: 3 }];
+    expect(withAlsoRead(has)).toEqual(has);
+    const s = screen([row("TSM", 0, 31), row("AAA", 1, 30)]);
+    expect(s.pool.map((r) => r.symbol)).toEqual(["TSM", "AAA"]);
+    expect(listPlaces([{ cik: "1", ticker: "NVS", title: "Novartis" }, { cik: "2", ticker: "TM", title: "Toyota" }], ["TSM", "TM"])).toBe("TSM absent, TM 2");
   });
   it("counts a company as US-listed unless it only trades over the counter", () => {
     expect(usListed(["Nasdaq"])).toBe(true);
