@@ -37,7 +37,13 @@ export async function GET(request: Request, ctx: { params: Promise<{ name: strin
       case "driftlist": result = deps.data ? `drift list book: ${await import("@/lib/scout/drift-list").then(({ updateListBook }) => updateListBook(deps.data!, deps.now))}` : "drift list book: waiting for market data (Alpaca keys)"; break;
       case "prdesk": result = await import("@/lib/scout/pr-desk").then(({ runPrDesk }) => runPrDesk({ data: deps.data ?? null, now: deps.now })); break;
       case "filingcheck": result = await import("@/lib/scout/primary").then(async ({ filingCheck }) => filingCheck({ data: deps.data ?? null, env: deps.env, now: deps.now }, async () => (await import("@/lib/scout/stories")).runStories({ ...deps, startBy: Date.now() + 150_000 }, 2, { primaryOnly: true }))); break;
-      case "longterm": result = await import("@/lib/scout/long-term").then(({ runLongTerm }) => runLongTerm({ env: deps.env, data: deps.data ?? null, now: deps.now })); break;
+      case "longterm": {
+        const r = await import("@/lib/scout/long-term").then(({ runLongTerm }) => runLongTerm({ env: deps.env, data: deps.data ?? null, now: deps.now }));
+        result = r.line;
+        // Entries still waiting: the next pass starts at once, in its own 5 minutes, so a whole read takes minutes rather than an hour.
+        if (r.more) await import("@/lib/scout/jobs").then(({ startJob }) => startJob(new URL(request.url).origin, "/api/cron/job/longterm", "lock:job:longterm:next", 1)).catch(() => undefined);
+        break;
+      }
       case "watchlist": result = await import("@/lib/scout/store").then(({ watchlistUpkeep }) => watchlistUpkeep()).then((r) => `watch-list: ${r.before.active} active and ${r.before.proposed} proposed before, ${r.after.active} active and ${r.after.proposed} proposed after; ${r.retired} retired${r.retired ? ` (${Object.entries(r.why).map(([k, n]) => `${n} ${k}`).join(", ")})` : ""}`); break;
       case "earningsrepair": result = deps.data ? `earnings repair: ${await import("@/lib/scout/earnings").then(({ repairLateScans }) => repairLateScans(deps.data!, deps.now, 60))}` : "earnings repair: waiting for market data (Alpaca keys)"; break;
       case "pricecheck": result = deps.data ? await import("@/lib/scout/tracking").then(({ runPriceCheck }) => runPriceCheck(deps.data!, deps.now)) : "price check: waiting for market data (Alpaca keys)"; break;
@@ -53,7 +59,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ name: strin
     // Each job's state goes on the health panel (Settings) and on Home when it is not reporting.
     await import("@/lib/scout/health").then(({ reportHealth, saysFailed }) => reportHealth(`job:${name}`, !saysFailed(result!), result!)).catch(() => undefined);
     // The finished study answers every 5 minutes: not worth a log line each time.
-    if (!/^(rating|panel) study: (done|waiting)|^earnings repair: no rows|^pr desk: (0 logged, 0 outcomes|another pass)|^long term: all |^filing check: nothing new|^daytrade: read in the last/.test(result!)) console.log(result!);
+    if (!/^(rating|panel) study: (done|waiting)|^earnings repair: no rows|^pr desk: (0 logged, 0 outcomes|another pass)|^long term: (all |another pass)|^filing check: nothing new|^daytrade: read in the last/.test(result!)) console.log(result!);
     return NextResponse.json({ status: "ok", result: result! });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

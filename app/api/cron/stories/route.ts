@@ -28,7 +28,15 @@ export async function GET(request: Request) {
   }
   // Quiet hours: nothing from 8 PM to 6 AM ET, hourly on weekends, so the database can sleep (lib/quiet-hours.ts).
   const resting = quietReply(request, "minutes");
-  if (resting) return NextResponse.json(resting);
+  if (resting) {
+    // A whole Long term read ordered in the evening goes on through quiet hours until its set time, then stops.
+    const { LONG_TERM } = await import("@/lib/scout/long-term");
+    if (Date.now() < Date.parse(LONG_TERM.nightReadUntil)) {
+      const { JOBS, startJob } = await import("@/lib/scout/jobs");
+      await startJob(new URL(request.url).origin, "/api/cron/job/longterm", "lock:job:longterm", JOBS.longterm.everyMin).catch(() => false);
+    }
+    return NextResponse.json(resting);
+  }
   const params = new URL(request.url).searchParams;
   // Anything the daily AI budget turned away is worked through once it resets (a no-op when nothing waits).
   background(async () => {
