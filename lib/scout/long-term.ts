@@ -388,6 +388,7 @@ export async function runLongTerm(deps: { env?: NodeJS.ProcessEnv; data?: Market
   const rows = await longTermRows();
   const s = screen(rows);
   // The watched names as they stand on file, on a line of their own (the pass's own line is too long to read them from).
+  console.log(`long term lookup: ${universe.filter((c) => /taiwan semi/i.test(c.name) || c.cik === "1046179" || c.rank === 14 || /^TSM/.test(c.symbol)).map((c) => `${c.symbol} #${c.rank} cik ${c.cik} "${c.name}"`).join(" | ") || "nothing like TSMC among the entries read"} · ${universe.length} entries, last ${universe.at(-1)?.symbol} #${universe.at(-1)?.rank}`);
   if (read) console.log(`long term watch: ${LONG_TERM.watch.map((w) => { const r = rows.find((x) => x.symbol === w); const m = r?.metrics; return !r ? `${w} not read yet` : !m ? `${w} #${r.rank}: ${r.error}` : `${w} #${r.rank} ${passesAll(r.checks) ? "PASS" : "no"}${r.removed ? ` [${r.removed}]` : ""} roe ${m.roeLast ?? "?"}/${m.roe5y ?? "?"} margin ${m.margin ?? "?"} d/e ${m.debtToEquity ?? "?"} ${m.currency ?? "?"} ${m.years}y to ${m.lastYear}`; }).join(" | ")}`);
   // The list is kept once the whole list has been read (a handful the SEC will not answer for do not hold it up).
   let kept = "";
