@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fiscalYears, largestCompanies, listChanges, longTermChecks, passesAll, priceOf, removedSector, screen, usListed, type FiscalYear, type LongTermRow } from "@/lib/scout/long-term";
+import { fiscalYears, largestCompanies, listChanges, longTermChecks, passesAll, priceOf, removedSector, reportingCurrency, screen, usListed, type FiscalYear, type LongTermRow } from "@/lib/scout/long-term";
 import { periodFacts } from "@/lib/sources/fmp";
 
 const yr = (y: number, o: Partial<FiscalYear>): FiscalYear => ({ end: `${y}-12-31`, netIncome: 0, revenue: null, equity: null, debt: null, cashFromOps: null, capex: null, shares: null, ...o });
@@ -159,6 +159,26 @@ describe("fiscal years from the SEC's facts", () => {
     const r = longTermChecks(out)!;
     expect(by(r)).toEqual({ roe_last: true, roe_5y: true, margin: true, debt: true, growth: true });
     expect(r.metrics.netIncome5yAgo).toBe(100);
+  });
+  it("reads a foreign company in its own currency, not in the dollar figure it prints beside it (TSMC)", () => {
+    const f20 = (y: number, val: number) => ({ start: `${y}-01-01`, end: `${y}-12-31`, val, form: "20-F", filed: `${y + 1}-04-15` });
+    const i20 = (y: number, val: number) => ({ end: `${y}-12-31`, val, form: "20-F", filed: `${y + 1}-04-15` });
+    // Home currency for every year; a dollar convenience figure for the latest years only, listed first.
+    const facts = { "ifrs-full": {
+      ProfitLossAttributableToOwnersOfParent: { units: { USD: [2024, 2025].map((y) => f20(y, 40)), TWD: ys.map((y, i) => f20(y, 1000 + i * 100)) } },
+      Revenue: { units: { USD: [2025].map((y) => f20(y, 100)), TWD: ys.map((y, i) => f20(y, 2500 + i * 200)) } },
+      EquityAttributableToOwnersOfParent: { units: { USD: [2025].map((y) => i20(y, 150)), TWD: ys.map((y, i) => i20(y, 3000 + i * 300)) } },
+      LongtermBorrowings: { units: { TWD: ys.map((y) => i20(y, 600)) } },
+    } };
+    expect(reportingCurrency(facts)).toBe("TWD");
+    const out = fiscalYears(facts);
+    expect(out.at(-1)).toMatchObject({ end: "2025-12-31", netIncome: 1500, revenue: 3500, equity: 4500, debt: 600 });
+    const r = longTermChecks(out, reportingCurrency(facts))!;
+    expect(by(r)).toEqual({ roe_last: true, roe_5y: true, margin: true, debt: true, growth: true });
+    expect(r.metrics.currency).toBe("TWD");
+    // A company with the same number of years in both keeps its home currency.
+    expect(reportingCurrency({ "ifrs-full": { ProfitLoss: { units: { USD: ys.map((y) => f20(y, 1)), JPY: ys.map((y) => f20(y, 150)) } } } })).toBe("JPY");
+    expect(reportingCurrency({ "us-gaap": { NetIncomeLoss: { units: { USD: ys.map((y) => ann(y, 1)) } } } })).toBe("USD");
   });
   it("a fiscal year comes from an annual report, not from the rolling twelve months a quarterly report prints (Amazon)", () => {
     const ttm = (start: string, end: string, val: number) => ({ start, end, val, form: "10-Q", filed: end });

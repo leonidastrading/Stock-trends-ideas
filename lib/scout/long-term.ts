@@ -31,7 +31,9 @@ export const LONG_TERM = {
   yearsRead: 8,
   perRun: 700, refreshDays: 30, runSeconds: 200,
   /** Raise when the rules change: every company is then screened again and the kept list is set again. */
-  rev: 5,
+  rev: 6,
+  /** Always written into the pass's log line when read, to check foreign filers by eye. */
+  watch: ["TSM", "ASML", "NVO", "TM", "SAP", "BABA", "PDD", "RY", "HSBC", "AZN", "SHEL", "BRK.B"],
 };
 
 type Facts = Record<string, Record<string, { units?: Record<string, Fact[]> }>>;
@@ -39,7 +41,7 @@ export interface FiscalYear { end: string; netIncome: number | null; revenue: nu
 
 const NET_INCOME = ["NetIncomeLoss", "ProfitLossAttributableToOwnersOfParent", "NetIncomeLossAvailableToCommonStockholdersBasic", "ProfitLoss"];
 const EQUITY = ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest", "EquityAttributableToOwnersOfParent", "Equity"];
-const DEBT = ["LongTermDebt", "LongTermDebtNoncurrent", "LongTermDebtFairValue", "DebtLongtermAndShorttermCombinedAmount", "ConvertibleNotesPayable", "ConvertibleDebtNoncurrent", "OtherLongTermDebtNoncurrent", "SubordinatedDebt", "FederalHomeLoanBankAdvancesLongTerm", "LongTermDebtAndCapitalLeaseObligations", "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities", "DebtAndCapitalLeaseObligations", "DebtInstrumentCarryingAmount", "LongTermNotesPayable", "SeniorNotes", "SeniorLongTermNotes", "UnsecuredLongTermDebt", "SecuredLongTermDebt", "SecuredDebt", "NotesPayable", "ConvertibleNotesPayableNoncurrent", "LongTermLineOfCredit", "NoncurrentPortionOfNoncurrentBondsIssued", "Borrowings", "LongtermBorrowings"];
+const DEBT = ["LongTermDebt", "LongTermDebtNoncurrent", "LongTermDebtFairValue", "DebtLongtermAndShorttermCombinedAmount", "ConvertibleNotesPayable", "ConvertibleDebtNoncurrent", "OtherLongTermDebtNoncurrent", "SubordinatedDebt", "FederalHomeLoanBankAdvancesLongTerm", "NotesAndLoansPayable", "LoansPayable", "OtherBorrowings", "OtherLongTermDebt", "BondsIssued", "LongTermDebtAndCapitalLeaseObligations", "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities", "DebtAndCapitalLeaseObligations", "DebtInstrumentCarryingAmount", "LongTermNotesPayable", "SeniorNotes", "SeniorLongTermNotes", "UnsecuredLongTermDebt", "SecuredLongTermDebt", "SecuredDebt", "NotesPayable", "ConvertibleNotesPayableNoncurrent", "LongTermLineOfCredit", "NoncurrentPortionOfNoncurrentBondsIssued", "Borrowings", "LongtermBorrowings"];
 const CASH_OPS = ["NetCashProvidedByUsedInOperatingActivities", "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations", "CashFlowsFromUsedInOperatingActivities"];
 const CAPEX = ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets", "PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities"];
 const SHARES = ["WeightedAverageNumberOfDilutedSharesOutstanding", "WeightedAverageNumberOfSharesOutstandingBasic", "WeightedAverageShares"];
@@ -75,11 +77,40 @@ function yearAt(facts: Facts, names: string[], end: string, unitOk: (u: string) 
   return null;
 }
 
-/** Pure: the currency the company reports its net income in. */
-export const reportingCurrency = (facts: Facts): string | null => pickFacts(facts, NET_INCOME)?.unit ?? null;
+/**
+ * Pure: the currency the company keeps its accounts in: the one its annual net income is on file in for the most
+ * fiscal years. A foreign company often prints a US-dollar "convenience" figure for the latest year beside its own
+ * currency; read as its accounts, that would set dollars of profit against Taiwan dollars of equity.
+ */
+export function reportingCurrency(facts: Facts): string | null {
+  const years = new Map<string, Set<string>>();
+  for (const tax of ["us-gaap", "ifrs-full"]) for (const n of NET_INCOME) for (const [unit, rows] of Object.entries(facts[tax]?.[n]?.units ?? {})) {
+    if (unit.includes("/") || !Array.isArray(rows)) continue;
+    const set = years.get(unit) ?? new Set<string>();
+    for (const r of periodFacts(rows, "annual", 40)) set.add(r.end);
+    years.set(unit, set);
+  }
+  // Most fiscal years wins; on a tie the home currency does (the convenience figure is always in dollars).
+  return [...years].filter(([, set]) => set.size).sort((a, b) => b[1].size - a[1].size || Number(a[0] === "USD") - Number(b[0] === "USD"))[0]?.[0] ?? null;
+}
+
+/** Pure: the facts with only one currency's figures (and share counts), so nothing is mixed across currencies. */
+function inCurrency(facts: Facts, unit: string): Facts {
+  const out: Facts = {};
+  for (const [tax, concepts] of Object.entries(facts)) {
+    out[tax] = {};
+    for (const [name, c] of Object.entries(concepts ?? {})) {
+      const units = Object.fromEntries(Object.entries(c?.units ?? {}).filter(([u]) => u === unit || u === "shares"));
+      if (Object.keys(units).length) out[tax][name] = { units };
+    }
+  }
+  return out;
+}
 
 /** Pure: the company's fiscal years on file (up to ten, oldest first), from its annual net income. */
-export function fiscalYears(facts: Facts): FiscalYear[] {
+export function fiscalYears(all: Facts): FiscalYear[] {
+  const unit = reportingCurrency(all);
+  const facts = unit ? inCurrency(all, unit) : all;
   const ni = pickFacts(facts, NET_INCOME);
   if (!ni) return [];
   const rev = pickRevenue(facts, "annual");
@@ -343,8 +374,8 @@ export async function runLongTerm(deps: { env?: NodeJS.ProcessEnv; data?: Market
         x.metrics.price = prices[x.c.symbol]?.price ?? null;
         withReports++;
         // A compact reading for the first few of a pass, so the numbers can be checked by eye in the log.
-        if (seen.length < 14) seen.push(`${x.c.symbol} #${x.c.rank} ${passesAll(x.checks) ? "PASS" : "no"}${x.removed ? ` [${x.removed}]` : ""} (roe ${x.metrics.roeLast ?? "?"}% / 5y ${x.metrics.roe5y ?? "?"}%, margin ${x.metrics.margin ?? "?"}%, debt/equity ${x.metrics.debtToEquity ?? "?"}, 5y ago ${x.checks.find((k) => k.id === "growth")?.pass ?? "?"}, $${x.metrics.price ?? "?"}, sic ${x.metrics.sic ?? "?"}, ${(x.metrics.exchanges ?? []).join("/") || "?"})`);
-      }
+        if (seen.length < 8 || LONG_TERM.watch.includes(x.c.symbol)) seen.push(`${x.c.symbol} #${x.c.rank} ${passesAll(x.checks) ? "PASS" : "no"}${x.removed ? ` [${x.removed}]` : ""} (roe ${x.metrics.roeLast ?? "?"}% / 5y ${x.metrics.roe5y ?? "?"}%, margin ${x.metrics.margin ?? "?"}%, debt/equity ${x.metrics.debtToEquity ?? "?"}, 5y ago ${x.checks.find((k) => k.id === "growth")?.pass ?? "?"}, $${x.metrics.price ?? "?"}, ${x.metrics.currency ?? "?"}, sic ${x.metrics.sic ?? "?"}, ${[...new Set(x.metrics.exchanges ?? [])].join("/") || "?"})`);
+      } else if (LONG_TERM.watch.includes(x.c.symbol)) seen.push(`${x.c.symbol} #${x.c.rank}: ${x.error}`);
       read++;
       await q(
         `INSERT INTO long_term (symbol, sector, name, computed_at, metrics, checks, error, rev, cik, rank) VALUES ($1, $2, $3, now(), $4, $5, $6, $7, $8, $9)
