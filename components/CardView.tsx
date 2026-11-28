@@ -152,18 +152,18 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
           ) : null}
           {hasDatabase() && <Suspense fallback={null}><CapShort symbol={c.primaryTicker} price={q?.price ?? null} /></Suspense>}
           {c.direction === "short" && q && (q.price < SCOUT.minShortPrice || (q.changePct ?? 0) >= 15) ? (
-            <span className="tag not_promoted" style={{ marginLeft: 8 }} title="Cheap or fast-rising stocks are often hard and costly to borrow and can squeeze far past a stop; losses on a short are open-ended.">
+            <span className="tag not_promoted wrap" style={{ marginLeft: 8 }} title="Cheap or fast-rising stocks are often hard and costly to borrow and can squeeze far past a stop; losses on a short are open-ended.">
               ⚠ dangerous to short: {q.price < SCOUT.minShortPrice ? `under $${SCOUT.minShortPrice}` : `up ${q.changePct}% ${sessionLabel(q)}`}; defined-risk puts or no trade
             </span>
           ) : null}
-          {peerAgainst.length > 0 && <span className="tag warn" style={{ marginLeft: 8 }} title="Companies in the same industry mostly rise and fall together. Held at once, opposite calls on two of them largely cancel into 'this one beats that one'.">⚠ opposite call on a peer ({peerAgainst[0].label || "same industry"}): {peerAgainst.slice(0, 5).map((p) => <a key={p.cardId} href={`/cards/${p.cardId}`}>#{p.cardId} {p.direction} {p.symbol} </a>)}</span>}
-          {opposing?.length ?<span className="tag warn" style={{ marginLeft: 8 }}>⚠ opposite call on {c.primaryTicker}: {opposing.map((id) => <a key={id} href={`/cards/${id}`}>#{id} </a>)}</span> : null}</div>
+          {peerAgainst.length > 0 && <span className="tag warn wrap" style={{ marginLeft: 8 }} title="Companies in the same industry mostly rise and fall together. Held at once, opposite calls on two of them largely cancel into 'this one beats that one'.">⚠ opposite call on a peer ({peerAgainst[0].label || "same industry"}): {peerAgainst.slice(0, 5).map((p) => <a key={p.cardId} href={`/cards/${p.cardId}`}>#{p.cardId} {p.direction} {p.symbol} </a>)}</span>}
+          {opposing?.length ?<span className="tag warn wrap" style={{ marginLeft: 8 }}>⚠ opposite call on {c.primaryTicker}: {opposing.map((id) => <a key={id} href={`/cards/${id}`}>#{id} </a>)}</span> : null}</div>
         <div className="small secondary">
           {nextE ? <>Next earnings <b>~{fmtDay(nextE)}</b> <span className="muted">({info!.nextBasis})</span></>
             : info?.lastEarnings ? <>Next earnings: not enough history to estimate <span className="muted">(last release {fmtDay(info.lastEarnings)})</span></>
             : info ? <>Next earnings: unknown <span className="muted">(no earnings releases on file at the SEC — a fund, an ADR or a new listing)</span></>
             : <>Next earnings: loading — reload in a moment</>}
-          {beforeExit ? <span className="tag warn" style={{ marginLeft: 6 }}>before this card&apos;s exit ({fmtDay(track!.deadlineDate)})</span> : null}
+          {beforeExit ? <span className="tag warn wrap" style={{ marginLeft: 6 }}>before this card&apos;s exit ({fmtDay(track!.deadlineDate)})</span> : null}
         </div>
         {/* No headline here: it nearly always repeated the thesis just below (the title still names the card in lists and links). */}
         {hasDatabase() && <Suspense fallback={null}><CompanyAbout symbol={c.primaryTicker} sector={c.sector} /></Suspense>}
