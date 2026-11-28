@@ -144,13 +144,15 @@ describe("long-term debt from the filing's lines", () => {
     const tsm = { "ifrs-full": { NoncurrentPortionOfNoncurrentBondsIssued: { units: { TWD: [at(900)] } }, NoncurrentPortionOfNoncurrentLoansReceived: { units: { TWD: [at(40)] } } } };
     expect(debtAt(tsm, "2025-12-31")).toEqual({ debt: 940, from: "NoncurrentPortionOfNoncurrentBondsIssued + NoncurrentPortionOfNoncurrentLoansReceived", kind: "noncurrent parts" });
   });
-  it("uses a total with current maturities when that is all there is, less the current part where reported", () => {
+  it("uses a debt line that may include current maturities when that is all there is, taken whole", () => {
     // A financial company: one long-term debt line, no current split.
-    expect(read({ LongTermDebt: 3_400 })).toEqual({ debt: 3_400, from: "LongTermDebt", kind: "total less current part" });
-    expect(read({ LongTermDebt: 3_400, LongTermDebtCurrent: 400 })).toMatchObject({ debt: 3_000 });
+    expect(read({ LongTermDebt: 3_400 })).toEqual({ debt: 3_400, from: "LongTermDebt", kind: "may include the part due within a year" });
     // Senior notes or notes payable stand as they are (Evercore, Kinsale).
     expect(read({ NotesPayable: 370 })).toMatchObject({ debt: 370, from: "NotesPayable" });
-    expect(read({ SeniorNotes: 500, LongTermDebtCurrent: 100 })).toMatchObject({ debt: 500, from: "SeniorNotes" });
+    // Nothing is taken off: a "current part" larger than the line found read Western Digital's debt as zero.
+    expect(read({ DebtInstrumentCarryingAmount: 1_600, LongTermDebtCurrent: 2_200 })).toMatchObject({ debt: 1_600, from: "DebtInstrumentCarryingAmount" });
+    // Parts and a gross line both on file: the larger.
+    expect(read({ LongTermNotesPayable: 500, LongTermDebt: 2_000 })).toMatchObject({ debt: 2_000, from: "LongTermDebt" });
   });
   it("does not take an empty credit line as no debt while another line has a figure", () => {
     expect(read({ LongTermLineOfCredit: 0, SeniorNotes: 5_000 })).toMatchObject({ debt: 5_000, from: "SeniorNotes" });
@@ -194,6 +196,10 @@ describe("market value and the price against earnings", () => {
     expect(marketValueOf(50, { annualForm: "10-K", sharesOut: 1_000_000, sharesOutAt: "2026-10-20" }, 990_000)).toEqual({ marketValue: 50_000_000, marketValueFrom: "price × 1,000,000 shares on the report cover of 2026-10-20" });
     expect(marketValueOf(50, { annualForm: "10-K", sharesOut: null, sharesOutAt: null }, 990_000)).toMatchObject({ marketValue: 49_500_000 });
     expect(marketValueOf(50, { annualForm: "40-F", sharesOut: 10, sharesOutAt: "2026-01-31" }, null).marketValue).toBe(500);
+    // A cover count from years back is not today's count (Berkshire's last plain one is from 2011): the year's average count is used.
+    expect(marketValueOf(50, { annualForm: "10-K", sharesOut: 1_000_000, sharesOutAt: "2011-04-29", lastYear: "2025-12-31" }, 990_000)).toMatchObject({ marketValue: 49_500_000 });
+    // A count that covers one share class only gives a value under twice a year's profit: not computed.
+    expect(marketValueOf(580, { annualForm: "10-K", sharesOut: null, sharesOutAt: null, lastYear: "2025-12-31", netIncome: 67e9 }, 1_440_000).marketValue).toBeNull();
   });
   it("is not computed for a foreign annual-report filer, or without a price or a share count, and says why", () => {
     expect(marketValueOf(300, { annualForm: "20-F", sharesOut: 25_000, sharesOutAt: "2025-12-31" }, 25_000)).toEqual({ marketValue: null, marketValueFrom: "files a foreign annual report (20-F): its share count is not in US-listed shares" });
@@ -326,7 +332,8 @@ describe("fiscal years from the SEC's facts", () => {
       OperatingIncomeLoss: { units: { USD: ys.map((y, i) => ann(y, 130 + i * 12)) } },
       StockholdersEquity: { units: { USD: ys.map((y, i) => at(y, 400 + i * 20)) } },
       LongTermDebtNoncurrent: { units: { USD: ys.map((y) => at(y, 200)) } },
-      Liabilities: { units: { USD: ys.map((y) => at(y, 700)) } }, LiabilitiesCurrent: { units: { USD: ys.map((y) => at(y, 300)) } },
+      // No total-liabilities line (many filers give none): total assets less equity stands in.
+      LiabilitiesAndStockholdersEquity: { units: { USD: ys.map((y, i) => at(y, 1100 + i * 20)) } }, LiabilitiesCurrent: { units: { USD: ys.map((y) => at(y, 300)) } },
       WeightedAverageNumberOfDilutedSharesOutstanding: { units: { shares: ys.map((y) => ann(y, 50)) } },
     } };
     const out = fiscalYears(facts);

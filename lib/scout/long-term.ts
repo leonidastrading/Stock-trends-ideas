@@ -38,7 +38,7 @@ export const LONG_TERM = {
   yearsRead: 8,
   perRun: 700, refreshDays: 30, runSeconds: 200,
   /** Raise when the rules change: every company is then screened again and the kept list is set again. */
-  rev: 8,
+  rev: 9,
   /** The kept list is set only while this is on (off while a new set of rules has its first whole read checked by hand). */
   setList: false,
   /** Until this time the read also runs in the scheduler's quiet hours, so a whole read ordered in the evening finishes the same night. */
@@ -57,8 +57,8 @@ export const LONG_TERM = {
 };
 
 type Facts = Record<string, Record<string, { units?: Record<string, Fact[]> }>>;
-/** How the long-term debt figure was found: a noncurrent total, noncurrent parts added up, or a total that includes current maturities (less the current part where reported). */
-export type DebtKind = "noncurrent total" | "noncurrent parts" | "total less current part";
+/** How the long-term debt figure was found: a noncurrent total, noncurrent parts added up, or a debt line that may include what is due within a year (taken whole, so it can only overstate). */
+export type DebtKind = "noncurrent total" | "noncurrent parts" | "may include the part due within a year";
 export interface FiscalYear {
   end: string; netIncome: number | null; revenue: number | null; equity: number | null;
   /** Long-term debt (null: no debt line found in the filing), which filing line it is from, and how it was read. */
@@ -80,11 +80,9 @@ const DEBT_NONCURRENT_PARTS: string[][] = [
   ["SubordinatedLongTermDebt"], ["NoncurrentPortionOfNoncurrentBondsIssued"], ["NoncurrentPortionOfNoncurrentLoansReceived"], ["NoncurrentPortionOfNoncurrentNotesAndDebenturesIssued"],
   ["NoncurrentPortionOfNoncurrentSecuredBankLoansReceived"], ["NoncurrentPortionOfNoncurrentUnsecuredBankLoansReceived"], ["NoncurrentPortionOfOtherNoncurrentBorrowings"],
 ];
-/** Debt totals that include what falls due within a year (the current part is taken off where the filing reports it). */
-const DEBT_WITH_CURRENT = ["LongTermDebt", "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities", "LongTermDebtAndLeaseObligationIncludingCurrentMaturities", "DebtInstrumentCarryingAmount", "DebtAndCapitalLeaseObligations", "DebtLongtermAndShorttermCombinedAmount", "LongTermDebtFairValue", "Borrowings"];
-/** Other debt lines a filer may use instead (taken as they stand). */
-const DEBT_OTHER = ["SeniorNotes", "NotesPayable", "SecuredDebt", "UnsecuredDebt", "ConvertibleNotesPayable", "ConvertibleDebt", "SubordinatedDebt", "JuniorSubordinatedNotes", "OtherLongTermDebt", "NotesAndLoansPayable", "LoansPayable", "OtherBorrowings", "FederalHomeLoanBankAdvancesLongTerm", "BondsIssued", "LoansReceived", "DebtInstrumentsIssued", "NotesAndDebenturesIssued", "SubordinatedLiabilities", "DebtInstrumentFaceAmount", "LineOfCredit"];
-const DEBT_CURRENT_PART = ["LongTermDebtCurrent", "LongTermDebtAndCapitalLeaseObligationsCurrent", "LongTermDebtAndLeaseObligationCurrent", "CurrentPortionOfLongtermBorrowings"];
+/** Debt lines that may include what falls due within a year. Taken whole: taking a "current part" off a line that is not the full total read Western Digital's debt as nothing. */
+const DEBT_GROSS = ["LongTermDebt", "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities", "LongTermDebtAndLeaseObligationIncludingCurrentMaturities", "DebtInstrumentCarryingAmount", "DebtAndCapitalLeaseObligations", "DebtLongtermAndShorttermCombinedAmount", "LongTermDebtFairValue", "Borrowings",
+  "SeniorNotes", "NotesPayable", "SecuredDebt", "UnsecuredDebt", "ConvertibleNotesPayable", "ConvertibleDebt", "SubordinatedDebt", "JuniorSubordinatedNotes", "OtherLongTermDebt", "NotesAndLoansPayable", "LoansPayable", "OtherBorrowings", "FederalHomeLoanBankAdvancesLongTerm", "BondsIssued", "LoansReceived", "DebtInstrumentsIssued", "NotesAndDebenturesIssued", "SubordinatedLiabilities", "DebtInstrumentFaceAmount", "LineOfCredit"];
 
 /** Pure: a balance-sheet figure on (or within ten days of) a date: the latest filing's value. */
 function instantAt(facts: Facts, names: string[], end: string): number | null {
@@ -101,9 +99,9 @@ function instantAt(facts: Facts, names: string[], end: string): number | null {
 /**
  * Pure: long-term debt on a date, and which filing line it came from. Read in this order:
  *  1. a noncurrent total (long-term debt after current maturities, with or without finance leases): the largest;
- *  2. noncurrent debt reported in parts (notes, convertible notes, credit line, bonds, bank loans): added up;
- *  3. a total that includes current maturities (long-term debt, total debt, senior notes, notes payable): the
- *     largest, less the current part where the filing reports one.
+ *  2. otherwise the larger of: noncurrent debt reported in parts (notes, convertible notes, credit line, bonds, bank
+ *     loans) added up; and the largest debt line that may include current maturities (long-term debt, total debt,
+ *     senior notes, notes payable), taken whole. Taking it whole can overstate the debt, never understate it.
  * A zero in one tier is not taken as "no debt" while another tier has a figure (a filer can report an empty credit
  * line beside its notes). Null when the filing has none of these lines: that is "not found", never "none".
  */
@@ -114,21 +112,26 @@ export function debtAt(facts: Facts, end: string): { debt: number | null; from: 
   if (total && total.v > 0) return { debt: total.v, from: total.n, kind: "noncurrent total" };
   const parts = DEBT_NONCURRENT_PARTS.map(best).filter((x): x is { n: string; v: number } => !!x);
   const partSum = parts.length ? { n: parts.filter((x) => x.v > 0).map((x) => x.n).join(" + ") || parts[0].n, v: parts.reduce((a, x) => a + x.v, 0) } : null;
-  const withCurrent = best(DEBT_WITH_CURRENT), other = best(DEBT_OTHER);
-  const currentPart = best(DEBT_CURRENT_PART)?.v ?? 0;
-  const gross = withCurrent && (!other || withCurrent.v >= other.v) ? { n: withCurrent.n, v: Math.max(0, withCurrent.v - currentPart) } : other;
-  const found = [partSum && { ...partSum, kind: "noncurrent parts" as DebtKind }, gross && { ...gross, kind: "total less current part" as DebtKind }, total && { ...total, kind: "noncurrent total" as DebtKind }].filter((x): x is { n: string; v: number; kind: DebtKind } => !!x);
+  const gross = best(DEBT_GROSS);
+  const found = [partSum && { ...partSum, kind: "noncurrent parts" as DebtKind }, gross && { ...gross, kind: "may include the part due within a year" as DebtKind }, total && { ...total, kind: "noncurrent total" as DebtKind }].filter((x): x is { n: string; v: number; kind: DebtKind } => !!x);
   if (!found.length) return { debt: null, from: null, kind: null };
   const top = found.sort((a, b) => b.v - a.v)[0];
   return { debt: top.v, from: top.n, kind: top.kind };
 }
 
-/** Pure: everything owed beyond a year on a date (noncurrent liabilities), or null when the filing does not split its liabilities that way. */
+/**
+ * Pure: everything owed beyond a year on a date (noncurrent liabilities), or null when the filing does not split its
+ * liabilities that way (banks, insurers, brokers). Many filers give no total-liabilities line: the total is then
+ * total assets less shareholders' equity, which counts any outside owners' stake as owed and so can only overstate.
+ */
 function noncurrentLiabilitiesAt(facts: Facts, end: string): number | null {
   const direct = instantAt(facts, ["LiabilitiesNoncurrent", "NoncurrentLiabilities"], end);
   if (direct !== null) return direct;
-  const all = instantAt(facts, ["Liabilities"], end), current = instantAt(facts, ["LiabilitiesCurrent", "CurrentLiabilities"], end);
-  return all !== null && current !== null && all >= current ? all - current : null;
+  const current = instantAt(facts, ["LiabilitiesCurrent", "CurrentLiabilities"], end);
+  if (current === null) return null;
+  const assets = instantAt(facts, ["LiabilitiesAndStockholdersEquity", "Assets", "EquityAndLiabilities"], end), equity = instantAt(facts, EQUITY, end);
+  const all = instantAt(facts, ["Liabilities"], end) ?? (assets !== null && equity !== null ? assets - equity : null);
+  return all !== null && all >= current ? all - current : null;
 }
 
 /** Pure: a full-year figure for the year ending on a date. */
@@ -261,7 +264,7 @@ export const CHECK_ABOUT: Record<CheckId, string> = {
   roe_last: `Net income of the last fiscal year as a share of shareholders' equity (the average of the year's opening and closing equity): ${LONG_TERM.roe}% or more.`,
   roe_5y: `The same figure for each of the last ${LONG_TERM.years} fiscal years, averaged: ${LONG_TERM.roe}% or more.`,
   margin: `Net income of the last fiscal year as a share of its sales: ${LONG_TERM.margin}% or more. For a bank, sales are interest income plus other income.`,
-  debt: `Long-term debt (after current maturities) at the last fiscal year end is no more than ${Math.round(LONG_TERM.debtToEquity * 100)}% of shareholders' equity. Asked of every company, financials included. The filing's debt lines are read in order: a noncurrent total, noncurrent parts added up, then a total including current maturities less the current part. "None" is shown only when the filing reports a debt line of zero. With no debt line at all, the company passes only if everything it owes beyond a year (all noncurrent liabilities, which include any long-term debt) is within the limit; otherwise it fails.`,
+  debt: `Long-term debt (after current maturities) at the last fiscal year end is no more than ${Math.round(LONG_TERM.debtToEquity * 100)}% of shareholders' equity. Asked of every company, financials included. The filing's debt lines are read in order: a noncurrent total; otherwise the larger of the noncurrent parts added up and the largest debt line that may include what is due within a year (taken whole, so it can overstate the debt but not understate it). "None" is shown only when the filing reports a debt line of zero. With no debt line at all, the company passes only if everything it owes beyond a year (all noncurrent liabilities, which include any long-term debt) is within the limit; otherwise it fails.`,
   growth: "Net income of the last fiscal year is higher than in the fiscal year five years before it.",
 };
 
@@ -341,7 +344,7 @@ export function longTermChecks(years: FiscalYear[], currency: string | null = "U
   checks.push({
     id: "debt", pass: debtPass,
     detail: equityFail ?? (last.equity === null ? "shareholders' equity is not in the report"
-      : last.debt !== null ? (last.debt === 0 ? `the filing reports no long-term debt (${last.debtFrom} is zero)` : `long-term debt is ${Math.round((last.debt / last.equity!) * 100)}% of equity (${last.debtFrom}${last.debtKind === "total less current part" ? ", less the part due within a year where reported" : ""})`)
+      : last.debt !== null ? (last.debt === 0 ? `the filing reports no long-term debt (${last.debtFrom} is zero)` : `long-term debt is ${last.debt / last.equity! < 0.005 ? "under 1" : Math.round((last.debt / last.equity!) * 100)}% of equity (${last.debtFrom}${last.debtKind === "may include the part due within a year" ? ", which may include the part due within a year" : ""})`)
       : ceiling !== null ? `no long-term debt line in the filing; everything owed beyond a year is ${Math.round(ceiling * 100)}% of equity${ceiling <= LONG_TERM.debtToEquity ? ", so long-term debt is within the limit" : ", so the limit cannot be confirmed"}`
       : "no long-term debt figure found in the filing, and its liabilities are not split by when they fall due"),
   });
@@ -393,12 +396,17 @@ export function listingAge(firstAnnualFiled: string | null, traded: boolean | nu
  * fiscal year's average diluted count. Not computed for a company that files a foreign annual report (form 20-F):
  * its share count is in home-market shares, and one US-listed share is often several of those or a fraction of one.
  */
-export function marketValueOf(price: number | null, f: { annualForm: string | null; sharesOut: number | null; sharesOutAt: string | null }, weighted: number | null): { marketValue: number | null; marketValueFrom: string } {
+export function marketValueOf(price: number | null, f: { annualForm: string | null; sharesOut: number | null; sharesOutAt: string | null; lastYear?: string; netIncome?: number }, weighted: number | null): { marketValue: number | null; marketValueFrom: string } {
   if (!price) return { marketValue: null, marketValueFrom: "no price from the market feed" };
   if (/^20-F/i.test(f.annualForm ?? "")) return { marketValue: null, marketValueFrom: "files a foreign annual report (20-F): its share count is not in US-listed shares" };
-  if (f.sharesOut) return { marketValue: Math.round(price * f.sharesOut), marketValueFrom: `price × ${f.sharesOut.toLocaleString("en-US")} shares on the report cover of ${f.sharesOutAt}` };
-  if (weighted) return { marketValue: Math.round(price * weighted), marketValueFrom: `price × ${Math.round(weighted).toLocaleString("en-US")} average diluted shares of the last fiscal year (no count on the report cover)` };
-  return { marketValue: null, marketValueFrom: "no share count in the filings (several share classes reported separately)" };
+  // A cover count from years back (a filer that now reports each share class separately) is not the count today.
+  const fresh = !!f.sharesOut && !!f.sharesOutAt && (!f.lastYear || f.sharesOutAt >= yearsBack(f.lastYear, 1));
+  const shares = fresh ? f.sharesOut! : weighted;
+  if (!shares) return { marketValue: null, marketValueFrom: "no share count in the filings (several share classes reported separately)" };
+  const value = Math.round(price * shares);
+  // Worth under twice a year's profit: the count is one share class of several (Berkshire's is in Class A equivalents), not the company.
+  if (f.netIncome && f.netIncome > 0 && value < 2 * f.netIncome) return { marketValue: null, marketValueFrom: "the share count in the filings covers one share class only, so the price times it is not the company's value" };
+  return { marketValue: value, marketValueFrom: fresh ? `price × ${shares.toLocaleString("en-US")} shares on the report cover of ${f.sharesOutAt}` : `price × ${Math.round(shares).toLocaleString("en-US")} average diluted shares of the last fiscal year (no current count on the report cover)` };
 }
 
 /**
@@ -669,7 +677,7 @@ async function longTermPass(deps: { env?: NodeJS.ProcessEnv; data?: MarketData |
         const m = x.metrics, isListed = usListed(m.exchanges);
         if (isListed && (!prices || !tradedThen)) continue;
         m.price = prices?.[x.c.symbol]?.price ?? null;
-        Object.assign(m, marketValueOf(m.price, { annualForm: m.annualForm ?? null, sharesOut: m.sharesOut ?? null, sharesOutAt: m.sharesOutAt ?? null }, m.shares));
+        Object.assign(m, marketValueOf(m.price, { annualForm: m.annualForm ?? null, sharesOut: m.sharesOut ?? null, sharesOutAt: m.sharesOutAt ?? null, lastYear: m.lastYear, netIncome: m.currency === "USD" ? m.netIncome : undefined }, m.shares));
         Object.assign(m, listingAge(m.firstAnnualFiled ?? null, isListed && unsure.includes(x.c.symbol) ? tradedThen!.includes(x.c.symbol) : null, day));
         withReports++;
       }

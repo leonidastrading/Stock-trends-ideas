@@ -22,7 +22,7 @@ const longDate = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("e
 /** Long-term debt against equity as shown: a figure, "none" only for a reported zero, a ceiling when there is no debt line, or "not found". */
 function Debt({ r }: { r: LongTermRow }) {
   const m = r.metrics!, why = r.checks.find((c) => c.id === "debt")?.detail ?? "";
-  if (m.debt !== null && m.debt !== undefined && m.debtToEquity !== null) return <span title={why} style={{ cursor: "help" }}>{m.debt === 0 ? "none" : `${Math.round(m.debtToEquity * 100)}%`}</span>;
+  if (m.debt !== null && m.debt !== undefined && m.debtToEquity !== null) return <span title={why} style={{ cursor: "help" }}>{m.debt === 0 ? "none" : m.debtToEquity < 0.005 ? "under 1%" : `${Math.round(m.debtToEquity * 100)}%`}</span>;
   if (m.debtCeiling !== null && m.debtCeiling !== undefined) return <span title={why} style={{ cursor: "help" }}>at most {Math.round(m.debtCeiling * 100)}%<div className="small muted">no debt line</div></span>;
   return <span className="neg" title={why} style={{ cursor: "help" }}>not found</span>;
 }
@@ -49,7 +49,7 @@ function Table({ rows, prices, cardsOn, weight }: { rows: LongTermRow[]; prices:
         return (
           <tr key={r.symbol}>
             <td className="num">{i + 1}</td>
-            <td><Ticker symbol={r.symbol} /> <div className="small muted">{[r.name, m.industry, r.rank ? `#${r.rank} on the SEC's size list` : null, `fiscal year to ${m.lastYear}`].filter(Boolean).join(" · ")}</div></td>
+            <td><Ticker symbol={r.symbol} /> <div className="small muted">{[r.name, m.industry, r.rank ? `#${r.rank} on the SEC's size list` : null, `fiscal year to ${m.lastYear}`].filter(Boolean).join(" · ")}</div>{Date.parse(r.computedAt) - Date.parse(m.lastYear) > 548 * 86400_000 && <span className="tag warn" title="The latest annual report in the SEC's data for this company is more than 18 months old, so these figures are older than the others'." style={{ cursor: "help" }}>figures from fiscal {m.lastYear.slice(0, 4)}</span>}</td>
             <td className="num"><b>{pct(m.roe5y)}</b></td>
             <td className="num">{pct(m.roeLast)}</td>
             <td className="num">{pct(m.margin)}<div className="small muted">{m.operatingIncome === null || m.operatingIncome === undefined ? "operating income not reported" : `operating income ${money(m.operatingIncome, m.currency)}`}</div>{m.oneOff?.length > 0 && <span className="tag warn" title={m.oneOff.join("; ")} style={{ cursor: "help" }}>one-off gain?</span>}</td>
@@ -155,7 +155,7 @@ export default async function LongTermPage() {
             <p className="small">Company number {s.pool.length.toLocaleString("en-US")} is <b>{c.last?.symbol}</b> ({c.last?.name}), with a market value of <b>{c.last?.marketValue ? money(c.last.marketValue) : "not computed"}</b>{c.last?.marketValueFrom ? <span className="muted"> ({c.last.marketValueFrom})</span> : null}. Among the last 25 companies of the pool, the {c.computed} with a computed market value run from {money(c.low)} to {money(c.high)}, middle {money(c.mid)}.</p>
             <ul className="small">
               <li><b>How the pool is ordered.</b> By the SEC&apos;s own list of listed companies, which it publishes largest first; the pool is the first {LONG_TERM.pool.toLocaleString("en-US")} on it that file annual reports there and are listed on a US exchange. The SEC does not say which price or share count its order uses.</li>
-              <li><b>How market value is calculated here</b> (to check that order, not to make it). The latest trade price when the company was screened, times the share count on the cover of its latest annual or quarterly report; without a cover count, the fiscal year&apos;s average diluted count. Not computed for the {c.foreignFilers} pool companies that file a foreign annual report (form 20-F): their share count is in home-market shares, and one US-listed share is often several of those or a fraction of one.</li>
+              <li><b>How market value is calculated here</b> (to check that order, not to make it). The latest trade price when the company was screened, times the share count on the cover of its latest annual or quarterly report; without a current cover count, the fiscal year&apos;s average diluted count. Not computed for the {c.foreignFilers} pool companies that file a foreign annual report (form 20-F): their share count is in home-market shares, and one US-listed share is often several of those or a fraction of one.</li>
               <li><b>What the check shows.</b> {c.outsideAbove.length} companies outside the pool have a computed market value above the middle of the pool&apos;s last 25{c.outsideAbove.length ? <> ({c.outsideAbove.slice(0, 10).map((x) => `${x.symbol} ${money(x.marketValue)}`).join(", ")}{c.outsideAbove.length > 10 ? ", …" : ""})</> : null}, and {c.insideBelowHalf} inside it have one under half of that.</li>
               <li><b>Why another data source cuts differently.</b> This pool counts every company that files annual reports with the SEC and is listed on a US exchange, {c.foreignFilers} foreign annual-report filers included. A source that counts fewer foreign listings reaches further down the size order before it has 1,000, so a company just outside this pool can be inside that one.</li>
             </ul>
