@@ -336,14 +336,16 @@ const toRow = (r: Record<string, unknown>): LongTermRow => ({
   metrics: (r.metrics as Metrics) ?? null, checks: (r.checks as Check[]) ?? [], removed: REMOVED_SECTORS.includes(r.sector as RemovedSector) ? (r.sector as RemovedSector) : null, error: (r.error as string) ?? null,
 });
 
-/** Every entry read under the current rules (rows from older rules are not shown while they wait to be redone). */
-export async function longTermRows(): Promise<LongTermRow[]> {
-  return (await q(`SELECT * FROM long_term WHERE rev = $1 ORDER BY rank`, [LONG_TERM.rev])).map(toRow);
+/** Every entry read under the current rules. `orLast`: until the first pass under them has run, the last reading before it. */
+export async function longTermRows(orLast = false): Promise<LongTermRow[]> {
+  const rows = await q(`SELECT * FROM long_term WHERE rev = $1 ORDER BY rank`, [LONG_TERM.rev]);
+  if (rows.length || !orLast) return rows.map(toRow);
+  return (await q(`SELECT * FROM long_term WHERE rev = (SELECT max(rev) FROM long_term) ORDER BY rank`)).map(toRow);
 }
 
 /** The kept lists under the current rules, newest first. */
 export async function keptLists(): Promise<KeptList[]> {
-  return (await q(`SELECT year, set_at, picks, counts FROM long_term_lists WHERE rev = $1 ORDER BY year DESC`, [LONG_TERM.rev])).map((r) => ({ year: Number(r.year), setAt: new Date(r.set_at as string).toISOString(), picks: (r.picks as ListPick[]) ?? [], counts: (r.counts as KeptList["counts"]) ?? null }));
+  return (await q(`SELECT year, set_at, picks, counts FROM long_term_lists WHERE rev = (SELECT max(rev) FROM long_term_lists WHERE rev <= $1) ORDER BY year DESC`, [LONG_TERM.rev])).map((r) => ({ year: Number(r.year), setAt: new Date(r.set_at as string).toISOString(), picks: (r.picks as ListPick[]) ?? [], counts: (r.counts as KeptList["counts"]) ?? null }));
 }
 
 const toPick = (r: LongTermRow): ListPick => ({ symbol: r.symbol, name: r.name, roe5y: r.metrics!.roe5y, roeLast: r.metrics!.roeLast, margin: r.metrics!.margin, debtToEquity: r.metrics!.debtToEquity, price: r.metrics!.price ?? null });

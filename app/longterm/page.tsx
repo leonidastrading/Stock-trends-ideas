@@ -59,7 +59,7 @@ function Table({ rows, prices, cardsOn, weight }: { rows: LongTermRow[]; prices:
 /** Long term: the 1,000 largest US-listed companies through a fixed quality screen; the top 25 by five-year return on equity. */
 export default async function LongTermPage() {
   if (!hasDatabase()) return <SetupNotice />;
-  const [all, briefs, universe, lists] = await Promise.all([longTermRows().catch(() => [] as LongTermRow[]), store.cardBriefsSince(180).catch(() => [] as store.CardBrief[]), longTermUniverse().catch(() => []), keptLists().catch(() => [] as KeptList[])]);
+  const [all, briefs, universe, lists] = await Promise.all([longTermRows(true).catch(() => [] as LongTermRow[]), store.cardBriefsSince(180).catch(() => [] as store.CardBrief[]), longTermUniverse().catch(() => []), keptLists().catch(() => [] as KeptList[])]);
   const s = screen(all);
   const kept = lists[0] ?? null;
   const cardsOn = (sym: string) => briefs.filter((b) => b.primaryTicker === sym || b.tickers.includes(sym));
