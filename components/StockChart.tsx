@@ -49,10 +49,12 @@ const sma = (bars: Bar[], n: number) => bars.map((b, i) => (i + 1 < n ? null : {
 /** An extra marker on the chart: an insider's buy (below the line, green) or sale (above, red), or a plain note (a grey dot), with its text. */
 export interface ChartMark { date: string; side: "buy" | "sell" | "note"; text: string }
 
-export default function StockChart({ symbol, tvSymbol, height = 680, entry, line = false, marks: extraMarks, tvOnly = false }: { symbol: string; tvSymbol: string; height?: number; entry?: ChartEntry; line?: boolean; marks?: ChartMark[]; tvOnly?: boolean }) {
+export default function StockChart({ symbol, tvSymbol, height = 680, entry, line = false, marks: extraMarks, tvOnly = false, card = false }: { symbol: string; tvSymbol: string; height?: number; entry?: ChartEntry; line?: boolean; marks?: ChartMark[]; tvOnly?: boolean; /** On a thesis card: opens on the last three months of daily bars, and remembers its settings apart from the other charts. */ card?: boolean }) {
   // Currencies, gold and crypto have no US stock prices for the scout chart: TradingView only.
   const [tab, setTab] = useState<"scout" | "tv">(tvOnly ? "tv" : "scout");
-  const [prefs, setPrefs] = useState<Prefs>(DEFAULT);
+  const base: Prefs = card ? { ...DEFAULT, range: "3M", weekly: false } : DEFAULT;
+  const prefsKey = card ? `${PREFS_KEY}:card` : PREFS_KEY;
+  const [prefs, setPrefs] = useState<Prefs>(base);
   const box = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const overlay = useRef<HTMLDivElement>(null);
@@ -65,8 +67,8 @@ export default function StockChart({ symbol, tvSymbol, height = 680, entry, line
   useEffect(() => { if (window.matchMedia?.("(max-width: 640px)").matches) setH(Math.min(height, 460)); }, [height]);
 
   // Remembered per viewer (this browser only).
-  useEffect(() => { try { const p = JSON.parse(localStorage.getItem(PREFS_KEY) ?? "null"); if (p) setPrefs({ ...DEFAULT, ...p }); } catch { /* no storage */ } }, []);
-  const set = (p: Partial<Prefs>) => setPrefs((old) => { const next = { ...old, ...p }; try { localStorage.setItem(PREFS_KEY, JSON.stringify(next)); } catch { /* no storage */ } return next; });
+  useEffect(() => { try { const p = JSON.parse(localStorage.getItem(prefsKey) ?? "null"); if (p) setPrefs({ ...base, ...p }); } catch { /* no storage */ } }, []);
+  const set = (p: Partial<Prefs>) => setPrefs((old) => { const next = { ...old, ...p }; try { localStorage.setItem(prefsKey, JSON.stringify(next)); } catch { /* no storage */ } return next; });
 
   useEffect(() => {
     const el = box.current;

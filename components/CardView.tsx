@@ -225,7 +225,7 @@ export default async function CardView({ c, track, actions, feedback, opposing, 
       <CardFundamentals symbol={c.primaryTicker} />
       <div className="card-chart">
         <div className="small muted card-chart-head"><span>{c.primaryTicker} · chart</span><a href={chartUrl(c.primaryTicker)} target="_blank" rel="noreferrer">Open full chart →</a></div>
-        <StockChart symbol={c.primaryTicker} tvSymbol={tvSymbol(c.primaryTicker, info?.exchange)} entry={track?.entryDate && track.entryPrice ? { date: track.entryDate, price: track.entryPrice, direction: track.direction, exitDate: track.exitDate, exitPrice: track.exitPrice, exitReason: track.exitReason, label: "scout entry", cardId: c.id } : { date: pendingEntryDay, price: null, direction: c.direction, label: "entry at the next open", cardId: c.id }} />
+        <StockChart card symbol={c.primaryTicker} tvSymbol={tvSymbol(c.primaryTicker, info?.exchange)} entry={track?.entryDate && track.entryPrice ? { date: track.entryDate, price: track.entryPrice, direction: track.direction, exitDate: track.exitDate, exitPrice: track.exitPrice, exitReason: track.exitReason, label: "scout entry", cardId: c.id } : { date: pendingEntryDay, price: null, direction: c.direction, label: "entry at the next open", cardId: c.id }} />
       </div>
       <div className="actions">{actions}<CardInvestigate text={cardInvestigationText({ id: c.id, title: k.title, ticker: c.primaryTicker, company: info?.name ?? company, direction: c.direction, thesis, observation: k.observation, whyNotPriced: k.why_not_priced, unknowns: k.unknowns })} /><CardAsk cardId={c.id} symbol={c.primaryTicker} tickers={k.tickers.map((t) => t.symbol)} /></div>
       <Suspense fallback={null}><RecheckLine cardId={c.id} /></Suspense>
