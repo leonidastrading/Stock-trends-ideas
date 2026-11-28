@@ -385,7 +385,10 @@ export async function runLongTerm(deps: { env?: NodeJS.ProcessEnv; data?: Market
     }
   }
   const left = dueAll.length - read;
-  const s = screen(await longTermRows());
+  const rows = await longTermRows();
+  const s = screen(rows);
+  // The watched names as they stand on file, on a line of their own (the pass's own line is too long to read them from).
+  if (read) console.log(`long term watch: ${LONG_TERM.watch.map((w) => { const r = rows.find((x) => x.symbol === w); const m = r?.metrics; return !r ? `${w} not read yet` : !m ? `${w} #${r.rank}: ${r.error}` : `${w} #${r.rank} ${passesAll(r.checks) ? "PASS" : "no"}${r.removed ? ` [${r.removed}]` : ""} roe ${m.roeLast ?? "?"}/${m.roe5y ?? "?"} margin ${m.margin ?? "?"} d/e ${m.debtToEquity ?? "?"} ${m.currency ?? "?"} ${m.years}y to ${m.lastYear}`; }).join(" | ")}`);
   // The list is kept once the whole list has been read (a handful the SEC will not answer for do not hold it up).
   let kept = "";
   if (left <= universe.length * 0.01 && s.top.length && !(await q(`SELECT 1 FROM long_term_lists WHERE year = $1 AND rev = $2`, [year, LONG_TERM.rev])).length) {
