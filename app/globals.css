@@ -348,6 +348,12 @@ main { overflow-wrap: break-word; }
   .thesis dl dt { overflow-wrap: anywhere; }
   .thesis dl dt { margin-top: 8px; }
   .thesis dl dd { margin-left: 0; }
+  /* On a phone the card's text runs the full width: only the first row keeps clear of the PDF and fold buttons. */
+  .thesis > div:first-of-type { padding-right: 0; }
+  .thesis > div:first-of-type > .inline:first-child { padding-right: 96px; }
+  /* The long/short box sits beside the logo, with the company name on its own line under them. */
+  .thesis .call-with-name { display: inline; }
+  .thesis .call-with-name .call-name { display: block; margin-top: 6px; }
 }
 
 /* A card opened from a link: clear of the sticky news strip, and briefly highlighted. */
